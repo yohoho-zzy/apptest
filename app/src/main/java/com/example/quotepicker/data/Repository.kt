@@ -14,6 +14,7 @@ class Repository private constructor(context: Context) {
 
     suspend fun addGroup(name: String) = groupDao.insert(GroupEntity(name = name))
     suspend fun deleteGroup(group: GroupEntity) = groupDao.delete(group)
+    suspend fun updateGroup(group: GroupEntity) = groupDao.update(group)
 
     suspend fun addTextQuote(groupId: Long, text: String, weight: Int) =
         quoteDao.insert(QuoteEntity(groupId = groupId, type = QuoteType.TEXT, text = text, weight = weight))
