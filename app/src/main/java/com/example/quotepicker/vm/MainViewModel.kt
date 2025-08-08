@@ -36,9 +36,15 @@ class MainViewModel(app: Application): AndroidViewModel(app) {
         repo.observeQuotes(null),
         _randomResult
     ) { groups, gid, allQuotes, random ->
+        val sortedGroups = groups.sortedWith(
+            compareBy<GroupEntity> {
+                val match = Regex("^(\\d+)").find(it.name.trim())
+                match?.groupValues?.get(1)?.toInt() ?: Int.MAX_VALUE
+            }.thenBy { it.name }
+        )
         val quotes = if (gid == null) allQuotes else allQuotes.filter { it.groupId == gid }
         UiState(
-            groups = groups,
+            groups = sortedGroups,
             currentGroupId = gid,
             quotes = quotes,
             randomResult = random
@@ -49,6 +55,7 @@ class MainViewModel(app: Application): AndroidViewModel(app) {
 
     fun addGroup(name: String) = viewModelScope.launch { repo.addGroup(name) }
     fun deleteGroup(group: GroupEntity) = viewModelScope.launch { repo.deleteGroup(group) }
+    fun updateGroup(group: GroupEntity) = viewModelScope.launch { repo.updateGroup(group) }
     fun addTextQuote(groupId: Long, text: String, weight: Int) = viewModelScope.launch {
         repo.addTextQuote(groupId, text, weight)
     }

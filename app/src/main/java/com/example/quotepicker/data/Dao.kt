@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface GroupDao {
-    @Query("SELECT * FROM groups ORDER BY createdAt ASC")
+    @Query("SELECT * FROM groups ORDER BY name COLLATE NOCASE ASC")
     fun observeGroups(): Flow<List<GroupEntity>>
 
     @Insert
@@ -13,6 +13,9 @@ interface GroupDao {
 
     @Delete
     suspend fun delete(group: GroupEntity)
+
+    @Update
+    suspend fun update(group: GroupEntity)
 }
 
 @Dao

@@ -2,6 +2,7 @@ package com.example.quotepicker.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import com.example.quotepicker.data.QuoteEntity
 import com.example.quotepicker.data.QuoteType
 import com.example.quotepicker.vm.MainViewModel
 import com.example.quotepicker.ui.components.AddQuoteDialog
+import com.example.quotepicker.ui.components.EditQuoteDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +37,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     var showAddQuote by remember { mutableStateOf(false) }
     var showResult by remember { mutableStateOf(false) }
     var currentTab by remember { mutableStateOf(0) } // 0: draw, 1: manage
+    var editGroup by remember { mutableStateOf<GroupEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -79,7 +84,13 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
         when (currentTab) {
             0 -> {
                 Column(Modifier.padding(inner)) {
-                    GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
+                    GroupTabs(
+                        groups = ui.groups,
+                        current = ui.currentGroupId,
+                        onSelect = vm::setGroup,
+                        onDelete = vm::deleteGroup,
+                        onEdit = { editGroup = it }
+                    )
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("点击右下角按钮抽取语录")
                     }
@@ -87,7 +98,13 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             }
             else -> {
                 Column(Modifier.padding(inner)) {
-                    GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
+                    GroupTabs(
+                        groups = ui.groups,
+                        current = ui.currentGroupId,
+                        onSelect = vm::setGroup,
+                        onDelete = vm::deleteGroup,
+                        onEdit = { editGroup = it }
+                    )
                     if (ui.groups.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("暂无分组，点击右上角添加")
@@ -96,7 +113,8 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         QuoteList(
                             quotes = ui.quotes,
                             decodeImage = { vm.decodeBase64ToBitmap(it) },
-                            onDelete = vm::deleteQuote
+                            onDelete = vm::deleteQuote,
+                            onUpdate = vm::updateQuote
                         )
                     }
                 }
@@ -114,6 +132,14 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             onAddText = { gid, text, w -> vm.addTextQuote(gid, text, w) },
             onAddImage = { gid, b64, text, w -> vm.addImageQuote(gid, b64, text, w) },
             vm = vm
+        )
+    }
+
+    editGroup?.let { g ->
+        EditGroupDialog(
+            group = g,
+            onDismiss = { editGroup = null },
+            onConfirm = { name -> vm.updateGroup(g.copy(name = name)); editGroup = null }
         )
     }
 
@@ -144,7 +170,13 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun GroupTabs(groups: List<GroupEntity>, current: Long?, onSelect: (Long?) -> Unit) {
+private fun GroupTabs(
+    groups: List<GroupEntity>,
+    current: Long?,
+    onSelect: (Long?) -> Unit,
+    onDelete: (GroupEntity) -> Unit,
+    onEdit: (GroupEntity) -> Unit
+) {
     FlowRow(
         Modifier.fillMaxWidth().padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -156,11 +188,19 @@ private fun GroupTabs(groups: List<GroupEntity>, current: Long?, onSelect: (Long
             label = { Text("全部") }
         )
         groups.forEach { g ->
-            FilterChip(
-                selected = current == g.id,
-                onClick = { onSelect(g.id) },
-                label = { Text(g.name) }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = current == g.id,
+                    onClick = { onSelect(g.id) },
+                    label = { Text(g.name) }
+                )
+                IconButton(onClick = { onEdit(g) }) {
+                    Icon(Icons.Default.Edit, contentDescription = "编辑分组")
+                }
+                IconButton(onClick = { onDelete(g); if (current == g.id) onSelect(null) }) {
+                    Icon(Icons.Default.Close, contentDescription = "删除分组")
+                }
+            }
         }
     }
 }
@@ -169,8 +209,10 @@ private fun GroupTabs(groups: List<GroupEntity>, current: Long?, onSelect: (Long
 private fun QuoteList(
     quotes: List<QuoteEntity>,
     decodeImage: (String)->android.graphics.Bitmap,
-    onDelete: (QuoteEntity)->Unit
+    onDelete: (QuoteEntity)->Unit,
+    onUpdate: (QuoteEntity)->Unit
 ) {
+    var editQuote by remember { mutableStateOf<QuoteEntity?>(null) }
     if (quotes.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("该分组下暂无语录，点击下方 + 号添加")
@@ -181,7 +223,7 @@ private fun QuoteList(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(quotes, key = { it.id }) { q ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
+                ElevatedCard(Modifier.fillMaxWidth().clickable { editQuote = q }) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         var preview by remember { mutableStateOf(false) }
                         if (q.type == QuoteType.TEXT) {
@@ -197,7 +239,7 @@ private fun QuoteList(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AssistChip(onClick = { /* 未来：编辑权重 */ }, label = { Text("权重: ${q.weight}") })
+                            AssistChip(onClick = {}, label = { Text("权重: ${q.weight}") })
                             if (q.type == QuoteType.IMAGE) {
                                 TextButton(onClick = { preview = !preview }) { Text(if (preview) "隐藏" else "预览") }
                             }
@@ -208,6 +250,13 @@ private fun QuoteList(
                 }
             }
         }
+    }
+    editQuote?.let { q ->
+        EditQuoteDialog(
+            quote = q,
+            onDismiss = { editQuote = null },
+            onConfirm = { text, w -> onUpdate(q.copy(text = text, weight = w)); editQuote = null }
+        )
     }
 }
 
@@ -222,6 +271,29 @@ private fun AddGroupDialog(onDismiss: ()->Unit, onConfirm: (String)->Unit) {
         },
         confirmButton = {
             Button(onClick = { if (name.isNotBlank()) onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun EditGroupDialog(group: GroupEntity, onDismiss: ()->Unit, onConfirm: (String)->Unit) {
+    var name by remember { mutableStateOf(group.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑分组") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("分组名") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(onClick = { if (name.isNotBlank()) onConfirm(name.trim()) }, enabled = name.isNotBlank()) {
+                Text("确定")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
