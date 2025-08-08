@@ -19,7 +19,7 @@ fun AddQuoteDialog(
     groups: List<GroupEntity>,
     onDismiss: () -> Unit,
     onAddText: (groupId: Long, text: String, weight: Int) -> Unit,
-    onAddImage: (groupId: Long, base64: String, weight: Int) -> Unit,
+    onAddImage: (groupId: Long, base64: String, text: String, weight: Int) -> Unit,
     vm: MainViewModel
 ) {
     var isImage by remember { mutableStateOf(false) }
@@ -31,7 +31,7 @@ fun AddQuoteDialog(
         if (uri != null && groupId > 0) {
             val b64 = vm.encodeImageToBase64(uri)
             val w = weightStr.toIntOrNull() ?: 1
-            onAddImage(groupId, b64, w.coerceAtLeast(1))
+            onAddImage(groupId, b64, text.trim(), w.coerceAtLeast(1))
             onDismiss()
         }
     }
@@ -81,6 +81,13 @@ fun AddQuoteDialog(
                         label = { Text("文本内容") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                } else {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        label = { Text("图片名称") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         },
@@ -95,7 +102,7 @@ fun AddQuoteDialog(
                     Text("确定")
                 }
             } else {
-                Button(onClick = { launcher.launch("image/*") }, enabled = groups.isNotEmpty()) {
+                Button(onClick = { launcher.launch("image/*") }, enabled = groups.isNotEmpty() && text.isNotBlank()) {
                     Text("导入图片")
                 }
             }

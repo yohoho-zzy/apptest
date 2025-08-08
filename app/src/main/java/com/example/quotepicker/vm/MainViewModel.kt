@@ -52,8 +52,8 @@ class MainViewModel(app: Application): AndroidViewModel(app) {
     fun addTextQuote(groupId: Long, text: String, weight: Int) = viewModelScope.launch {
         repo.addTextQuote(groupId, text, weight)
     }
-    fun addImageQuote(groupId: Long, base64: String, weight: Int) = viewModelScope.launch {
-        repo.addImageQuote(groupId, base64, weight)
+    fun addImageQuote(groupId: Long, base64: String, text: String, weight: Int) = viewModelScope.launch {
+        repo.addImageQuote(groupId, base64, text, weight)
     }
     fun deleteQuote(q: QuoteEntity) = viewModelScope.launch { repo.deleteQuote(q) }
     fun updateQuote(q: QuoteEntity) = viewModelScope.launch { repo.updateQuote(q) }

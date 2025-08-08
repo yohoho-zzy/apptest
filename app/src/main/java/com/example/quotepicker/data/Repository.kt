@@ -18,8 +18,16 @@ class Repository private constructor(context: Context) {
     suspend fun addTextQuote(groupId: Long, text: String, weight: Int) =
         quoteDao.insert(QuoteEntity(groupId = groupId, type = QuoteType.TEXT, text = text, weight = weight))
 
-    suspend fun addImageQuote(groupId: Long, base64: String, weight: Int) =
-        quoteDao.insert(QuoteEntity(groupId = groupId, type = QuoteType.IMAGE, imageBase64 = base64, weight = weight))
+    suspend fun addImageQuote(groupId: Long, base64: String, text: String, weight: Int) =
+        quoteDao.insert(
+            QuoteEntity(
+                groupId = groupId,
+                type = QuoteType.IMAGE,
+                imageBase64 = base64,
+                text = text,
+                weight = weight
+            )
+        )
 
     suspend fun updateQuote(q: QuoteEntity) = quoteDao.update(q)
     suspend fun deleteQuote(q: QuoteEntity) = quoteDao.delete(q)
