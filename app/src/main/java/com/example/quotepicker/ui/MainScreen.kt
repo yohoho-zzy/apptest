@@ -103,7 +103,8 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         current = ui.currentGroupId,
                         onSelect = vm::setGroup,
                         onDelete = vm::deleteGroup,
-                        onEdit = { editGroup = it }
+                        onEdit = { editGroup = it },
+                        showActions = true
                     )
                     if (ui.groups.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -177,7 +178,8 @@ private fun GroupTabs(
     current: Long?,
     onSelect: (Long?) -> Unit,
     onDelete: (GroupEntity) -> Unit,
-    onEdit: (GroupEntity) -> Unit
+    onEdit: (GroupEntity) -> Unit,
+    showActions: Boolean = false
 ) {
     FlowRow(
         Modifier.fillMaxWidth().padding(8.dp),
@@ -191,16 +193,22 @@ private fun GroupTabs(
         )
         groups.forEach { g ->
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val selected = current == g.id
                 FilterChip(
-                    selected = current == g.id,
+                    selected = selected,
                     onClick = { onSelect(g.id) },
                     label = { Text(g.name) }
                 )
-                IconButton(onClick = { onEdit(g) }) {
-                    Icon(Icons.Default.Edit, contentDescription = "编辑分组")
-                }
-                IconButton(onClick = { onDelete(g); if (current == g.id) onSelect(null) }) {
-                    Icon(Icons.Default.Close, contentDescription = "删除分组")
+                if (showActions && selected) {
+                    IconButton(onClick = { onEdit(g) }) {
+                        Icon(Icons.Default.Edit, contentDescription = "编辑分组")
+                    }
+                    IconButton(onClick = {
+                        onDelete(g)
+                        if (current == g.id) onSelect(null)
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "删除分组")
+                    }
                 }
             }
         }
