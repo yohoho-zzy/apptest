@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,43 +30,74 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     var showAddGroup by remember { mutableStateOf(false) }
     var showAddQuote by remember { mutableStateOf(false) }
     var showResult by remember { mutableStateOf(false) }
-    var result: QuoteEntity? by remember { mutableStateOf(null) }
+    var currentTab by remember { mutableStateOf(0) } // 0: draw, 1: manage
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("语录随机器") },
+                title = { Text(if (currentTab == 0) "抽取" else "数据管理") },
                 actions = {
-                    IconButton(onClick = { showAddGroup = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "添加分组")
+                    if (currentTab == 1) {
+                        IconButton(onClick = { showAddGroup = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "添加分组")
+                        }
                     }
                 }
             )
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = currentTab == 0,
+                    onClick = { currentTab = 0 },
+                    icon = { Icon(Icons.Default.Casino, contentDescription = "抽取") },
+                    label = { Text("抽取") }
+                )
+                NavigationBarItem(
+                    selected = currentTab == 1,
+                    onClick = { currentTab = 1 },
+                    icon = { Icon(Icons.Default.List, contentDescription = "管理") },
+                    label = { Text("管理") }
+                )
+            }
+        },
         floatingActionButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-                ExtendedFloatingActionButton(onClick = { showAddQuote = true }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("添加") })
-                ExtendedFloatingActionButton(onClick = {
+            if (currentTab == 0) {
+                FloatingActionButton(onClick = {
                     vm.pickRandom()
-                    result = vm.uiState.value.randomResult
                     showResult = true
-                }, icon = { Icon(Icons.Default.Casino, null) }, text = { Text("抽一句") })
+                }) { Icon(Icons.Default.Casino, contentDescription = null) }
+            } else {
+                FloatingActionButton(onClick = { showAddQuote = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                }
             }
         }
     ) { inner ->
-        Column(Modifier.padding(inner)) {
-            GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
-
-            if (ui.groups.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无分组，点击右上角添加")
+        when (currentTab) {
+            0 -> {
+                Column(Modifier.padding(inner)) {
+                    GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("点击右下角按钮抽取语录")
+                    }
                 }
-            } else {
-                QuoteList(
-                    quotes = ui.quotes,
-                    decodeImage = { vm.decodeBase64ToBitmap(it) },
-                    onDelete = vm::deleteQuote
-                )
+            }
+            else -> {
+                Column(Modifier.padding(inner)) {
+                    GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
+                    if (ui.groups.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("暂无分组，点击右上角添加")
+                        }
+                    } else {
+                        QuoteList(
+                            quotes = ui.quotes,
+                            decodeImage = { vm.decodeBase64ToBitmap(it) },
+                            onDelete = vm::deleteQuote
+                        )
+                    }
+                }
             }
         }
     }
@@ -89,7 +121,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             confirmButton = { TextButton(onClick = { showResult = false; vm.clearRandom() }) { Text("关闭") } },
             title = { Text("抽取结果") },
             text = {
-                val q = vm.uiState.value.randomResult ?: result
+                val q = ui.randomResult
                 if (q == null) {
                     Text("没有可抽取的内容")
                 } else if (q.type == QuoteType.TEXT) {
@@ -140,17 +172,25 @@ private fun QuoteList(
             items(quotes, key = { it.id }) { q ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (q.type == com.example.quotepicker.data.QuoteType.TEXT) {
+                        var preview by remember { mutableStateOf(false) }
+                        if (q.type == QuoteType.TEXT) {
                             Text(q.text.orEmpty(), style = MaterialTheme.typography.titleMedium)
                         } else {
-                            val bmp = remember(q.imageBase64) { decodeImage(q.imageBase64.orEmpty()) }
-                            Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                            if (preview) {
+                                val bmp = remember(q.imageBase64) { decodeImage(q.imageBase64.orEmpty()) }
+                                Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                            } else {
+                                Text("图片语录", style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             AssistChip(onClick = { /* 未来：编辑权重 */ }, label = { Text("权重: ${q.weight}") })
+                            if (q.type == QuoteType.IMAGE) {
+                                TextButton(onClick = { preview = !preview }) { Text(if (preview) "隐藏" else "预览") }
+                            }
                             Spacer(Modifier.weight(1f))
                             TextButton(onClick = { onDelete(q) }) { Text("删除") }
                         }
