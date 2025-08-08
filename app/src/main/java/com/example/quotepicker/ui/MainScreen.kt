@@ -159,8 +159,10 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         if (!q.text.isNullOrBlank()) {
                             Text(q.text)
                         }
-                        val bmp: Bitmap = vm.decodeBase64ToBitmap(q.imageBase64 ?: "")
-                        Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                        val bmp = vm.decodeBase64ToBitmap(q.imageBase64 ?: "")
+                        bmp?.let {
+                            Image(bitmap = it.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
@@ -208,7 +210,7 @@ private fun GroupTabs(
 @Composable
 private fun QuoteList(
     quotes: List<QuoteEntity>,
-    decodeImage: (String)->android.graphics.Bitmap,
+    decodeImage: (String) -> Bitmap?,
     onDelete: (QuoteEntity)->Unit,
     onUpdate: (QuoteEntity)->Unit
 ) {
@@ -232,7 +234,9 @@ private fun QuoteList(
                             Text(q.text.orEmpty(), style = MaterialTheme.typography.titleMedium)
                             if (preview) {
                                 val bmp = remember(q.imageBase64) { decodeImage(q.imageBase64.orEmpty()) }
-                                Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                                bmp?.let {
+                                    Image(bitmap = it.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                                }
                             }
                         }
                         Row(

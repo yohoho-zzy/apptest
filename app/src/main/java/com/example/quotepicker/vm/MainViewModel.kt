@@ -96,8 +96,10 @@ class MainViewModel(app: Application): AndroidViewModel(app) {
         }
     }
 
-    fun decodeBase64ToBitmap(b64: String): Bitmap {
-        val bytes = Base64.decode(b64, Base64.DEFAULT)
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    fun decodeBase64ToBitmap(b64: String): Bitmap? {
+        return runCatching {
+            val bytes = Base64.decode(b64, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
     }
 }
