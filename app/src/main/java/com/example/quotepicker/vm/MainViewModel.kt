@@ -33,14 +33,15 @@ class MainViewModel(app: Application): AndroidViewModel(app) {
     val uiState: StateFlow<UiState> = combine(
         repo.observeGroups(),
         _currentGroupId,
-        repo.observeQuotes(null)
-    ) { groups, gid, allQuotes ->
+        repo.observeQuotes(null),
+        _randomResult
+    ) { groups, gid, allQuotes, random ->
         val quotes = if (gid == null) allQuotes else allQuotes.filter { it.groupId == gid }
         UiState(
             groups = groups,
             currentGroupId = gid,
             quotes = quotes,
-            randomResult = _randomResult.value
+            randomResult = random
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
