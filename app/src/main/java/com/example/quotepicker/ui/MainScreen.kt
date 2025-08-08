@@ -3,6 +3,8 @@ package com.example.quotepicker.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -110,7 +112,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             groups = ui.groups,
             onDismiss = { showAddQuote = false },
             onAddText = { gid, text, w -> vm.addTextQuote(gid, text, w) },
-            onAddImage = { gid, b64, w -> vm.addImageQuote(gid, b64, w) },
+            onAddImage = { gid, b64, text, w -> vm.addImageQuote(gid, b64, text, w) },
             vm = vm
         )
     }
@@ -127,28 +129,37 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 } else if (q.type == QuoteType.TEXT) {
                     Text(q.text ?: "")
                 } else {
-                    val bmp: Bitmap = vm.decodeBase64ToBitmap(q.imageBase64 ?: "")
-                    Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (!q.text.isNullOrBlank()) {
+                            Text(q.text)
+                        }
+                        val bmp: Bitmap = vm.decodeBase64ToBitmap(q.imageBase64 ?: "")
+                        Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                    }
                 }
             }
         )
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun GroupTabs(groups: List<GroupEntity>, current: Long?, onSelect: (Long?) -> Unit) {
-    val selectedIndex = if (current == null) 0 else groups.indexOfFirst { it.id == current } + 1
-    ScrollableTabRow(selectedTabIndex = selectedIndex) {
-        Tab(
-            selected = selectedIndex == 0,
+    FlowRow(
+        Modifier.fillMaxWidth().padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FilterChip(
+            selected = current == null,
             onClick = { onSelect(null) },
-            text = { Text("全部") }
+            label = { Text("全部") }
         )
-        groups.forEachIndexed { i, g ->
-            Tab(
-                selected = selectedIndex == i + 1,
+        groups.forEach { g ->
+            FilterChip(
+                selected = current == g.id,
                 onClick = { onSelect(g.id) },
-                text = { Text(g.name) }
+                label = { Text(g.name) }
             )
         }
     }
@@ -176,11 +187,10 @@ private fun QuoteList(
                         if (q.type == QuoteType.TEXT) {
                             Text(q.text.orEmpty(), style = MaterialTheme.typography.titleMedium)
                         } else {
+                            Text(q.text.orEmpty(), style = MaterialTheme.typography.titleMedium)
                             if (preview) {
                                 val bmp = remember(q.imageBase64) { decodeImage(q.imageBase64.orEmpty()) }
                                 Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
-                            } else {
-                                Text("图片语录", style = MaterialTheme.typography.titleMedium)
                             }
                         }
                         Row(
