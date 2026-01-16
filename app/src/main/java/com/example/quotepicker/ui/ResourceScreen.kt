@@ -1,6 +1,9 @@
 package com.example.quotepicker.ui
 
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ResourceType
@@ -422,15 +427,44 @@ private fun ResourceCreateScreen(
     var showCharacterPicker by remember { mutableStateOf(false) }
     var showSceneDialog by remember { mutableStateOf(false) }
     var editSceneIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingMediaPicker by remember { mutableStateOf<ResourceType?>(null) }
 
+    val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         imageUris = it
     }
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         mediaUri = uri
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        }
     }
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         videoUris = uris
+        uris.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        }
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val granted = result.values.all { it }
+        if (granted) {
+            when (pendingMediaPicker) {
+                ResourceType.VIDEO -> videoPicker.launch(arrayOf("video/*"))
+                ResourceType.AUDIO -> mediaPicker.launch(arrayOf("audio/*"))
+                else -> Unit
+            }
+        }
+        pendingMediaPicker = null
     }
 
     val screenTitle = when (mode) {
@@ -597,10 +631,28 @@ private fun ResourceCreateScreen(
                     val label = if (mode.type == ResourceType.VIDEO) "选择视频" else "选择声音"
                     TextButton(
                         onClick = {
-                            if (mode.type == ResourceType.VIDEO) {
-                                videoPicker.launch("video/*")
+                            val requiredPermissions = when {
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                                    if (mode.type == ResourceType.VIDEO) {
+                                        arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO)
+                                    } else {
+                                        arrayOf(android.Manifest.permission.READ_MEDIA_AUDIO)
+                                    }
+                                }
+                                else -> arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                            }
+                            val hasPermissions = requiredPermissions.all { perm ->
+                                ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+                            }
+                            if (hasPermissions) {
+                                if (mode.type == ResourceType.VIDEO) {
+                                    videoPicker.launch(arrayOf("video/*"))
+                                } else {
+                                    mediaPicker.launch(arrayOf("audio/*"))
+                                }
                             } else {
-                                mediaPicker.launch("audio/*")
+                                pendingMediaPicker = mode.type
+                                permissionLauncher.launch(requiredPermissions)
                             }
                         }
                     ) {
@@ -670,6 +722,17 @@ private fun ResourceCreateScreen(
                     showSceneDialog = false
                     editSceneIndex = null
                 }
+            },
+            onAddAnother = if (editSceneIndex == null) {
+                { speaker, content ->
+                    if (speaker.isNotBlank() || content.isNotBlank()) {
+                        val updated = sceneMessages.toMutableList()
+                        updated.add(SceneDraftMessage(speaker.trim(), content.trim()))
+                        sceneMessages = updated
+                    }
+                }
+            } else {
+                null
             },
             onDismiss = {
                 showSceneDialog = false
@@ -962,10 +1025,12 @@ private fun SceneMessageDialog(
     initialSpeaker: String,
     initialContent: String,
     onConfirm: (String, String) -> Unit,
+    onAddAnother: ((String, String) -> Unit)?,
     onDismiss: () -> Unit
 ) {
     var speaker by remember(initialSpeaker) { mutableStateOf(initialSpeaker) }
     var content by remember(initialContent) { mutableStateOf(initialContent) }
+    val hasContent = speaker.isNotBlank() || content.isNotBlank()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -986,7 +1051,19 @@ private fun SceneMessageDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(speaker, content) }) { Text("确定") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onAddAnother != null) {
+                    TextButton(
+                        onClick = {
+                            onAddAnother(speaker, content)
+                            speaker = ""
+                            content = ""
+                        },
+                        enabled = hasContent
+                    ) { Text("继续添加") }
+                }
+                TextButton(onClick = { onConfirm(speaker, content) }, enabled = hasContent) { Text("确定") }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
