@@ -184,9 +184,10 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         fileManager.openDecryptedStream(path).use { it.readBytes() }
     }
 
-    suspend fun writeDecryptedToCache(path: String): File? = withContext(Dispatchers.IO) {
+    suspend fun writeDecryptedToCache(path: String, extension: String? = null): File? = withContext(Dispatchers.IO) {
         val cacheDir = getApplication<Application>().cacheDir
-        val temp = File(cacheDir, "preview_${System.currentTimeMillis()}.media")
+        val normalizedExtension = extension?.let { if (it.startsWith(".")) it else ".$it" } ?: ".media"
+        val temp = File(cacheDir, "preview_${System.currentTimeMillis()}$normalizedExtension")
         runCatching {
             fileManager.openDecryptedStream(path).use { input ->
                 temp.outputStream().use { output -> input.copyTo(output) }
