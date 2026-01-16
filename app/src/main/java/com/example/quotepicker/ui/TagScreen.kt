@@ -11,8 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -44,8 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
-import com.example.quotepicker.ui.components.AvatarListItem
 import com.example.quotepicker.ui.components.NameDialog
+import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.combinedClickable
@@ -62,8 +63,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     var bottomSheetTarget by remember { mutableStateOf<Any?>(null) }
     var deleteCategory by remember { mutableStateOf<TagCategoryEntity?>(null) }
     var deleteTag by remember { mutableStateOf<TagEntity?>(null) }
+    var sortByName by remember { mutableStateOf(true) }
 
     val isInCategory = ui.currentCategory != null
+    val categoryTagCounts = remember(ui.allTags) {
+        ui.allTags.groupingBy { it.categoryId }.eachCount()
+    }
 
     Scaffold(
         modifier = modifier,
@@ -75,6 +80,11 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         IconButton(onClick = { vm.selectCategory(null) }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { sortByName = !sortByName }) {
+                        Text(if (sortByName) "按名称排序✓" else "按名称排序")
                     }
                 }
             )
@@ -94,13 +104,22 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         Text("暂无标签类别，点击右下角添加")
                     }
                 } else {
-                    LazyColumn(
+                    val categories = if (sortByName) {
+                        ui.categories.sortedBy { it.name.lowercase() }
+                    } else {
+                        ui.categories
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(96.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(ui.categories, key = { it.id }) { category ->
-                            AvatarListItem(
+                        items(categories, key = { it.id }) { category ->
+                            val count = categoryTagCounts[category.id] ?: 0
+                            SquareGridItem(
                                 title = category.name,
+                                subtitle = "标签 $count",
                                 onClick = { vm.selectCategory(category.id) },
                                 onLongClick = { bottomSheetTarget = category }
                             )
@@ -113,15 +132,24 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         Text("暂无标签，点击右下角添加")
                     }
                 } else {
-                    LazyColumn(
+                    val tags = if (sortByName) {
+                        ui.tags.sortedBy { it.name.lowercase() }
+                    } else {
+                        ui.tags
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(96.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(ui.tags, key = { it.id }) { tag ->
-                            AvatarListItem(
+                        items(tags, key = { it.id }) { tag ->
+                            val bg = Color(tag.colorArgb)
+                            val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                            SquareGridItem(
                                 title = tag.name,
-                                avatarColor = Color(tag.colorArgb),
-                                avatarTextColor = if (Color(tag.colorArgb).luminance() < 0.5f) Color.White else Color.Black,
+                                backgroundColor = bg,
+                                contentColor = textColor,
                                 onClick = {},
                                 onLongClick = { bottomSheetTarget = tag }
                             )

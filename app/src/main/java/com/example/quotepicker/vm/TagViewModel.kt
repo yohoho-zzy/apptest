@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 data class TagUiState(
     val categories: List<TagCategoryEntity> = emptyList(),
     val currentCategory: TagCategoryEntity? = null,
-    val tags: List<TagEntity> = emptyList()
+    val tags: List<TagEntity> = emptyList(),
+    val allTags: List<TagEntity> = emptyList()
 )
 
 class TagViewModel(app: Application) : AndroidViewModel(app) {
@@ -35,10 +36,11 @@ class TagViewModel(app: Application) : AndroidViewModel(app) {
     val uiState: StateFlow<TagUiState> = combine(
         repo.observeCategories(),
         selectedCategoryId,
-        tagsFlow
-    ) { categories, selectedId, tags ->
+        tagsFlow,
+        repo.observeAllTags()
+    ) { categories, selectedId, tags, allTags ->
         val current = categories.firstOrNull { it.id == selectedId }
-        TagUiState(categories = categories, currentCategory = current, tags = tags)
+        TagUiState(categories = categories, currentCategory = current, tags = tags, allTags = allTags)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, TagUiState())
 
     fun selectCategory(id: Long?) { selectedCategoryId.value = id }
