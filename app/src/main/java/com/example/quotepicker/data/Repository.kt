@@ -5,33 +5,71 @@ import kotlinx.coroutines.flow.Flow
 
 class Repository private constructor(context: Context) {
     private val db = AppDatabase.get(context)
-    private val groupDao = db.groupDao()
-    private val quoteDao = db.quoteDao()
+    private val categoryDao = db.tagCategoryDao()
+    private val tagDao = db.tagDao()
+    private val characterDao = db.characterDao()
+    private val resourceDao = db.resourceDao()
+    private val crossRefDao = db.crossRefDao()
 
-    fun observeGroups(): Flow<List<GroupEntity>> = groupDao.observeGroups()
-    fun observeQuotes(groupId: Long?): Flow<List<QuoteEntity>> =
-        if (groupId == null) quoteDao.observeAllQuotes() else quoteDao.observeQuotesByGroup(groupId)
+    fun observeCategories(): Flow<List<TagCategoryEntity>> = categoryDao.observeCategories()
+    fun observeTagsByCategory(categoryId: Long): Flow<List<TagEntity>> = tagDao.observeTagsByCategory(categoryId)
+    fun observeAllTags(): Flow<List<TagEntity>> = tagDao.observeAllTags()
+    fun observeCharacters(): Flow<List<CharacterEntity>> = characterDao.observeCharacters()
+    fun observeCharactersWithTags(): Flow<List<CharacterWithTags>> = characterDao.observeCharactersWithTags()
+    fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
+    fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
 
-    suspend fun addGroup(name: String) = groupDao.insert(GroupEntity(name = name))
-    suspend fun deleteGroup(group: GroupEntity) = groupDao.delete(group)
-    suspend fun updateGroup(group: GroupEntity) = groupDao.update(group)
+    suspend fun addCategory(name: String) = categoryDao.insert(TagCategoryEntity(name = name))
+    suspend fun updateCategory(category: TagCategoryEntity) = categoryDao.update(category.copy(updatedAt = System.currentTimeMillis()))
+    suspend fun deleteCategory(category: TagCategoryEntity) = categoryDao.delete(category)
 
-    suspend fun addTextQuote(groupId: Long, text: String, weight: Int) =
-        quoteDao.insert(QuoteEntity(groupId = groupId, type = QuoteType.TEXT, text = text, weight = weight))
+    suspend fun addTag(categoryId: Long, name: String, colorArgb: Int) =
+        tagDao.insert(TagEntity(categoryId = categoryId, name = name, colorArgb = colorArgb))
 
-    suspend fun addImageQuote(groupId: Long, base64: String, text: String, weight: Int) =
-        quoteDao.insert(
-            QuoteEntity(
-                groupId = groupId,
-                type = QuoteType.IMAGE,
-                imageBase64 = base64,
-                text = text,
-                weight = weight
-            )
-        )
+    suspend fun updateTag(tag: TagEntity) = tagDao.update(tag.copy(updatedAt = System.currentTimeMillis()))
+    suspend fun deleteTag(tag: TagEntity) = tagDao.delete(tag)
 
-    suspend fun updateQuote(q: QuoteEntity) = quoteDao.update(q)
-    suspend fun deleteQuote(q: QuoteEntity) = quoteDao.delete(q)
+    suspend fun addCharacter(name: String) = characterDao.insert(CharacterEntity(name = name))
+    suspend fun updateCharacter(character: CharacterEntity) =
+        characterDao.update(character.copy(updatedAt = System.currentTimeMillis()))
+
+    suspend fun deleteCharacter(character: CharacterEntity) = characterDao.delete(character)
+
+    suspend fun updateCharacterTags(characterId: Long, tagIds: List<Long>) {
+        crossRefDao.clearCharacterTags(characterId)
+        if (tagIds.isNotEmpty()) {
+            crossRefDao.insertCharacterTags(tagIds.distinct().map { CharacterTagCrossRef(characterId, it) })
+        }
+    }
+
+    suspend fun addResource(resource: ResourceEntity, tagIds: List<Long>, characterIds: List<Long>): Long {
+        val id = resourceDao.insert(resource)
+        updateResourceTags(id, tagIds)
+        updateResourceCharacters(id, characterIds)
+        return id
+    }
+
+    suspend fun updateResource(resource: ResourceEntity) =
+        resourceDao.update(resource.copy(updatedAt = System.currentTimeMillis()))
+
+    suspend fun deleteResource(resource: ResourceEntity) = resourceDao.delete(resource)
+
+    suspend fun updateResourceTags(resourceId: Long, tagIds: List<Long>) {
+        crossRefDao.clearResourceTags(resourceId)
+        if (tagIds.isNotEmpty()) {
+            crossRefDao.insertResourceTags(tagIds.distinct().map { ResourceTagCrossRef(resourceId, it) })
+        }
+    }
+
+    suspend fun updateResourceCharacters(resourceId: Long, characterIds: List<Long>) {
+        crossRefDao.clearResourceCharacters(resourceId)
+        if (characterIds.isNotEmpty()) {
+            crossRefDao.insertResourceCharacters(characterIds.distinct().map { ResourceCharacterCrossRef(resourceId, it) })
+        }
+    }
+
+    suspend fun resourceIdsForCharacter(characterId: Long) = crossRefDao.resourceIdsForCharacter(characterId)
+    suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
 
     companion object {
         @Volatile private var INSTANCE: Repository? = null

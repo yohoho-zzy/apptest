@@ -1,31 +1,52 @@
 package com.example.quotepicker.data
 
 import android.content.Context
-import androidx.room.*
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 
 class Converters {
     @TypeConverter
-    fun fromType(t: QuoteType): String = t.name
+    fun fromType(type: ResourceType): String = type.name
+
     @TypeConverter
-    fun toType(s: String): QuoteType = QuoteType.valueOf(s)
+    fun toType(raw: String): ResourceType = ResourceType.valueOf(raw)
 }
 
-@Database(entities = [GroupEntity::class, QuoteEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        TagCategoryEntity::class,
+        TagEntity::class,
+        CharacterEntity::class,
+        ResourceEntity::class,
+        ResourceTagCrossRef::class,
+        CharacterTagCrossRef::class,
+        ResourceCharacterCrossRef::class
+    ],
+    version = 2,
+    exportSchema = false
+)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun groupDao(): GroupDao
-    abstract fun quoteDao(): QuoteDao
+    abstract fun tagCategoryDao(): TagCategoryDao
+    abstract fun tagDao(): TagDao
+    abstract fun characterDao(): CharacterDao
+    abstract fun resourceDao(): ResourceDao
+    abstract fun crossRefDao(): CrossRefDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
-        fun get(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
+        fun get(context: Context): AppDatabase =
+            INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "quote_picker.db"
-                ).build().also { INSTANCE = it }
+                )
+                    .fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
-        }
     }
 }
