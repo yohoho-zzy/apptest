@@ -48,6 +48,7 @@ import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -222,6 +223,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TagDialog(
     title: String,
