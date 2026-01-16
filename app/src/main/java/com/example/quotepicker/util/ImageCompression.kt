@@ -13,8 +13,15 @@ object ImageCompression {
 
     fun encodeToBase64(context: Context, uri: Uri): String {
         val resolver = context.contentResolver
-        val bitmap = resolver.openInputStream(uri).use { input ->
-            BitmapFactory.decodeStream(input)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return ""
+        val sampleSize = calculateInSampleSize(bounds, MAX_EDGE, MAX_EDGE)
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val bitmap = resolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, decodeOptions)
         } ?: return ""
 
         val scaled = scale(bitmap)
@@ -31,5 +38,18 @@ object ImageCompression {
         val w = (bitmap.width * ratio).roundToInt()
         val h = (bitmap.height * ratio).roundToInt()
         return Bitmap.createScaledBitmap(bitmap, w, h, true)
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height, width) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            var halfHeight = height / 2
+            var halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }

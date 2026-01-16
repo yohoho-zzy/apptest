@@ -25,9 +25,13 @@ import androidx.compose.ui.unit.dp
 fun AvatarListItem(
     title: String,
     modifier: Modifier = Modifier,
+    avatarColor: Color? = null,
+    avatarTextColor: Color? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val fallbackAvatarColor = MaterialTheme.colorScheme.primaryContainer
+    val fallbackAvatarText = MaterialTheme.colorScheme.onPrimaryContainer
     OutlinedCard(
         modifier = modifier
             .fillMaxWidth()
@@ -40,13 +44,13 @@ fun AvatarListItem(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(avatarColor ?: fallbackAvatarColor),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = title.take(2),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = avatarTextColor ?: fallbackAvatarText
                 )
             }
             Spacer(Modifier.width(12.dp))
