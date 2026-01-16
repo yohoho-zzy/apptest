@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 enum class Corner { LEFT_TOP, RIGHT_TOP, LEFT_BOTTOM, RIGHT_BOTTOM, NONE }
@@ -45,6 +46,7 @@ fun GateScreen(onPassed: () -> Unit) {
     var startTime by remember { mutableStateOf<Long?>(null) }
     var touchPosition by remember { mutableStateOf<Offset?>(null) }
     val opacity = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
     // 解锁目标顺序：右上3次 → 左上1次 → 左下2次
     val targets = listOf(
@@ -74,7 +76,9 @@ fun GateScreen(onPassed: () -> Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     touchPosition = down.position
-                    opacity.snapTo(1f)
+                    scope.launch {
+                        opacity.snapTo(1f)
+                    }
                     var pointerId = down.id
                     var upPosition = down.position
                     while (true) {
@@ -108,7 +112,9 @@ fun GateScreen(onPassed: () -> Unit) {
                             startTime = null
                         }
                     }
-                    opacity.animateTo(0f, tween(200))
+                    scope.launch {
+                        opacity.animateTo(0f, tween(200))
+                    }
                     touchPosition = null
                 }
             }
