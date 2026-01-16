@@ -247,6 +247,7 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
     }.getOrDefault(emptyList())
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
     if (images.isEmpty()) return
