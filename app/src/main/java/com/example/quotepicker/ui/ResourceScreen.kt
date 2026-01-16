@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -600,8 +601,8 @@ private fun FilterCharacterDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("角色")
                 FlowRow(
-                    mainAxisSpacing = 8.dp,
-                    crossAxisSpacing = 8.dp
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
                         selected = current == null,
@@ -740,6 +741,7 @@ private fun ResourceEditDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ResourceGridItem(
     title: String,
@@ -786,8 +788,8 @@ private fun TagSelectionSection(
             if (items.isNotEmpty()) {
                 Text(category.name, style = MaterialTheme.typography.labelMedium)
                 FlowRow(
-                    mainAxisSpacing = 8.dp,
-                    crossAxisSpacing = 8.dp
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items.forEach { tag ->
                         TagFilterChip(
@@ -801,10 +803,10 @@ private fun TagSelectionSection(
         }
         if (uncategorized.isNotEmpty()) {
             Text("其他", style = MaterialTheme.typography.labelMedium)
-            FlowRow(
-                mainAxisSpacing = 8.dp,
-                crossAxisSpacing = 8.dp
-            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 uncategorized.forEach { tag ->
                     TagFilterChip(
                         tag = tag,
@@ -854,8 +856,8 @@ private fun CharacterSelectionSection(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label)
         FlowRow(
-            mainAxisSpacing = 8.dp,
-            crossAxisSpacing = 8.dp
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             characters.forEach { character ->
                 val isSelected = selected.contains(character.id)

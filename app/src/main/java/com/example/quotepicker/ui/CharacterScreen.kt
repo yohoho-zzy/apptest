@@ -371,8 +371,8 @@ private fun TagSelectionSection(
             if (items.isNotEmpty()) {
                 Text(category.name, style = MaterialTheme.typography.labelMedium)
                 FlowRow(
-                    mainAxisSpacing = 8.dp,
-                    crossAxisSpacing = 8.dp
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items.forEach { tag ->
                         val isSelected = selected.contains(tag.id)
@@ -400,8 +400,8 @@ private fun TagSelectionSection(
         if (uncategorized.isNotEmpty()) {
             Text("其他", style = MaterialTheme.typography.labelMedium)
             FlowRow(
-                mainAxisSpacing = 8.dp,
-                crossAxisSpacing = 8.dp
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 uncategorized.forEach { tag ->
                     val isSelected = selected.contains(tag.id)
