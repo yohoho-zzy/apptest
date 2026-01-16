@@ -1,5 +1,6 @@
 package com.example.quotepicker.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AvatarListItem(
     title: String,
