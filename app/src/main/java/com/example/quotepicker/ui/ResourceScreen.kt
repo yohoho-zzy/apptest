@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,13 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -130,7 +128,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 ) {
                     items(ui.resources, key = { it.resource.id }) { res ->
                         ResourceGridItem(
-                            title = res.resource.title,
+                            resource = res,
                             onClick = { previewTarget = res },
                             onLongClick = { bottomSheetTarget = res }
                         )
@@ -143,8 +141,8 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     if (showAddMenu) {
         ModalBottomSheet(onDismissRequest = { showAddMenu = false }) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = { showTextDialog = true; showAddMenu = false }) { Text("创建文本语录") }
-                TextButton(onClick = { showImageQuoteDialog = true; showAddMenu = false }) { Text("创建图片语录") }
+                TextButton(onClick = { showTextDialog = true; showAddMenu = false }) { Text("创建文本") }
+                TextButton(onClick = { showImageQuoteDialog = true; showAddMenu = false }) { Text("创建图片文本") }
                 TextButton(onClick = { showSceneDialog = true; showAddMenu = false }) { Text("创建聊天情景") }
                 TextButton(onClick = {
                     pickedMediaType = ResourceType.IMAGE
@@ -167,7 +165,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     if (showTextDialog) {
         QuoteDialog(
-            title = "创建文本语录",
+            title = "创建文本",
             onConfirm = { title, text, tagIds, characterIds ->
                 vm.addTextQuote(title, text, tagIds, characterIds)
                 showTextDialog = false
@@ -341,7 +339,7 @@ private fun typeLabel(type: ResourceType): String = when (type) {
     ResourceType.IMAGE -> "图片"
     ResourceType.VIDEO -> "视频"
     ResourceType.AUDIO -> "声音"
-    ResourceType.QUOTE -> "语录"
+    ResourceType.QUOTE -> "文本"
     ResourceType.SCENE -> "情景"
 }
 
@@ -424,7 +422,7 @@ private fun ImageQuoteDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("创建图片语录") },
+        title = { Text("创建图片文本") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") })
@@ -744,29 +742,18 @@ private fun ResourceEditDialog(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ResourceGridItem(
-    title: String,
+    resource: ResourceWithTagsCharacters,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    OutlinedCard(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
+    val tagLabel = resource.tags.joinToString("、") { it.name }.ifBlank { "无标签" }
+    val subtitle = "${typeLabel(resource.resource.type)}\n标签：$tagLabel"
+    SquareGridItem(
+        title = resource.resource.title,
+        subtitle = subtitle,
+        onClick = onClick,
+        onLongClick = onLongClick
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

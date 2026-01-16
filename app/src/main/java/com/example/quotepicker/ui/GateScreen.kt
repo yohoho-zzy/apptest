@@ -20,6 +20,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -47,6 +52,19 @@ fun GateScreen(onPassed: () -> Unit) {
     var touchPosition by remember { mutableStateOf<Offset?>(null) }
     val opacity = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val infiniteTransition = rememberInfiniteTransition(label = "magicCircle")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "magicCircleRotation"
+    )
+    val density = LocalDensity.current
+    val circleSize = 156.dp
+    val circleSizePx = with(density) { circleSize.toPx() }
 
     // 解锁目标顺序：右上3次 → 左上1次 → 左下2次
     val targets = listOf(
@@ -124,10 +142,21 @@ fun GateScreen(onPassed: () -> Unit) {
             painter = painterResource(id = com.example.quotepicker.R.drawable.magic_circle),
             contentDescription = null,
             modifier = Modifier
-                .offset { IntOffset(pos.x.roundToInt() - 72, pos.y.roundToInt() - 96) }
-                .size(144.dp)
+                .offset {
+                    IntOffset(
+                        (pos.x - circleSizePx / 2f).roundToInt(),
+                        (pos.y - circleSizePx / 2f).roundToInt()
+                    )
+                }
+                .size(circleSize)
                 .background(Color.Transparent)
-                .graphicsLayer(alpha = opacity.value)
+                .graphicsLayer(
+                    alpha = opacity.value,
+                    rotationZ = rotation,
+                    shadowElevation = with(density) { 12.dp.toPx() },
+                    scaleX = 1.05f,
+                    scaleY = 1.05f
+                )
         )
     }
 }
