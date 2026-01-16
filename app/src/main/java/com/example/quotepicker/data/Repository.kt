@@ -21,7 +21,19 @@ class Repository private constructor(context: Context) {
 
     suspend fun addCategory(name: String) = categoryDao.insert(TagCategoryEntity(name = name))
     suspend fun updateCategory(category: TagCategoryEntity) = categoryDao.update(category.copy(updatedAt = System.currentTimeMillis()))
-    suspend fun deleteCategory(category: TagCategoryEntity) = categoryDao.delete(category)
+    suspend fun deleteCategory(category: TagCategoryEntity) {
+        if (category.name == ORPHAN_CATEGORY_NAME) return
+        val orphan = ensureOrphanCategory()
+        tagDao.reassignCategory(category.id, orphan.id)
+        categoryDao.delete(category)
+    }
+
+    suspend fun ensureOrphanCategory(): TagCategoryEntity {
+        val existing = categoryDao.findByName(ORPHAN_CATEGORY_NAME)
+        if (existing != null) return existing
+        val id = categoryDao.insert(TagCategoryEntity(name = ORPHAN_CATEGORY_NAME))
+        return TagCategoryEntity(id = id, name = ORPHAN_CATEGORY_NAME)
+    }
 
     suspend fun addTag(categoryId: Long, name: String, colorArgb: Int) =
         tagDao.insert(TagEntity(categoryId = categoryId, name = name, colorArgb = colorArgb))
@@ -72,6 +84,7 @@ class Repository private constructor(context: Context) {
     suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
 
     companion object {
+        const val ORPHAN_CATEGORY_NAME = "未分类"
         @Volatile private var INSTANCE: Repository? = null
         fun get(context: Context): Repository =
             INSTANCE ?: synchronized(this) {

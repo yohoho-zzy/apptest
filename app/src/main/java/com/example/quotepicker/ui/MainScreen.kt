@@ -6,6 +6,12 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -13,9 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.ui.unit.dp
 
 @Composable
 fun MainScreen() {
@@ -27,25 +30,25 @@ fun MainScreen() {
                 NavigationBarItem(
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
-                    icon = { Spacer(Modifier.size(0.dp)) },
+                    icon = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
                     label = { Text("标签") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 1,
                     onClick = { currentTab = 1 },
-                    icon = { Spacer(Modifier.size(0.dp)) },
+                    icon = { Icon(Icons.Default.Person, contentDescription = null) },
                     label = { Text("角色") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 2,
                     onClick = { currentTab = 2 },
-                    icon = { Spacer(Modifier.size(0.dp)) },
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
                     label = { Text("资源") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 3,
                     onClick = { currentTab = 3 },
-                    icon = { Spacer(Modifier.size(0.dp)) },
+                    icon = { Icon(Icons.Default.Casino, contentDescription = null) },
                     label = { Text("随机") }
                 )
             }

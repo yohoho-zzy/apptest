@@ -21,8 +21,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -162,13 +167,29 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     if (showAddMenu) {
         ModalBottomSheet(onDismissRequest = { showAddMenu = false }) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = { createMode = CreateMode.Text; showAddMenu = false }) { Text("创建文本") }
-                TextButton(onClick = { createMode = CreateMode.ImageText; showAddMenu = false }) { Text("创建图片文本") }
-                TextButton(onClick = { createMode = CreateMode.Scene; showAddMenu = false }) { Text("创建聊天情景") }
+                TextButton(onClick = { createMode = CreateMode.Text; showAddMenu = false }) {
+                    Icon(Icons.Default.Description, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("创建文本")
+                }
+                TextButton(onClick = { createMode = CreateMode.ImageText; showAddMenu = false }) {
+                    Icon(Icons.Default.Image, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("创建图片文本")
+                }
+                TextButton(onClick = { createMode = CreateMode.Scene; showAddMenu = false }) {
+                    Icon(Icons.Default.Chat, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("创建聊天情景")
+                }
                 TextButton(onClick = { createMode = CreateMode.Media(ResourceType.VIDEO); showAddMenu = false }) {
+                    Icon(Icons.Default.Videocam, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
                     Text("创建视频文本")
                 }
                 TextButton(onClick = { createMode = CreateMode.Media(ResourceType.AUDIO); showAddMenu = false }) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
                     Text("创建声音文本")
                 }
             }
@@ -244,6 +265,8 @@ private sealed class CreateMode {
     data class Media(val type: ResourceType) : CreateMode()
 }
 
+private data class SceneDraftMessage(val speaker: String, val content: String)
+
 @Composable
 private fun FilterBar(
     selectedType: ResourceType?,
@@ -256,7 +279,14 @@ private fun FilterBar(
 ) {
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ResourceType.values().forEach { type ->
+            val orderedTypes = listOf(
+                ResourceType.QUOTE,
+                ResourceType.IMAGE,
+                ResourceType.VIDEO,
+                ResourceType.SCENE,
+                ResourceType.AUDIO
+            )
+            orderedTypes.forEach { type ->
                 FilterChip(
                     selected = selectedType == type,
                     onClick = { onTypeChange(if (selectedType == type) null else type) },
@@ -382,19 +412,25 @@ private fun ResourceCreateScreen(
     var title by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var sceneJson by remember { mutableStateOf("") }
+    var sceneMessages by remember { mutableStateOf<List<SceneDraftMessage>>(emptyList()) }
     var selectedTags by remember { mutableStateOf(setOf<Long>()) }
     var selectedCharacters by remember { mutableStateOf(setOf<Long>()) }
     var imageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
+    var videoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var showTagPicker by remember { mutableStateOf(false) }
     var showCharacterPicker by remember { mutableStateOf(false) }
+    var showSceneDialog by remember { mutableStateOf(false) }
+    var editSceneIndex by remember { mutableStateOf<Int?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         imageUris = it
     }
     val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         mediaUri = uri
+    }
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        videoUris = uris
     }
 
     val screenTitle = when (mode) {
@@ -407,8 +443,8 @@ private fun ResourceCreateScreen(
     val canSubmit = title.isNotBlank() && selectedCharacters.isNotEmpty() && when (mode) {
         CreateMode.Text -> true
         CreateMode.ImageText -> imageUris.isNotEmpty()
-        CreateMode.Scene -> true
-        is CreateMode.Media -> mediaUri != null
+        CreateMode.Scene -> sceneMessages.isNotEmpty()
+        is CreateMode.Media -> if (mode.type == ResourceType.VIDEO) videoUris.isNotEmpty() else mediaUri != null
     }
 
     Scaffold(
@@ -438,17 +474,33 @@ private fun ResourceCreateScreen(
                             CreateMode.Scene -> vm.addScene(
                                 title.trim(),
                                 description.ifBlank { null },
-                                sceneJson,
+                                buildSceneJson(sceneMessages),
                                 selectedTags.toList(),
                                 selectedCharacters.toList()
                             )
                             is CreateMode.Media -> vm.addEncryptedMedia(
                                 mode.type,
                                 title.trim(),
-                                mediaUri ?: return@TextButton,
+                                if (mode.type == ResourceType.VIDEO) {
+                                    val uris = videoUris
+                                    uris.firstOrNull() ?: return@TextButton
+                                } else {
+                                    mediaUri ?: return@TextButton
+                                },
                                 selectedTags.toList(),
                                 selectedCharacters.toList()
                             )
+                        }
+                        if (mode is CreateMode.Media && mode.type == ResourceType.VIDEO && videoUris.size > 1) {
+                            videoUris.drop(1).forEachIndexed { index, uri ->
+                                vm.addEncryptedMedia(
+                                    mode.type,
+                                    "${title.trim()} (${index + 2})",
+                                    uri,
+                                    selectedTags.toList(),
+                                    selectedCharacters.toList()
+                                )
+                            }
                         }
                         onBack()
                     }, enabled = canSubmit) { Text("创建") }
@@ -479,7 +531,11 @@ private fun ResourceCreateScreen(
                     )
                 }
                 CreateMode.ImageText -> {
-                    TextButton(onClick = { imagePicker.launch("image/*") }) { Text("选择图片") }
+                    TextButton(onClick = { imagePicker.launch("image/*") }) {
+                        Icon(Icons.Default.Image, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("选择图片")
+                    }
                     Text(if (imageUris.isEmpty()) "未选择图片" else "已选择 ${imageUris.size} 张图片")
                 }
                 CreateMode.Scene -> {
@@ -489,23 +545,77 @@ private fun ResourceCreateScreen(
                         label = { Text("描述(可选)") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = sceneJson,
-                        onValueChange = { sceneJson = it },
-                        label = { Text("对话JSON") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "示例：[{\"speaker\":\"小明\",\"text\":\"你好\"},{\"speaker\":\"小红\",\"text\":\"你好呀\"}]",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                    TextButton(onClick = { showSceneDialog = true }) {
+                        Icon(Icons.Default.Chat, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("添加对话")
+                    }
+                    if (sceneMessages.isEmpty()) {
+                        Text("暂无对话", style = MaterialTheme.typography.labelSmall)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            sceneMessages.forEachIndexed { index, message ->
+                                androidx.compose.material3.OutlinedCard {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = message.speaker.ifBlank { "角色" },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(text = message.content)
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            IconButton(onClick = {
+                                                editSceneIndex = index
+                                                showSceneDialog = true
+                                            }) {
+                                                Icon(Icons.Default.Edit, contentDescription = "编辑")
+                                            }
+                                            IconButton(onClick = {
+                                                sceneMessages = sceneMessages.toMutableList().also { it.removeAt(index) }
+                                            }) {
+                                                Icon(Icons.Default.Delete, contentDescription = "删除")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 is CreateMode.Media -> {
                     val label = if (mode.type == ResourceType.VIDEO) "选择视频" else "选择声音"
-                    TextButton(onClick = { mediaPicker.launch(if (mode.type == ResourceType.VIDEO) "video/*" else "audio/*") }) {
+                    TextButton(
+                        onClick = {
+                            if (mode.type == ResourceType.VIDEO) {
+                                videoPicker.launch("video/*")
+                            } else {
+                                mediaPicker.launch("audio/*")
+                            }
+                        }
+                    ) {
+                        Icon(
+                            if (mode.type == ResourceType.VIDEO) Icons.Default.Videocam else Icons.Default.MusicNote,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(label)
                     }
-                    Text(mediaUri?.toString() ?: "未选择文件")
+                    if (mode.type == ResourceType.VIDEO) {
+                        Text(if (videoUris.isEmpty()) "未选择视频" else "已选择 ${videoUris.size} 个视频")
+                    } else {
+                        Text(mediaUri?.toString() ?: "未选择文件")
+                    }
                 }
             }
             ResourceTagPickerRow(
@@ -538,6 +648,33 @@ private fun ResourceCreateScreen(
             selectedIds = selectedCharacters,
             onConfirm = { selectedCharacters = it },
             onDismiss = { showCharacterPicker = false }
+        )
+    }
+    if (showSceneDialog) {
+        SceneMessageDialog(
+            title = if (editSceneIndex == null) "添加对话" else "编辑对话",
+            initialSpeaker = editSceneIndex?.let { sceneMessages.getOrNull(it)?.speaker }.orEmpty(),
+            initialContent = editSceneIndex?.let { sceneMessages.getOrNull(it)?.content }.orEmpty(),
+            onConfirm = { speaker, content ->
+                if (speaker.isBlank() && content.isBlank()) {
+                    showSceneDialog = false
+                    editSceneIndex = null
+                } else {
+                    val updated = sceneMessages.toMutableList()
+                    if (editSceneIndex != null) {
+                        updated[editSceneIndex!!] = SceneDraftMessage(speaker.trim(), content.trim())
+                    } else {
+                        updated.add(SceneDraftMessage(speaker.trim(), content.trim()))
+                    }
+                    sceneMessages = updated
+                    showSceneDialog = false
+                    editSceneIndex = null
+                }
+            },
+            onDismiss = {
+                showSceneDialog = false
+                editSceneIndex = null
+            }
         )
     }
 }
@@ -776,7 +913,7 @@ private fun TagSelectionSection(
             }
         }
         if (uncategorized.isNotEmpty()) {
-            Text("其他", style = MaterialTheme.typography.labelMedium)
+            Text("未分类", style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -817,4 +954,51 @@ private fun TagFilterChip(
             selectedLabelColor = selectedTextColor
         )
     )
+}
+
+@Composable
+private fun SceneMessageDialog(
+    title: String,
+    initialSpeaker: String,
+    initialContent: String,
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var speaker by remember(initialSpeaker) { mutableStateOf(initialSpeaker) }
+    var content by remember(initialContent) { mutableStateOf(initialContent) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = speaker,
+                    onValueChange = { speaker = it },
+                    label = { Text("角色") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("说话内容") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(speaker, content) }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+private fun buildSceneJson(messages: List<SceneDraftMessage>): String {
+    val array = org.json.JSONArray()
+    messages.forEach { message ->
+        val obj = org.json.JSONObject()
+        obj.put("speaker", message.speaker)
+        obj.put("text", message.content)
+        array.put(obj)
+    }
+    return array.toString()
 }

@@ -13,6 +13,9 @@ interface TagCategoryDao {
     @Query("SELECT * FROM tag_categories ORDER BY name COLLATE NOCASE ASC")
     fun observeCategories(): Flow<List<TagCategoryEntity>>
 
+    @Query("SELECT * FROM tag_categories WHERE name = :name LIMIT 1")
+    suspend fun findByName(name: String): TagCategoryEntity?
+
     @Insert
     suspend fun insert(category: TagCategoryEntity): Long
 
@@ -39,6 +42,9 @@ interface TagDao {
 
     @Delete
     suspend fun delete(tag: TagEntity)
+
+    @Query("UPDATE tags SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
 }
 
 @Dao

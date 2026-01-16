@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AssistChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,7 +60,6 @@ fun ResourcePreviewScreen(
     vm: ResourceViewModel,
     onBack: () -> Unit
 ) {
-    var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var quoteImages by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
@@ -67,19 +67,17 @@ fun ResourcePreviewScreen(
 
     LaunchedEffect(resource.resource.id) {
         val res = resource.resource
-        bitmap = when (res.type) {
-            ResourceType.IMAGE -> {
-                val path = res.contentUriOrPath ?: return@LaunchedEffect
+        quoteImages = emptyList()
+        if (res.type == ResourceType.IMAGE) {
+            val images = mutableListOf<android.graphics.Bitmap>()
+            res.contentUriOrPath?.let { path ->
                 val bytes = vm.loadDecryptedBytes(path)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { images.add(it) }
             }
-            ResourceType.QUOTE -> null
-            else -> null
-        }
-        quoteImages = if (res.type == ResourceType.QUOTE) {
-            decodeQuoteImages(res.quoteImageBase64, vm)
-        } else {
-            emptyList()
+            images.addAll(decodeQuoteImages(res.quoteImageBase64, vm))
+            quoteImages = images
+        } else if (res.type == ResourceType.QUOTE) {
+            quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
         }
         mediaUri = when (res.type) {
             ResourceType.VIDEO, ResourceType.AUDIO -> {
@@ -128,6 +126,14 @@ fun ResourcePreviewScreen(
             } else {
                 Text("无标签", style = MaterialTheme.typography.labelMedium)
             }
+            if (resource.characters.isNotEmpty()) {
+                Text("角色", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    resource.characters.forEach { character ->
+                        AssistChip(onClick = {}, label = { Text(character.name) })
+                    }
+                }
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth()
@@ -146,13 +152,11 @@ fun ResourcePreviewScreen(
                             QuoteImagePager(images = quoteImages)
                         }
                         ResourceType.IMAGE -> {
-                            bitmap?.let {
-                                Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } ?: Text("图片加载中…")
+                            if (quoteImages.isNotEmpty()) {
+                                QuoteImagePager(images = quoteImages)
+                            } else {
+                                Text("图片加载中…")
+                            }
                         }
                         ResourceType.VIDEO -> {
                             if (mediaUri != null) {
