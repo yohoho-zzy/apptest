@@ -9,7 +9,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
@@ -186,7 +185,7 @@ fun GateScreen(onPassed: () -> Unit) {
         ) {
             Canvas(
                 modifier = Modifier
-                    .matchParentSize()
+                    .fillMaxSize()
                     .graphicsLayer(scaleX = pulse, scaleY = pulse, alpha = glowAlpha)
             ) {
                 val radius = size.minDimension / 2f
