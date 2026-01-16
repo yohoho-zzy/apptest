@@ -1,25 +1,123 @@
 package com.example.quotepicker.data
 
+import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.Relation
 
-@Entity(tableName = "groups")
-data class GroupEntity(
+enum class ResourceType { IMAGE, VIDEO, AUDIO, QUOTE, SCENE }
+
+@Entity(
+    tableName = "tag_categories",
+    indices = [Index(value = ["name"], unique = true)]
+)
+data class TagCategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
-enum class QuoteType { TEXT, IMAGE }
-
-@Entity(tableName = "quotes")
-data class QuoteEntity(
+@Entity(
+    tableName = "tags",
+    indices = [Index(value = ["categoryId", "name"], unique = true)]
+)
+data class TagEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val groupId: Long,
-    val type: QuoteType,
-    val text: String? = null,
-    val imageBase64: String? = null,
-    val weight: Int = 1,
-    val enabled: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val categoryId: Long,
+    val name: String,
+    val colorArgb: Int,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "characters",
+    indices = [Index(value = ["name"], unique = true)]
+)
+data class CharacterEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val description: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "resources")
+data class ResourceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: ResourceType,
+    val title: String,
+    val contentUriOrPath: String? = null,
+    val quoteText: String? = null,
+    val quoteImageBase64: String? = null,
+    val sceneJson: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "resource_tag_cross_ref",
+    primaryKeys = ["resourceId", "tagId"]
+)
+data class ResourceTagCrossRef(
+    val resourceId: Long,
+    val tagId: Long
+)
+
+@Entity(
+    tableName = "character_tag_cross_ref",
+    primaryKeys = ["characterId", "tagId"]
+)
+data class CharacterTagCrossRef(
+    val characterId: Long,
+    val tagId: Long
+)
+
+@Entity(
+    tableName = "resource_character_cross_ref",
+    primaryKeys = ["resourceId", "characterId"]
+)
+data class ResourceCharacterCrossRef(
+    val resourceId: Long,
+    val characterId: Long
+)
+
+data class CharacterWithTags(
+    @Embedded val character: CharacterEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "id",
+        associateBy = androidx.room.Junction(
+            value = CharacterTagCrossRef::class,
+            parentColumn = "characterId",
+            entityColumn = "tagId"
+        )
+    )
+    val tags: List<TagEntity>
+)
+
+data class ResourceWithTagsCharacters(
+    @Embedded val resource: ResourceEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "id",
+        associateBy = androidx.room.Junction(
+            value = ResourceTagCrossRef::class,
+            parentColumn = "resourceId",
+            entityColumn = "tagId"
+        )
+    )
+    val tags: List<TagEntity>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "id",
+        associateBy = androidx.room.Junction(
+            value = ResourceCharacterCrossRef::class,
+            parentColumn = "resourceId",
+            entityColumn = "characterId"
+        )
+    )
+    val characters: List<CharacterEntity>
 )
