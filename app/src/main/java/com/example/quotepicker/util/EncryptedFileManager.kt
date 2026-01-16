@@ -12,7 +12,6 @@ import javax.crypto.CipherOutputStream
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import kotlin.random.Random
 
 class EncryptedFileManager(private val context: Context) {
     private val keyAlias = "resource_aes_key"
@@ -43,10 +42,10 @@ class EncryptedFileManager(private val context: Context) {
 
     fun encryptToFile(input: InputStream, targetName: String): File {
         val key = getOrCreateKey()
-        val iv = Random.nextBytes(12)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+            init(Cipher.ENCRYPT_MODE, key)
         }
+        val iv = cipher.iv
         val outFile = File(encryptedDir(), targetName)
         outFile.outputStream().use { fileOut ->
             fileOut.write(iv)
