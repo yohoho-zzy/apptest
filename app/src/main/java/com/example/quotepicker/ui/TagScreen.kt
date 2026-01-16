@@ -63,7 +63,6 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     var bottomSheetTarget by remember { mutableStateOf<Any?>(null) }
     var deleteCategory by remember { mutableStateOf<TagCategoryEntity?>(null) }
     var deleteTag by remember { mutableStateOf<TagEntity?>(null) }
-    var sortByName by remember { mutableStateOf(true) }
 
     val isInCategory = ui.currentCategory != null
     val categoryTagCounts = remember(ui.allTags) {
@@ -80,11 +79,6 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         IconButton(onClick = { vm.selectCategory(null) }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { sortByName = !sortByName }) {
-                        Text(if (sortByName) "按名称排序✓" else "按名称排序")
                     }
                 }
             )
@@ -104,16 +98,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         Text("暂无标签类别，点击右下角添加")
                     }
                 } else {
-                    val categories = if (sortByName) {
-                        ui.categories.sortedBy { it.name.lowercase() }
-                    } else {
-                        ui.categories
-                    }
+                    val categories = ui.categories.sortedBy { it.name.lowercase() }
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(96.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        columns = GridCells.Fixed(5),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(categories, key = { it.id }) { category ->
                             val count = categoryTagCounts[category.id] ?: 0
@@ -132,16 +122,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         Text("暂无标签，点击右下角添加")
                     }
                 } else {
-                    val tags = if (sortByName) {
-                        ui.tags.sortedBy { it.name.lowercase() }
-                    } else {
-                        ui.tags
-                    }
+                    val tags = ui.tags.sortedBy { it.name.lowercase() }
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(96.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        columns = GridCells.Fixed(5),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(tags, key = { it.id }) { tag ->
                             val bg = Color(tag.colorArgb)

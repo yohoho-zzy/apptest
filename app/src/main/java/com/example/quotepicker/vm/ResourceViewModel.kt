@@ -16,6 +16,7 @@ import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.EncryptedFileManager
 import com.example.quotepicker.util.ImageCompression
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -159,6 +160,17 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadDecryptedBytes(path: String): ByteArray = withContext(Dispatchers.IO) {
         fileManager.openDecryptedStream(path).use { it.readBytes() }
+    }
+
+    suspend fun writeDecryptedToCache(path: String): File? = withContext(Dispatchers.IO) {
+        val cacheDir = getApplication<Application>().cacheDir
+        val temp = File(cacheDir, "preview_${System.currentTimeMillis()}.media")
+        runCatching {
+            fileManager.openDecryptedStream(path).use { input ->
+                temp.outputStream().use { output -> input.copyTo(output) }
+            }
+            temp
+        }.getOrNull()
     }
 
     fun decodeBase64ToBitmap(b64: String): Bitmap? {

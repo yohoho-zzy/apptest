@@ -54,6 +54,7 @@ import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.NameDialog
+import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.CharacterViewModel
 import com.example.quotepicker.vm.ResourceViewModel
@@ -76,6 +77,16 @@ fun CharacterScreen(
     var filterTagDialog by remember { mutableStateOf(false) }
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
+    var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
+
+    if (previewTarget != null) {
+        ResourcePreviewScreen(
+            resource = previewTarget!!,
+            vm = resourceVm,
+            onBack = { previewTarget = null }
+        )
+        return
+    }
 
     Scaffold(
         modifier = modifier,
@@ -107,10 +118,10 @@ fun CharacterScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(96.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        columns = GridCells.Fixed(5),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(ui.characters, key = { it.character.id }) { character ->
                             SquareGridItem(
@@ -148,10 +159,10 @@ fun CharacterScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(110.dp),
+                        columns = GridCells.Fixed(3),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(filteredResources, key = { it.resource.id }) { resource ->
                             val tagLabel = resource.tags.joinToString("、") { it.name }.ifBlank { "无标签" }
@@ -159,7 +170,7 @@ fun CharacterScreen(
                             SquareGridItem(
                                 title = resource.resource.title,
                                 subtitle = subtitle,
-                                onClick = {},
+                                onClick = { previewTarget = resource },
                                 onLongClick = {}
                             )
                         }
