@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -51,7 +52,7 @@ import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ResourcePreviewScreen(
     resource: ResourceWithTagsCharacters,
@@ -246,6 +247,7 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
     }.getOrDefault(emptyList())
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
     if (images.isEmpty()) return
