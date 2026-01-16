@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
@@ -137,8 +138,23 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
         val targetName = "${type.name.lowercase()}_${System.currentTimeMillis()}.enc"
-        val input = getApplication<Application>().contentResolver.openInputStream(uri) ?: return@launch
-        val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }.getOrNull() ?: return@launch
+        val resolver = getApplication<Application>().contentResolver
+        val input = runCatching { resolver.openInputStream(uri) }
+            .onFailure { error ->
+                Log.e("ResourceViewModel", "Failed to open media uri=$uri type=$type", error)
+            }
+            .getOrNull()
+            ?: return@launch
+        val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
+            .onFailure { error ->
+                Log.e("ResourceViewModel", "Failed to encrypt media uri=$uri type=$type", error)
+            }
+            .getOrNull()
+            ?: return@launch
+        Log.d(
+            "ResourceViewModel",
+            "Encrypted media saved type=$type path=${encryptedFile.absolutePath} size=${encryptedFile.length()}"
+        )
         repo.addResource(
             ResourceEntity(
                 type = type,
@@ -176,7 +192,17 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
             temp
-        }.getOrNull()
+        }
+            .onSuccess {
+                Log.d(
+                    "ResourceViewModel",
+                    "Decrypted media cached path=$path temp=${temp.absolutePath} size=${temp.length()}"
+                )
+            }
+            .onFailure { error ->
+                Log.e("ResourceViewModel", "Failed to decrypt media path=$path", error)
+            }
+            .getOrNull()
     }
 
     fun decodeBase64ToBitmap(b64: String): Bitmap? {
