@@ -63,12 +63,15 @@ fun ResourcePreviewScreen(
 ) {
     var quoteImages by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
+    var mediaLoadFailed by remember { mutableStateOf(false) }
+    var mediaReloadKey by remember { mutableStateOf(0) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(resource.resource.id) {
+    LaunchedEffect(resource.resource.id, mediaReloadKey) {
         val res = resource.resource
         quoteImages = emptyList()
+        mediaLoadFailed = false
         if (res.type == ResourceType.IMAGE) {
             val images = mutableListOf<android.graphics.Bitmap>()
             res.contentUriOrPath?.let { path ->
@@ -83,10 +86,16 @@ fun ResourcePreviewScreen(
         mediaUri = when (res.type) {
             ResourceType.VIDEO, ResourceType.AUDIO -> {
                 val path = res.contentUriOrPath ?: return@LaunchedEffect
+                val extension = if (res.type == ResourceType.VIDEO) "mp4" else "mp3"
                 val file = withContext(Dispatchers.IO) {
-                    vm.writeDecryptedToCache(path)
-                } ?: return@LaunchedEffect
-                Uri.fromFile(file)
+                    vm.writeDecryptedToCache(path, extension)
+                }
+                if (file == null) {
+                    mediaLoadFailed = true
+                    null
+                } else {
+                    Uri.fromFile(file)
+                }
             }
             else -> null
         }
@@ -173,6 +182,14 @@ fun ResourcePreviewScreen(
                         ResourceType.VIDEO -> {
                             if (mediaUri != null) {
                                 MediaPreview(uri = mediaUri!!)
+                            } else if (mediaLoadFailed) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("视频加载失败")
+                                    AssistChip(
+                                        onClick = { mediaReloadKey += 1 },
+                                        label = { Text("重试") }
+                                    )
+                                }
                             } else {
                                 Text("视频加载中…")
                             }
@@ -181,6 +198,14 @@ fun ResourcePreviewScreen(
                             if (mediaUri != null) {
                                 MediaPreview(uri = mediaUri!!)
                                 Text("音频播放中")
+                            } else if (mediaLoadFailed) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("音频加载失败")
+                                    AssistChip(
+                                        onClick = { mediaReloadKey += 1 },
+                                        label = { Text("重试") }
+                                    )
+                                }
                             } else {
                                 Text("音频加载中…")
                             }
