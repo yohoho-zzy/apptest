@@ -1,6 +1,5 @@
 package com.example.quotepicker.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
@@ -54,6 +52,9 @@ import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.NameDialog
+import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.tagTextColor
+import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.CharacterViewModel
@@ -165,11 +166,10 @@ fun CharacterScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(filteredResources, key = { it.resource.id }) { resource ->
-                            val tagLabel = resource.tags.joinToString("、") { it.name }.ifBlank { "无标签" }
-                            val subtitle = "${typeLabel(resource.resource.type)}\n标签：$tagLabel"
-                            SquareGridItem(
+                            ResourceGridCard(
                                 title = resource.resource.title,
-                                subtitle = subtitle,
+                                typeLabel = typeLabel(resource.resource.type),
+                                tags = resource.tags,
                                 onClick = { previewTarget = resource },
                                 onLongClick = {}
                             )
@@ -342,19 +342,6 @@ private fun TagSummarySection(
 }
 
 @Composable
-private fun TagBadge(tag: TagEntity) {
-    val bg = Color(tag.colorArgb)
-    val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
-    Box(
-        modifier = Modifier
-            .background(bg, shape = MaterialTheme.shapes.small)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-    ) {
-        Text(text = tag.name, color = textColor, style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-@Composable
 private fun CharacterResourceFilterBar(
     selectedType: ResourceType?,
     selectedTagIds: Set<Long>,
@@ -468,7 +455,7 @@ private fun TagSelectionSection(
                     items.forEach { tag ->
                         val isSelected = selected.contains(tag.id)
                         val tagColor = Color(tag.colorArgb)
-                        val selectedTextColor = if (tagColor.luminance() < 0.5f) Color.White else Color.Black
+                        val selectedTextColor = tagTextColor(tagColor)
                         FilterChip(
                             selected = isSelected,
                             onClick = {
@@ -478,7 +465,7 @@ private fun TagSelectionSection(
                             },
                             label = { Text(tag.name) },
                             colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.White,
+                                containerColor = tagColor.copy(alpha = 0.2f),
                                 selectedContainerColor = tagColor,
                                 labelColor = MaterialTheme.colorScheme.onSurface,
                                 selectedLabelColor = selectedTextColor
@@ -497,7 +484,7 @@ private fun TagSelectionSection(
                 uncategorized.forEach { tag ->
                     val isSelected = selected.contains(tag.id)
                     val tagColor = Color(tag.colorArgb)
-                    val selectedTextColor = if (tagColor.luminance() < 0.5f) Color.White else Color.Black
+                    val selectedTextColor = tagTextColor(tagColor)
                     FilterChip(
                         selected = isSelected,
                         onClick = {
@@ -507,7 +494,7 @@ private fun TagSelectionSection(
                         },
                         label = { Text(tag.name) },
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color.White,
+                            containerColor = tagColor.copy(alpha = 0.2f),
                             selectedContainerColor = tagColor,
                             labelColor = MaterialTheme.colorScheme.onSurface,
                             selectedLabelColor = selectedTextColor
