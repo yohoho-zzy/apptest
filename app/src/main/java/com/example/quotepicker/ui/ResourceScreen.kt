@@ -1,11 +1,8 @@
 package com.example.quotepicker.ui
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,7 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,10 +54,9 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.ResourceViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,12 +73,22 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var deleteTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
+    var mediaDialogTitle by remember { mutableStateOf("") }
 
     var selectedResourceInput by remember { mutableStateOf<ResourceInputState?>(null) }
     val mediaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val type = pickedMediaType ?: return@rememberLauncherForActivityResult
         val resolved = uri ?: return@rememberLauncherForActivityResult
         selectedResourceInput = ResourceInputState(title = "", type = type, uri = resolved)
+    }
+
+    if (previewTarget != null) {
+        ResourcePreviewScreen(
+            resource = previewTarget!!,
+            vm = vm,
+            onBack = { previewTarget = null }
+        )
+        return
     }
 
     Scaffold(
@@ -121,10 +125,10 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(5),
+                    columns = GridCells.Fixed(3),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(ui.resources, key = { it.resource.id }) { res ->
                         ResourceGridItem(
@@ -145,20 +149,17 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 TextButton(onClick = { showImageQuoteDialog = true; showAddMenu = false }) { Text("创建图片文本") }
                 TextButton(onClick = { showSceneDialog = true; showAddMenu = false }) { Text("创建聊天情景") }
                 TextButton(onClick = {
-                    pickedMediaType = ResourceType.IMAGE
-                    showAddMenu = false
-                    mediaLauncher.launch("image/*")
-                }) { Text("上传图片") }
-                TextButton(onClick = {
                     pickedMediaType = ResourceType.VIDEO
+                    mediaDialogTitle = "创建视频文本"
                     showAddMenu = false
                     mediaLauncher.launch("video/*")
-                }) { Text("上传视频") }
+                }) { Text("创建视频文本") }
                 TextButton(onClick = {
                     pickedMediaType = ResourceType.AUDIO
+                    mediaDialogTitle = "创建声音文本"
                     showAddMenu = false
                     mediaLauncher.launch("audio/*")
-                }) { Text("上传声音") }
+                }) { Text("创建声音文本") }
             }
         }
     }
@@ -206,6 +207,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     selectedResourceInput?.let { input ->
         MediaDialog(
             input = input,
+            dialogTitle = mediaDialogTitle.ifBlank { "创建${typeLabel(input.type)}文本" },
             categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
@@ -233,10 +235,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             onConfirm = { vm.updateCharacterFilter(it) },
             onDismiss = { filterCharacterDialog = false }
         )
-    }
-
-    previewTarget?.let { target ->
-        ResourcePreviewDialog(resource = target, vm = vm, onDismiss = { previewTarget = null })
     }
 
     editTarget?.let { target ->
@@ -478,8 +476,12 @@ private fun SceneDialog(
                 OutlinedTextField(
                     value = sceneJson,
                     onValueChange = { sceneJson = it },
-                    label = { Text("sceneJson") },
+                    label = { Text("对话JSON") },
                     modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "示例：[{\"speaker\":\"小明\",\"text\":\"你好\"},{\"speaker\":\"小红\",\"text\":\"你好呀\"}]",
+                    style = MaterialTheme.typography.labelSmall
                 )
                 TagSelectionSection(
                     label = "标签",
@@ -510,6 +512,7 @@ private fun SceneDialog(
 @Composable
 private fun MediaDialog(
     input: ResourceInputState,
+    dialogTitle: String,
     categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
@@ -521,7 +524,7 @@ private fun MediaDialog(
     var selectedCharacters by remember { mutableStateOf(setOf<Long>()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("上传${typeLabel(input.type)}") },
+        title = { Text(dialogTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") })
@@ -634,57 +637,6 @@ private fun FilterCharacterDialog(
             }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
-}
-
-@Composable
-private fun ResourcePreviewDialog(
-    resource: ResourceWithTagsCharacters,
-    vm: ResourceViewModel,
-    onDismiss: () -> Unit
-) {
-    var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(resource.resource.id) {
-        val res = resource.resource
-        bitmap = when (res.type) {
-            ResourceType.IMAGE -> {
-                val path = res.contentUriOrPath ?: return@LaunchedEffect
-                val bytes = vm.loadDecryptedBytes(path)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            }
-            ResourceType.QUOTE -> {
-                val b64 = res.quoteImageBase64 ?: return@LaunchedEffect
-                vm.decodeBase64ToBitmap(b64)
-            }
-            else -> null
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(resource.resource.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                when (resource.resource.type) {
-                    ResourceType.QUOTE -> {
-                        Text(resource.resource.quoteText.orEmpty())
-                        bitmap?.let {
-                            Image(bitmap = it.asImageBitmap(), contentDescription = null)
-                        }
-                    }
-                    ResourceType.IMAGE -> {
-                        bitmap?.let {
-                            Image(bitmap = it.asImageBitmap(), contentDescription = null)
-                        } ?: Text("图片加载中…")
-                    }
-                    ResourceType.AUDIO -> Text("音频预览请使用外部播放器（已加密存储）")
-                    ResourceType.VIDEO -> Text("视频预览请使用外部播放器（已加密存储）")
-                    ResourceType.SCENE -> {
-                        Text(resource.resource.sceneJson.orEmpty())
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
 }
 
