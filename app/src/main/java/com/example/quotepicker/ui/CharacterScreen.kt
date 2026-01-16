@@ -38,6 +38,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,8 +69,9 @@ fun CharacterScreen(
     resourceVm: ResourceViewModel = viewModel()
 ) {
     val ui by vm.uiState.collectAsState()
-    val resources by resourceVm.uiState.collectAsState()
-    var selected by remember { mutableStateOf<CharacterWithTags?>(null) }
+    val resources by resourceVm.allResources.collectAsState()
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    val selected = ui.characters.firstOrNull { it.character.id == selectedId }
     var showAddDialog by remember { mutableStateOf(false) }
     var editCharacter by remember { mutableStateOf<CharacterEntity?>(null) }
     var showTagPicker by remember { mutableStateOf(false) }
@@ -79,6 +81,11 @@ fun CharacterScreen(
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
     var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
+
+    LaunchedEffect(selectedId) {
+        selectedTagIds = emptySet()
+        selectedType = null
+    }
 
     if (previewTarget != null) {
         ResourcePreviewScreen(
@@ -96,7 +103,7 @@ fun CharacterScreen(
                 title = { Text(selected?.character?.name ?: "角色") },
                 navigationIcon = {
                     if (selected != null) {
-                        IconButton(onClick = { selected = null }) {
+                        IconButton(onClick = { selectedId = null }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
                     }
@@ -127,7 +134,7 @@ fun CharacterScreen(
                         items(ui.characters, key = { it.character.id }) { character ->
                             SquareGridItem(
                                 title = character.character.name,
-                                onClick = { selected = character },
+                                onClick = { selectedId = character.character.id },
                                 onLongClick = { bottomSheetTarget = character }
                             )
                         }
@@ -147,7 +154,7 @@ fun CharacterScreen(
                     onTypeChange = { selectedType = it },
                     onTagDialog = { filterTagDialog = true }
                 )
-                val filteredResources = resources.resources.filter {
+                val filteredResources = resources.filter {
                     it.characters.any { c -> c.id == char.id }
                 }.filter { res ->
                     val typeMatch = selectedType?.let { it == res.resource.type } ?: true
@@ -328,7 +335,7 @@ private fun TagSummarySection(
         }
         val uncategorized = tags.filter { it.categoryId !in categoryMap.keys }
         if (uncategorized.isNotEmpty()) {
-            Text("其他", style = MaterialTheme.typography.labelMedium)
+            Text("未分类", style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -350,7 +357,14 @@ private fun CharacterResourceFilterBar(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ResourceType.values().forEach { type ->
+            val orderedTypes = listOf(
+                ResourceType.QUOTE,
+                ResourceType.IMAGE,
+                ResourceType.VIDEO,
+                ResourceType.SCENE,
+                ResourceType.AUDIO
+            )
+            orderedTypes.forEach { type ->
                 FilterChip(
                     selected = selectedType == type,
                     onClick = { onTypeChange(if (selectedType == type) null else type) },
@@ -476,7 +490,7 @@ private fun TagSelectionSection(
             }
         }
         if (uncategorized.isNotEmpty()) {
-            Text("其他", style = MaterialTheme.typography.labelMedium)
+            Text("未分类", style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

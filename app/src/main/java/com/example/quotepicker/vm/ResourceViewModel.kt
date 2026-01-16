@@ -46,8 +46,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     private val filters = MutableStateFlow(ResourceFilterState())
 
+    val allResources: StateFlow<List<ResourceWithTagsCharacters>> = repo.observeResourcesWithRelations()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val uiState: StateFlow<ResourceUiState> = combine(
-        repo.observeResourcesWithRelations(),
+        allResources,
         repo.observeCategories(),
         repo.observeAllTags(),
         repo.observeCharacters(),
@@ -104,7 +107,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             }
             val payload = org.json.JSONArray(base64List).toString()
             repo.addResource(
-                ResourceEntity(type = ResourceType.QUOTE, title = title, quoteImageBase64 = payload),
+                ResourceEntity(type = ResourceType.IMAGE, title = title, quoteImageBase64 = payload),
                 tagIds,
                 characterIds
             )

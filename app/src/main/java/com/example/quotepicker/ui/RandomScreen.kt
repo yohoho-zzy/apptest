@@ -4,11 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,12 +43,28 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
     }
 
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = { vm.randomCharacter() }) { Text("随机角色") }
+        Button(onClick = { vm.randomCharacter() }) {
+            Icon(Icons.Default.Casino, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("随机角色")
+        }
         Text(ui.selectedCharacter?.name ?: "未选择角色")
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { vm.randomResource() }, enabled = ui.selectedCharacter != null) { Text("随机资源") }
-            Button(onClick = { vm.nextResource() }, enabled = ui.selectedCharacter != null) { Text("下一个") }
-            Button(onClick = { vm.reset() }) { Text("重置") }
+            Button(onClick = { vm.randomResource() }, enabled = ui.selectedCharacter != null) {
+                Icon(Icons.Default.Casino, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("随机资源")
+            }
+            Button(onClick = { vm.nextResource() }, enabled = ui.selectedCharacter != null) {
+                Icon(Icons.Default.SkipNext, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("下一个")
+            }
+            Button(onClick = { vm.reset() }) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("重置")
+            }
         }
         Spacer(Modifier.height(8.dp))
         val res = ui.selectedResource
@@ -50,7 +72,11 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
             Text("暂无资源")
         } else {
             Text("当前资源：${res.resource.title}")
-            Button(onClick = { showPreview = true }) { Text("预览") }
+            Button(onClick = { showPreview = true }) {
+                Icon(Icons.Default.Visibility, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("预览")
+            }
         }
     }
 }

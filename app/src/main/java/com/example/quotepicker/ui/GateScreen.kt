@@ -2,18 +2,23 @@ package com.example.quotepicker.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
@@ -62,9 +67,39 @@ fun GateScreen(onPassed: () -> Unit) {
         ),
         label = "magicCircleRotation"
     )
+    val counterRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "magicCircleCounterRotation"
+    )
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "magicCirclePulse"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "magicCircleGlow"
+    )
     val density = LocalDensity.current
     val circleSize = 156.dp
+    val innerSize = 110.dp
+    val outerSize = 230.dp
     val circleSizePx = with(density) { circleSize.toPx() }
+    val outerSizePx = with(density) { outerSize.toPx() }
 
     // 解锁目标顺序：右上3次 → 左上1次 → 左下2次
     val targets = listOf(
@@ -138,25 +173,59 @@ fun GateScreen(onPassed: () -> Unit) {
             }
     )
     touchPosition?.let { pos ->
-        Image(
-            painter = painterResource(id = com.example.quotepicker.R.drawable.magic_circle),
-            contentDescription = null,
+        Box(
             modifier = Modifier
                 .offset {
                     IntOffset(
-                        (pos.x - circleSizePx / 2f).roundToInt(),
-                        (pos.y - circleSizePx / 2f).roundToInt()
+                        (pos.x - outerSizePx / 2f).roundToInt(),
+                        (pos.y - outerSizePx / 2f).roundToInt()
                     )
                 }
-                .size(circleSize)
-                .background(Color.Transparent)
-                .graphicsLayer(
-                    alpha = opacity.value,
-                    rotationZ = rotation,
-                    shadowElevation = with(density) { 12.dp.toPx() },
-                    scaleX = 1.05f,
-                    scaleY = 1.05f
+                .size(outerSize)
+                .graphicsLayer(alpha = opacity.value)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer(scaleX = pulse, scaleY = pulse, alpha = glowAlpha)
+            ) {
+                val radius = size.minDimension / 2f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF7B4DFF), Color.Transparent)
+                    ),
+                    radius = radius
                 )
-        )
+                drawCircle(
+                    color = Color(0xFFB388FF).copy(alpha = 0.5f),
+                    radius = radius * 0.88f,
+                    style = Stroke(width = radius * 0.08f)
+                )
+            }
+            Image(
+                painter = painterResource(id = com.example.quotepicker.R.drawable.magic_circle),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(circleSize)
+                    .align(Alignment.Center)
+                    .graphicsLayer(
+                        rotationZ = rotation,
+                        shadowElevation = with(density) { 14.dp.toPx() },
+                        scaleX = 1.08f,
+                        scaleY = 1.08f
+                    )
+            )
+            Image(
+                painter = painterResource(id = com.example.quotepicker.R.drawable.magic_circle),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(innerSize)
+                    .align(Alignment.Center)
+                    .graphicsLayer(
+                        rotationZ = counterRotation,
+                        alpha = 0.85f
+                    )
+            )
+        }
     }
 }
