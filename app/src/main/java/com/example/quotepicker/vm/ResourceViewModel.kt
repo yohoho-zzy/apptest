@@ -96,12 +96,15 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
-    fun addImageQuote(title: String, imageUri: Uri, tagIds: List<Long>, characterIds: List<Long>) =
+    fun addImageQuote(title: String, imageUris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
-            val base64 = ImageCompression.encodeToBase64(getApplication(), imageUri)
+            val base64List = imageUris.mapNotNull { uri ->
+                ImageCompression.encodeToBase64(getApplication(), uri).ifBlank { null }
+            }
+            val payload = org.json.JSONArray(base64List).toString()
             repo.addResource(
-                ResourceEntity(type = ResourceType.QUOTE, title = title, quoteImageBase64 = base64),
+                ResourceEntity(type = ResourceType.QUOTE, title = title, quoteImageBase64 = payload),
                 tagIds,
                 characterIds
             )
@@ -132,7 +135,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         if (characterIds.isEmpty()) return@launch
         val targetName = "${type.name.lowercase()}_${System.currentTimeMillis()}.enc"
         val input = getApplication<Application>().contentResolver.openInputStream(uri) ?: return@launch
-        val encryptedFile = fileManager.encryptToFile(input, targetName)
+        val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }.getOrNull() ?: return@launch
         repo.addResource(
             ResourceEntity(
                 type = type,

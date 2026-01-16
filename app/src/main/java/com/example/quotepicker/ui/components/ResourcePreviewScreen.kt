@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,6 +59,7 @@ fun ResourcePreviewScreen(
     onBack: () -> Unit
 ) {
     var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var quoteImages by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
     val scrollState = rememberScrollState()
@@ -69,11 +72,13 @@ fun ResourcePreviewScreen(
                 val bytes = vm.loadDecryptedBytes(path)
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }
-            ResourceType.QUOTE -> {
-                val b64 = res.quoteImageBase64 ?: return@LaunchedEffect
-                vm.decodeBase64ToBitmap(b64)
-            }
+            ResourceType.QUOTE -> null
             else -> null
+        }
+        quoteImages = if (res.type == ResourceType.QUOTE) {
+            decodeQuoteImages(res.quoteImageBase64, vm)
+        } else {
+            emptyList()
         }
         mediaUri = when (res.type) {
             ResourceType.VIDEO, ResourceType.AUDIO -> {
@@ -116,7 +121,7 @@ fun ResourcePreviewScreen(
             if (resource.tags.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     resource.tags.forEach { tag ->
-                        AssistChip(onClick = {}, label = { Text(tag.name) })
+                        TagBadge(tag = tag)
                     }
                 }
             } else {
@@ -137,13 +142,7 @@ fun ResourcePreviewScreen(
                             if (!resource.resource.quoteText.isNullOrBlank()) {
                                 Text(resource.resource.quoteText.orEmpty())
                             }
-                            bitmap?.let {
-                                Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                            QuoteImagePager(images = quoteImages)
                         }
                         ResourceType.IMAGE -> {
                             bitmap?.let {
@@ -245,4 +244,46 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
             }
         }
     }.getOrDefault(emptyList())
+}
+
+@Composable
+private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
+    if (images.isEmpty()) return
+    if (images.size == 1) {
+        Image(
+            bitmap = images.first().asImageBitmap(),
+            contentDescription = null,
+            modifier = Modifier.fillMaxWidth()
+        )
+        return
+    }
+    val pagerState = rememberPagerState(pageCount = { images.size })
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+            Image(
+                bitmap = images[page].asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Text(
+            text = "${pagerState.currentPage + 1}/${images.size}",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+    }
+}
+
+private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<android.graphics.Bitmap> {
+    if (payload.isNullOrBlank()) return emptyList()
+    val base64List = runCatching {
+        val array = JSONArray(payload)
+        buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optString(i)
+                if (item.isNotBlank()) add(item)
+            }
+        }
+    }.getOrElse { listOf(payload) }
+    return base64List.mapNotNull { vm.decodeBase64ToBitmap(it) }
 }
