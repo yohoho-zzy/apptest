@@ -6,6 +6,7 @@ import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -117,21 +118,32 @@ fun ResourcePreviewScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            if (resource.tags.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    resource.tags.forEach { tag ->
-                        TagBadge(tag = tag)
+            ResourceMetaRow(label = "标签") {
+                if (resource.tags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        resource.tags.forEach { tag ->
+                            TagBadge(tag = tag)
+                        }
                     }
+                } else {
+                    Text("无标签", style = MaterialTheme.typography.labelSmall)
                 }
-            } else {
-                Text("无标签", style = MaterialTheme.typography.labelMedium)
             }
-            if (resource.characters.isNotEmpty()) {
-                Text("角色", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    resource.characters.forEach { character ->
-                        AssistChip(onClick = {}, label = { Text(character.name) })
+            ResourceMetaRow(label = "角色") {
+                if (resource.characters.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        resource.characters.forEach { character ->
+                            AssistChip(onClick = {}, label = { Text(character.name) })
+                        }
                     }
+                } else {
+                    Text("未选择角色", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
@@ -249,6 +261,28 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
             }
         }
     }.getOrDefault(emptyList())
+}
+
+@Composable
+private fun ResourceMetaRow(
+    label: String,
+    content: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            content()
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
