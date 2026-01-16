@@ -11,6 +11,7 @@ import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceEntity
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.EncryptedFileManager
@@ -32,6 +33,7 @@ data class ResourceFilterState(
 
 data class ResourceUiState(
     val resources: List<ResourceWithTagsCharacters> = emptyList(),
+    val categories: List<TagCategoryEntity> = emptyList(),
     val tags: List<TagEntity> = emptyList(),
     val characters: List<CharacterEntity> = emptyList(),
     val filters: ResourceFilterState = ResourceFilterState()
@@ -45,10 +47,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     val uiState: StateFlow<ResourceUiState> = combine(
         repo.observeResourcesWithRelations(),
+        repo.observeCategories(),
         repo.observeAllTags(),
         repo.observeCharacters(),
         filters
-    ) { resources, tags, characters, filter ->
+    ) { resources, categories, tags, characters, filter ->
         val filtered = resources.filter { res ->
             val typeMatch = filter.selectedType?.let { it == res.resource.type } ?: true
             val charMatch = filter.selectedCharacterId?.let { id ->
@@ -63,6 +66,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
         ResourceUiState(
             resources = filtered,
+            categories = categories,
             tags = tags,
             characters = characters,
             filters = filter

@@ -3,6 +3,8 @@ package com.example.quotepicker.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -25,6 +29,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,11 +44,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.CharacterWithTags
 import com.example.quotepicker.data.ResourceType
+import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.AvatarListItem
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.vm.CharacterViewModel
@@ -62,6 +73,11 @@ fun CharacterScreen(
     var showTagPicker by remember { mutableStateOf(false) }
     var bottomSheetTarget by remember { mutableStateOf<CharacterWithTags?>(null) }
     var deleteTarget by remember { mutableStateOf<CharacterEntity?>(null) }
+    var showImages by remember { mutableStateOf(true) }
+    var showVideos by remember { mutableStateOf(true) }
+    var showAudios by remember { mutableStateOf(true) }
+    var showQuotes by remember { mutableStateOf(true) }
+    var showScenes by remember { mutableStateOf(true) }
 
     Scaffold(
         modifier = modifier,
@@ -125,11 +141,36 @@ fun CharacterScreen(
                 val grouped = resources.resources.filter {
                     it.characters.any { c -> c.id == char.id }
                 }.groupBy { it.resource.type }
-                ResourceGroup(title = "图片", items = grouped[ResourceType.IMAGE].orEmpty())
-                ResourceGroup(title = "视频", items = grouped[ResourceType.VIDEO].orEmpty())
-                ResourceGroup(title = "声音", items = grouped[ResourceType.AUDIO].orEmpty())
-                ResourceGroup(title = "语录", items = grouped[ResourceType.QUOTE].orEmpty())
-                ResourceGroup(title = "情景", items = grouped[ResourceType.SCENE].orEmpty())
+                ResourceGroup(
+                    title = "图片",
+                    items = grouped[ResourceType.IMAGE].orEmpty(),
+                    expanded = showImages,
+                    onToggle = { showImages = !showImages }
+                )
+                ResourceGroup(
+                    title = "视频",
+                    items = grouped[ResourceType.VIDEO].orEmpty(),
+                    expanded = showVideos,
+                    onToggle = { showVideos = !showVideos }
+                )
+                ResourceGroup(
+                    title = "声音",
+                    items = grouped[ResourceType.AUDIO].orEmpty(),
+                    expanded = showAudios,
+                    onToggle = { showAudios = !showAudios }
+                )
+                ResourceGroup(
+                    title = "语录",
+                    items = grouped[ResourceType.QUOTE].orEmpty(),
+                    expanded = showQuotes,
+                    onToggle = { showQuotes = !showQuotes }
+                )
+                ResourceGroup(
+                    title = "情景",
+                    items = grouped[ResourceType.SCENE].orEmpty(),
+                    expanded = showScenes,
+                    onToggle = { showScenes = !showScenes }
+                )
             }
         }
     }
@@ -153,6 +194,7 @@ fun CharacterScreen(
 
     if (showTagPicker && selected != null) {
         TagPickerDialog(
+            categories = ui.categories,
             tags = ui.tags,
             selectedIds = selected!!.tags.map { it.id }.toSet(),
             onConfirm = { ids ->
@@ -208,19 +250,37 @@ fun CharacterScreen(
 }
 
 @Composable
-private fun ResourceGroup(title: String, items: List<com.example.quotepicker.data.ResourceWithTagsCharacters>) {
+private fun ResourceGroup(
+    title: String,
+    items: List<com.example.quotepicker.data.ResourceWithTagsCharacters>,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
     Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Text(title)
-        if (items.isEmpty()) {
-            Text("暂无${title}资源")
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items.forEach { resource ->
-                    AvatarListItem(
-                        title = resource.resource.title,
-                        onClick = {},
-                        onLongClick = {}
-                    )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, modifier = Modifier.weight(1f))
+            IconButton(onClick = onToggle) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null
+                )
+            }
+        }
+        if (expanded) {
+            if (items.isEmpty()) {
+                Text("暂无${title}资源")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items.forEach { resource ->
+                        AvatarListItem(
+                            title = resource.resource.title,
+                            onClick = {},
+                            onLongClick = {}
+                        )
+                    }
                 }
             }
         }
@@ -266,6 +326,7 @@ private fun CharacterEditDialog(
 
 @Composable
 private fun TagPickerDialog(
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     selectedIds: Set<Long>,
     onConfirm: (Set<Long>) -> Unit,
@@ -276,20 +337,93 @@ private fun TagPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择标签") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                tags.forEach { tag ->
-                    val isChecked = selected.contains(tag.id)
-                    TextButton(onClick = {
-                        if (isChecked) selected.remove(tag.id) else selected.add(tag.id)
-                    }) {
-                        Text(if (isChecked) "✓ ${tag.name}" else tag.name)
-                    }
-                }
-            }
+            TagSelectionSection(
+                label = "标签",
+                categories = categories,
+                tags = tags,
+                selected = selected,
+                onChange = { selected = it.toMutableSet() }
+            )
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selected) }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagSelectionSection(
+    label: String,
+    categories: List<TagCategoryEntity>,
+    tags: List<TagEntity>,
+    selected: Set<Long>,
+    onChange: (Set<Long>) -> Unit
+) {
+    val grouped = tags.groupBy { it.categoryId }
+    val knownCategoryIds = categories.map { it.id }.toSet()
+    val uncategorized = tags.filter { it.categoryId !in knownCategoryIds }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label)
+        categories.forEach { category ->
+            val items = grouped[category.id].orEmpty()
+            if (items.isNotEmpty()) {
+                Text(category.name, style = MaterialTheme.typography.labelMedium)
+                FlowRow(
+                    mainAxisSpacing = 8.dp,
+                    crossAxisSpacing = 8.dp
+                ) {
+                    items.forEach { tag ->
+                        val isSelected = selected.contains(tag.id)
+                        val tagColor = Color(tag.colorArgb)
+                        val selectedTextColor = if (tagColor.luminance() < 0.5f) Color.White else Color.Black
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                val newSet = selected.toMutableSet()
+                                if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
+                                onChange(newSet)
+                            },
+                            label = { Text(tag.name) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color.White,
+                                selectedContainerColor = tagColor,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLabelColor = selectedTextColor
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        if (uncategorized.isNotEmpty()) {
+            Text("其他", style = MaterialTheme.typography.labelMedium)
+            FlowRow(
+                mainAxisSpacing = 8.dp,
+                crossAxisSpacing = 8.dp
+            ) {
+                uncategorized.forEach { tag ->
+                    val isSelected = selected.contains(tag.id)
+                    val tagColor = Color(tag.colorArgb)
+                    val selectedTextColor = if (tagColor.luminance() < 0.5f) Color.White else Color.Black
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            val newSet = selected.toMutableSet()
+                            if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
+                            onChange(newSet)
+                        },
+                        label = { Text(tag.name) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color.White,
+                            selectedContainerColor = tagColor,
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            selectedLabelColor = selectedTextColor
+                        )
+                    )
+                }
+            }
+        }
+    }
 }

@@ -47,8 +47,7 @@ class RandomViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RandomUiState())
 
     fun randomCharacter() = viewModelScope.launch {
-        val characters = repo.observeCharacters()
-            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList()).value
+        val characters = uiState.value.characters
         if (characters.isNotEmpty()) {
             val pick = characters.random()
             selectedCharacterId.value = pick.id

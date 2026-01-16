@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.TagCategoryEntity
@@ -119,6 +120,8 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         items(ui.tags, key = { it.id }) { tag ->
                             AvatarListItem(
                                 title = tag.name,
+                                avatarColor = Color(tag.colorArgb),
+                                avatarTextColor = if (Color(tag.colorArgb).luminance() < 0.5f) Color.White else Color.Black,
                                 onClick = {},
                                 onLongClick = { bottomSheetTarget = tag }
                             )
@@ -234,11 +237,12 @@ private fun TagDialog(
 ) {
     var name by remember { mutableStateOf(initialName) }
     val palette = listOf(
-        0xFFB388FF.toInt(),
-        0xFFFFAB91.toInt(),
-        0xFF80DEEA.toInt(),
-        0xFFC5E1A5.toInt(),
-        0xFFFFF59D.toInt()
+        0xFFFF8A80.toInt(), // 红
+        0xFFFFF59D.toInt(), // 黄
+        0xFFB388FF.toInt(), // 紫
+        0xFF82B1FF.toInt(), // 蓝
+        0xFFA5D6A7.toInt(), // 绿
+        0xFFE0E0E0.toInt() // 灰
     )
     var colorIndex by remember {
         mutableIntStateOf(palette.indexOf(initialColor).takeIf { it >= 0 } ?: 0)

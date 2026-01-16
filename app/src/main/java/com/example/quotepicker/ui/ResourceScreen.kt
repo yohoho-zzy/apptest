@@ -5,18 +5,23 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -25,11 +30,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,13 +51,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.quotepicker.data.ResourceEntity
+import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
-import com.example.quotepicker.ui.components.AvatarListItem
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,12 +121,14 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     Text("暂无资源，点击右下角添加")
                 }
             } else {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(5),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(ui.resources, key = { it.resource.id }) { res ->
-                        AvatarListItem(
+                        ResourceGridItem(
                             title = res.resource.title,
                             onClick = { previewTarget = res },
                             onLongClick = { bottomSheetTarget = res }
@@ -158,6 +171,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 vm.addTextQuote(title, text, tagIds, characterIds)
                 showTextDialog = false
             },
+            categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
             onDismiss = { showTextDialog = false }
@@ -166,6 +180,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     if (showImageQuoteDialog) {
         ImageQuoteDialog(
+            categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
             onConfirm = { title, uri, tagIds, characterIds ->
@@ -178,6 +193,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     if (showSceneDialog) {
         SceneDialog(
+            categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
             onConfirm = { title, desc, json, tagIds, characterIds ->
@@ -191,6 +207,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     selectedResourceInput?.let { input ->
         MediaDialog(
             input = input,
+            categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
             onConfirm = { title, tagIds, characterIds ->
@@ -203,6 +220,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     if (filterTagDialog) {
         FilterTagDialog(
+            categories = ui.categories,
             tags = ui.tags,
             selectedIds = ui.filters.selectedTagIds,
             onConfirm = { vm.updateTagFilter(it) },
@@ -225,6 +243,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     editTarget?.let { target ->
         ResourceEditDialog(
             resource = target,
+            categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
             onConfirm = { title, tagIds, characterIds ->
@@ -334,6 +353,7 @@ data class ResourceInputState(
 @Composable
 private fun QuoteDialog(
     title: String,
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
     onConfirm: (String, String, List<Long>, List<Long>) -> Unit,
@@ -360,12 +380,19 @@ private fun QuoteDialog(
                     label = { Text("文本内容") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                MultiSelectRow("标签", tags.map { it.name }, selectedTags, tags.map { it.id }) {
-                    selectedTags = it
-                }
-                MultiSelectRow("角色", characters.map { it.name }, selectedCharacters, characters.map { it.id }) {
-                    selectedCharacters = it
-                }
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selectedTags,
+                    onChange = { selectedTags = it }
+                )
+                CharacterSelectionSection(
+                    label = "角色",
+                    characters = characters,
+                    selected = selectedCharacters,
+                    onChange = { selectedCharacters = it }
+                )
             }
         },
         confirmButton = {
@@ -381,6 +408,7 @@ private fun QuoteDialog(
 
 @Composable
 private fun ImageQuoteDialog(
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
     onConfirm: (String, Uri, List<Long>, List<Long>) -> Unit,
@@ -401,12 +429,19 @@ private fun ImageQuoteDialog(
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") })
                 TextButton(onClick = { launcher.launch("image/*") }) { Text("选择图片") }
                 Text(imageUri?.toString() ?: "未选择图片")
-                MultiSelectRow("标签", tags.map { it.name }, selectedTags, tags.map { it.id }) {
-                    selectedTags = it
-                }
-                MultiSelectRow("角色", characters.map { it.name }, selectedCharacters, characters.map { it.id }) {
-                    selectedCharacters = it
-                }
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selectedTags,
+                    onChange = { selectedTags = it }
+                )
+                CharacterSelectionSection(
+                    label = "角色",
+                    characters = characters,
+                    selected = selectedCharacters,
+                    onChange = { selectedCharacters = it }
+                )
             }
         },
         confirmButton = {
@@ -423,6 +458,7 @@ private fun ImageQuoteDialog(
 
 @Composable
 private fun SceneDialog(
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
     onConfirm: (String, String?, String, List<Long>, List<Long>) -> Unit,
@@ -446,12 +482,19 @@ private fun SceneDialog(
                     label = { Text("sceneJson") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                MultiSelectRow("标签", tags.map { it.name }, selectedTags, tags.map { it.id }) {
-                    selectedTags = it
-                }
-                MultiSelectRow("角色", characters.map { it.name }, selectedCharacters, characters.map { it.id }) {
-                    selectedCharacters = it
-                }
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selectedTags,
+                    onChange = { selectedTags = it }
+                )
+                CharacterSelectionSection(
+                    label = "角色",
+                    characters = characters,
+                    selected = selectedCharacters,
+                    onChange = { selectedCharacters = it }
+                )
             }
         },
         confirmButton = {
@@ -468,6 +511,7 @@ private fun SceneDialog(
 @Composable
 private fun MediaDialog(
     input: ResourceInputState,
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
     onConfirm: (String, List<Long>, List<Long>) -> Unit,
@@ -483,12 +527,19 @@ private fun MediaDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") })
                 Text(input.uri.toString())
-                MultiSelectRow("标签", tags.map { it.name }, selectedTags, tags.map { it.id }) {
-                    selectedTags = it
-                }
-                MultiSelectRow("角色", characters.map { it.name }, selectedCharacters, characters.map { it.id }) {
-                    selectedCharacters = it
-                }
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selectedTags,
+                    onChange = { selectedTags = it }
+                )
+                CharacterSelectionSection(
+                    label = "角色",
+                    characters = characters,
+                    selected = selectedCharacters,
+                    onChange = { selectedCharacters = it }
+                )
             }
         },
         confirmButton = {
@@ -504,6 +555,7 @@ private fun MediaDialog(
 
 @Composable
 private fun FilterTagDialog(
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     selectedIds: Set<Long>,
     onConfirm: (Set<Long>) -> Unit,
@@ -514,14 +566,13 @@ private fun FilterTagDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择标签筛选") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                tags.forEach { tag ->
-                    val isChecked = selected.contains(tag.id)
-                    TextButton(onClick = {
-                        if (isChecked) selected.remove(tag.id) else selected.add(tag.id)
-                    }) { Text(if (isChecked) "✓ ${tag.name}" else tag.name) }
-                }
-            }
+            TagSelectionSection(
+                label = "标签",
+                categories = categories,
+                tags = tags,
+                selected = selected,
+                onChange = { selected = it.toMutableSet() }
+            )
         },
         confirmButton = {
             TextButton(onClick = {
@@ -533,6 +584,7 @@ private fun FilterTagDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FilterCharacterDialog(
     characters: List<com.example.quotepicker.data.CharacterEntity>,
@@ -546,10 +598,32 @@ private fun FilterCharacterDialog(
         title = { Text("选择角色筛选") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { current = null }) { Text("全部角色") }
-                characters.forEach { character ->
-                    TextButton(onClick = { current = character.id }) {
-                        Text(if (current == character.id) "✓ ${character.name}" else character.name)
+                Text("角色")
+                FlowRow(
+                    mainAxisSpacing = 8.dp,
+                    crossAxisSpacing = 8.dp
+                ) {
+                    FilterChip(
+                        selected = current == null,
+                        onClick = { current = null },
+                        label = { Text("全部角色") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color.White,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                    characters.forEach { character ->
+                        FilterChip(
+                            selected = current == character.id,
+                            onClick = { current = character.id },
+                            label = { Text(character.name) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color.White,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
                     }
                 }
             }
@@ -618,6 +692,7 @@ private fun ResourcePreviewDialog(
 @Composable
 private fun ResourceEditDialog(
     resource: ResourceWithTagsCharacters,
+    categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     characters: List<com.example.quotepicker.data.CharacterEntity>,
     onConfirm: (String, List<Long>, List<Long>) -> Unit,
@@ -633,12 +708,19 @@ private fun ResourceEditDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") })
-                MultiSelectRow("标签", tags.map { it.name }, selectedTags, tags.map { it.id }) {
-                    selectedTags = it
-                }
-                MultiSelectRow("角色", characters.map { it.name }, selectedCharacters, characters.map { it.id }) {
-                    selectedCharacters = it
-                }
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selectedTags,
+                    onChange = { selectedTags = it }
+                )
+                CharacterSelectionSection(
+                    label = "角色",
+                    characters = characters,
+                    selected = selectedCharacters,
+                    onChange = { selectedCharacters = it }
+                )
             }
         },
         confirmButton = {
@@ -659,27 +741,137 @@ private fun ResourceEditDialog(
 }
 
 @Composable
-private fun MultiSelectRow(
+private fun ResourceGridItem(
+    title: String,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagSelectionSection(
     label: String,
-    names: List<String>,
+    categories: List<TagCategoryEntity>,
+    tags: List<TagEntity>,
     selected: Set<Long>,
-    ids: List<Long>,
     onChange: (Set<Long>) -> Unit
 ) {
-    Column {
+    val grouped = tags.groupBy { it.categoryId }
+    val knownCategoryIds = categories.map { it.id }.toSet()
+    val uncategorized = tags.filter { it.categoryId !in knownCategoryIds }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ids.forEachIndexed { idx, id ->
-                val name = names[idx]
-                val isSelected = selected.contains(id)
+        categories.forEach { category ->
+            val items = grouped[category.id].orEmpty()
+            if (items.isNotEmpty()) {
+                Text(category.name, style = MaterialTheme.typography.labelMedium)
+                FlowRow(
+                    mainAxisSpacing = 8.dp,
+                    crossAxisSpacing = 8.dp
+                ) {
+                    items.forEach { tag ->
+                        TagFilterChip(
+                            tag = tag,
+                            selected = selected,
+                            onChange = onChange
+                        )
+                    }
+                }
+            }
+        }
+        if (uncategorized.isNotEmpty()) {
+            Text("其他", style = MaterialTheme.typography.labelMedium)
+            FlowRow(
+                mainAxisSpacing = 8.dp,
+                crossAxisSpacing = 8.dp
+            ) {
+                uncategorized.forEach { tag ->
+                    TagFilterChip(
+                        tag = tag,
+                        selected = selected,
+                        onChange = onChange
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagFilterChip(
+    tag: TagEntity,
+    selected: Set<Long>,
+    onChange: (Set<Long>) -> Unit
+) {
+    val isSelected = selected.contains(tag.id)
+    val tagColor = Color(tag.colorArgb)
+    val selectedTextColor = if (tagColor.luminance() < 0.5f) Color.White else Color.Black
+    FilterChip(
+        selected = isSelected,
+        onClick = {
+            val newSet = selected.toMutableSet()
+            if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
+            onChange(newSet)
+        },
+        label = { Text(tag.name) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.White,
+            selectedContainerColor = tagColor,
+            labelColor = MaterialTheme.colorScheme.onSurface,
+            selectedLabelColor = selectedTextColor
+        )
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CharacterSelectionSection(
+    label: String,
+    characters: List<com.example.quotepicker.data.CharacterEntity>,
+    selected: Set<Long>,
+    onChange: (Set<Long>) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label)
+        FlowRow(
+            mainAxisSpacing = 8.dp,
+            crossAxisSpacing = 8.dp
+        ) {
+            characters.forEach { character ->
+                val isSelected = selected.contains(character.id)
                 FilterChip(
                     selected = isSelected,
                     onClick = {
                         val newSet = selected.toMutableSet()
-                        if (isSelected) newSet.remove(id) else newSet.add(id)
+                        if (isSelected) newSet.remove(character.id) else newSet.add(character.id)
                         onChange(newSet)
                     },
-                    label = { Text(name) }
+                    label = { Text(character.name) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.White,
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 )
             }
         }
