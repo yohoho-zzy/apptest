@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AssistChip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -257,6 +258,12 @@ fun ResourcePreviewScreen(
 
 @Composable
 private fun MediaPreview(uri: Uri) {
+    val viewHolder = remember { mutableStateOf<VideoView?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            viewHolder.value?.stopPlayback()
+        }
+    }
     AndroidView(
         factory = { context ->
             VideoView(context).apply {
@@ -264,6 +271,7 @@ private fun MediaPreview(uri: Uri) {
                 controller.setAnchorView(this)
                 setMediaController(controller)
                 setVideoURI(uri)
+                tag = uri
                 setOnPreparedListener { mediaPlayer ->
                     Log.d("MediaPreview", "Video prepared uri=$uri duration=${mediaPlayer.duration}")
                     mediaPlayer.start()
@@ -272,10 +280,14 @@ private fun MediaPreview(uri: Uri) {
                     Log.e("MediaPreview", "Video error uri=$uri what=$what extra=$extra")
                     false
                 }
+                viewHolder.value = this
             }
         },
         update = { view ->
-            view.setVideoURI(uri)
+            if (view.tag != uri) {
+                view.tag = uri
+                view.setVideoURI(uri)
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
