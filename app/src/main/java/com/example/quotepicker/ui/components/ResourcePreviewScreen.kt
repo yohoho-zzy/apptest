@@ -1,6 +1,7 @@
 package com.example.quotepicker.ui.components
 
 import android.net.Uri
+import android.util.Log
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -62,7 +63,7 @@ fun ResourcePreviewScreen(
     onBack: () -> Unit
 ) {
     var quoteImages by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
-    var mediaUri by remember { mutableStateOf<Uri?>(null) }
+    var mediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var mediaLoadFailed by remember { mutableStateOf(false) }
     var mediaReloadKey by remember { mutableStateOf(0) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
@@ -83,21 +84,33 @@ fun ResourcePreviewScreen(
         } else if (res.type == ResourceType.QUOTE) {
             quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
         }
-        mediaUri = when (res.type) {
+        mediaUris = when (res.type) {
             ResourceType.VIDEO, ResourceType.AUDIO -> {
-                val path = res.contentUriOrPath ?: return@LaunchedEffect
+                val raw = res.contentUriOrPath ?: return@LaunchedEffect
+                val paths = parseMediaPaths(raw)
                 val extension = if (res.type == ResourceType.VIDEO) "mp4" else "mp3"
-                val file = withContext(Dispatchers.IO) {
-                    vm.writeDecryptedToCache(path, extension)
+                val uriList = mutableListOf<Uri>()
+                paths.forEachIndexed { index, path ->
+                    Log.d(
+                        "ResourcePreview",
+                        "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
+                    )
+                    val file = withContext(Dispatchers.IO) {
+                        vm.writeDecryptedToCache(path, extension)
+                    }
+                    if (file == null) {
+                        Log.e(
+                            "ResourcePreview",
+                            "Failed to load media preview type=${res.type} id=${res.id} index=$index path=$path"
+                        )
+                        mediaLoadFailed = true
+                    } else {
+                        uriList.add(Uri.fromFile(file))
+                    }
                 }
-                if (file == null) {
-                    mediaLoadFailed = true
-                    null
-                } else {
-                    Uri.fromFile(file)
-                }
+                uriList
             }
-            else -> null
+            else -> emptyList()
         }
         sceneMessages = parseSceneMessages(res.sceneJson.orEmpty())
     }
@@ -180,8 +193,8 @@ fun ResourcePreviewScreen(
                             }
                         }
                         ResourceType.VIDEO -> {
-                            if (mediaUri != null) {
-                                MediaPreview(uri = mediaUri!!)
+                            if (mediaUris.isNotEmpty()) {
+                                MediaPreviewPager(uris = mediaUris)
                             } else if (mediaLoadFailed) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("视频加载失败")
@@ -195,8 +208,8 @@ fun ResourcePreviewScreen(
                             }
                         }
                         ResourceType.AUDIO -> {
-                            if (mediaUri != null) {
-                                MediaPreview(uri = mediaUri!!)
+                            if (mediaUris.isNotEmpty()) {
+                                MediaPreview(uri = mediaUris.first())
                                 Text("音频播放中")
                             } else if (mediaLoadFailed) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -237,7 +250,14 @@ private fun MediaPreview(uri: Uri) {
                 controller.setAnchorView(this)
                 setMediaController(controller)
                 setVideoURI(uri)
-                setOnPreparedListener { it.start() }
+                setOnPreparedListener { mediaPlayer ->
+                    Log.d("MediaPreview", "Video prepared uri=$uri duration=${mediaPlayer.duration}")
+                    mediaPlayer.start()
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.e("MediaPreview", "Video error uri=$uri what=$what extra=$extra")
+                    false
+                }
             }
         },
         update = { view ->
@@ -248,6 +268,34 @@ private fun MediaPreview(uri: Uri) {
             .height(240.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
     )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MediaPreviewPager(uris: List<Uri>) {
+    val pagerState = rememberPagerState(pageCount = { uris.size })
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HorizontalPager(state = pagerState) { page ->
+            MediaPreview(uri = uris[page])
+        }
+        if (uris.size > 1) {
+            Text(
+                text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+private fun parseMediaPaths(raw: String): List<String> {
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("[")) {
+        return runCatching {
+            val arr = JSONArray(trimmed)
+            List(arr.length()) { index -> arr.getString(index) }
+        }.getOrDefault(listOf(raw))
+    }
+    return listOf(raw)
 }
 
 @Composable

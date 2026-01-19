@@ -493,25 +493,20 @@ private fun ResourceCreateScreen(
                                 selectedTags.toList(),
                                 selectedCharacters.toList()
                             )
-                            is CreateMode.Media -> vm.addEncryptedMedia(
-                                mode.type,
-                                title.trim(),
-                                if (mode.type == ResourceType.VIDEO) {
-                                    val uris = videoUris
-                                    uris.firstOrNull() ?: return@TextButton
-                                } else {
-                                    mediaUri ?: return@TextButton
-                                },
-                                selectedTags.toList(),
-                                selectedCharacters.toList()
-                            )
-                        }
-                        if (mode is CreateMode.Media && mode.type == ResourceType.VIDEO && videoUris.size > 1) {
-                            videoUris.drop(1).forEachIndexed { index, uri ->
+                            is CreateMode.Media -> if (mode.type == ResourceType.VIDEO) {
+                                val uris = videoUris
+                                vm.addEncryptedMediaGroup(
+                                    mode.type,
+                                    title.trim(),
+                                    uris,
+                                    selectedTags.toList(),
+                                    selectedCharacters.toList()
+                                )
+                            } else {
                                 vm.addEncryptedMedia(
                                     mode.type,
-                                    "${title.trim()} (${index + 2})",
-                                    uri,
+                                    title.trim(),
+                                    mediaUri ?: return@TextButton,
                                     selectedTags.toList(),
                                     selectedCharacters.toList()
                                 )

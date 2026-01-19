@@ -166,6 +166,59 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun addEncryptedMediaGroup(
+        type: ResourceType,
+        title: String,
+        uris: List<Uri>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        if (uris.isEmpty()) return@launch
+        val resolver = getApplication<Application>().contentResolver
+        val encryptedPaths = mutableListOf<String>()
+        uris.forEachIndexed { index, uri ->
+            val targetName = "${type.name.lowercase()}_${System.currentTimeMillis()}_$index.enc"
+            val input = runCatching { resolver.openInputStream(uri) }
+                .onFailure { error ->
+                    Log.e("ResourceViewModel", "Failed to open media uri=$uri type=$type", error)
+                }
+                .getOrNull()
+            if (input == null) {
+                Log.w("ResourceViewModel", "Skip media uri=$uri type=$type due to open failure")
+                return@forEachIndexed
+            }
+            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
+                .onFailure { error ->
+                    Log.e("ResourceViewModel", "Failed to encrypt media uri=$uri type=$type", error)
+                }
+                .getOrNull()
+            if (encryptedFile != null) {
+                encryptedPaths.add(encryptedFile.absolutePath)
+                Log.d(
+                    "ResourceViewModel",
+                    "Encrypted media saved type=$type path=${encryptedFile.absolutePath} size=${encryptedFile.length()}"
+                )
+            } else {
+                Log.w("ResourceViewModel", "Skip media uri=$uri type=$type due to encryption failure")
+            }
+        }
+        if (encryptedPaths.isEmpty()) {
+            Log.e("ResourceViewModel", "No media saved for group type=$type title=$title")
+            return@launch
+        }
+        val payload = org.json.JSONArray(encryptedPaths).toString()
+        repo.addResource(
+            ResourceEntity(
+                type = type,
+                title = title,
+                contentUriOrPath = payload
+            ),
+            tagIds,
+            characterIds
+        )
+    }
+
     fun updateResource(resource: ResourceEntity) =
         viewModelScope.launch { repo.updateResource(resource) }
 
