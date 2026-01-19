@@ -375,6 +375,7 @@ private fun ManageStorageScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StorageMediaRow(
     item: StoredMediaItem,
