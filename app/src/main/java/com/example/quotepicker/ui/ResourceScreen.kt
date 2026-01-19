@@ -757,7 +757,6 @@ private fun ResourceCreateScreen(
     }
     if (showFlowDialog) {
         FlowStepDialog(
-            allowedSpeakers = selectedSpeakerNames,
             initialItem = editFlowIndex?.let { flowItems.getOrNull(it) },
             availableResources = flowResources,
             onConfirm = { item ->

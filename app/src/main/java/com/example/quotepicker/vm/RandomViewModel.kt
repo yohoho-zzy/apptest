@@ -26,26 +26,46 @@ data class RandomUiState(
     val selectedResource: ResourceWithTagsCharacters? = null
 )
 
+private data class RandomInputs(
+    val characters: List<CharacterEntity>,
+    val resources: List<ResourceWithTagsCharacters>,
+    val categories: List<TagCategoryEntity>,
+    val tags: List<TagEntity>,
+    val selectedCharacterId: Long?
+)
+
 class RandomViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
     private val selectedCharacterId = MutableStateFlow<Long?>(null)
     private val selectedResourceId = MutableStateFlow<Long?>(null)
     private val selectedTagIds = MutableStateFlow<Set<Long>>(emptySet())
 
-    val uiState: StateFlow<RandomUiState> = combine(
+    private val baseInputs = combine(
         repo.observeCharacters(),
         repo.observeResourcesWithRelations(),
         repo.observeCategories(),
         repo.observeAllTags(),
-        selectedCharacterId,
+        selectedCharacterId
+    ) { characters, resources, categories, tags, charId ->
+        RandomInputs(
+            characters = characters,
+            resources = resources,
+            categories = categories,
+            tags = tags,
+            selectedCharacterId = charId
+        )
+    }
+
+    val uiState: StateFlow<RandomUiState> = combine(
+        baseInputs,
         selectedResourceId,
         selectedTagIds
-    ) { characters, resources, categories, tags, charId, resId, tagIds ->
-        val selectedCharacter = characters.firstOrNull { it.id == charId }
+    ) { inputs, resId, tagIds ->
+        val selectedCharacter = inputs.characters.firstOrNull { it.id == inputs.selectedCharacterId }
         val matchingResources = if (selectedCharacter == null) {
             emptyList()
         } else {
-            resources.filter { res -> res.characters.any { it.id == selectedCharacter.id } }
+            inputs.resources.filter { res -> res.characters.any { it.id == selectedCharacter.id } }
         }
         val filteredResources = if (tagIds.isEmpty()) {
             matchingResources
@@ -53,11 +73,11 @@ class RandomViewModel(app: Application) : AndroidViewModel(app) {
             matchingResources.filter { res -> res.tags.any { tagIds.contains(it.id) } }
         }
         val selectedResource = filteredResources.firstOrNull { it.resource.id == resId }
-        val resourceCategories = categories.filter { it.type == TagCategoryType.RESOURCE }
+        val resourceCategories = inputs.categories.filter { it.type == TagCategoryType.RESOURCE }
         val categoryIds = resourceCategories.map { it.id }.toSet()
-        val resourceTags = tags.filter { it.categoryId in categoryIds }
+        val resourceTags = inputs.tags.filter { it.categoryId in categoryIds }
         RandomUiState(
-            characters = characters,
+            characters = inputs.characters,
             resources = filteredResources,
             categories = resourceCategories,
             tags = resourceTags,
