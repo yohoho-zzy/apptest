@@ -381,6 +381,13 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault(false)
     }
 
+    fun deleteStoredMedia(item: StoredMediaItem): Boolean {
+        val uri = Uri.parse(item.path)
+        val path = uri.path ?: return false
+        val target = File(path)
+        return target.exists() && target.delete()
+    }
+
     private fun storeBase64ImageToInternal(base64: String): String? {
         val bitmap = decodeBase64ToBitmap(base64) ?: return null
         return storeBitmapToInternal(bitmap)
