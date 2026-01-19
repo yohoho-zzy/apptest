@@ -32,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.AssistChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +55,7 @@ private data class SceneMessage(val speaker: String, val content: String)
 
 private data class FlowPreviewItem(
     val type: ResourceType,
+    val title: String? = null,
     val text: String = "",
     val sceneMessages: List<SceneMessage> = emptyList(),
     val images: List<android.graphics.Bitmap> = emptyList(),
@@ -138,32 +138,34 @@ fun ResourcePreviewScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            ResourceMetaRow(label = "标签") {
-                if (resource.tags.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        resource.tags.forEach { tag ->
-                            TagBadge(tag = tag)
+            if (resource.resource.type != ResourceType.FLOW) {
+                ResourceMetaRow(label = "标签") {
+                    if (resource.tags.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            resource.tags.forEach { tag ->
+                                TagBadge(tag = tag)
+                            }
                         }
+                    } else {
+                        Text("无标签", style = MaterialTheme.typography.labelSmall)
                     }
-                } else {
-                    Text("无标签", style = MaterialTheme.typography.labelSmall)
                 }
-            }
-            ResourceMetaRow(label = "角色") {
-                if (resource.characters.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        resource.characters.forEach { character ->
-                            AssistChip(onClick = {}, label = { Text(character.name) })
+                ResourceMetaRow(label = "角色") {
+                    if (resource.characters.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            resource.characters.forEach { character ->
+                                CharacterBadge(name = character.name)
+                            }
                         }
+                    } else {
+                        Text("未选择角色", style = MaterialTheme.typography.labelSmall)
                     }
-                } else {
-                    Text("未选择角色", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
@@ -221,7 +223,7 @@ fun ResourcePreviewScreen(
                                 Text("流程内容为空")
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    flowItems.forEachIndexed { index, item ->
+                                    flowItems.forEach { item ->
                                         Card(modifier = Modifier.fillMaxWidth()) {
                                             Column(
                                                 modifier = Modifier
@@ -229,7 +231,8 @@ fun ResourcePreviewScreen(
                                                     .padding(12.dp),
                                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Text("步骤 ${index + 1} - ${typeLabel(item.type)}")
+                                                val title = item.title?.ifBlank { null } ?: typeLabel(item.type)
+                                                Text(title, style = MaterialTheme.typography.titleMedium)
                                                 when (item.type) {
                                                     ResourceType.TEXT -> Text(item.text)
                                                     ResourceType.SCENE -> {
@@ -376,9 +379,10 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
             for (i in 0 until array.length()) {
                 val obj = array.optJSONObject(i) ?: continue
                 val type = runCatching { ResourceType.valueOf(obj.optString("type")) }.getOrNull() ?: continue
+                val title = obj.optString("title").ifBlank { null }
                 when (type) {
                     ResourceType.TEXT -> add(
-                        FlowPreviewItem(type = type, text = obj.optString("text"))
+                        FlowPreviewItem(type = type, title = title, text = obj.optString("text"))
                     )
                     ResourceType.SCENE -> {
                         val messages = obj.optJSONArray("messages") ?: JSONArray()
@@ -392,7 +396,7 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                                 }
                             }
                         }
-                        add(FlowPreviewItem(type = type, sceneMessages = parsed))
+                        add(FlowPreviewItem(type = type, title = title, sceneMessages = parsed))
                     }
                     ResourceType.IMAGE -> {
                         val images = obj.optJSONArray("images") ?: JSONArray()
@@ -404,7 +408,7 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                                 }
                             }
                         }
-                        add(FlowPreviewItem(type = type, images = bitmaps))
+                        add(FlowPreviewItem(type = type, title = title, images = bitmaps))
                     }
                     ResourceType.VIDEO -> {
                         val videos = obj.optJSONArray("videos") ?: JSONArray()
@@ -421,7 +425,7 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                         if (uriList.isEmpty() && videos.length() > 0) {
                             failed = true
                         }
-                        add(FlowPreviewItem(type = type, mediaUris = uriList, mediaFailed = failed))
+                        add(FlowPreviewItem(type = type, title = title, mediaUris = uriList, mediaFailed = failed))
                     }
                     else -> {}
                 }

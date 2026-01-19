@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagCategoryType
+import com.example.quotepicker.data.TagEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +19,9 @@ import kotlinx.coroutines.launch
 data class RandomUiState(
     val characters: List<CharacterEntity> = emptyList(),
     val resources: List<ResourceWithTagsCharacters> = emptyList(),
+    val categories: List<TagCategoryEntity> = emptyList(),
+    val tags: List<TagEntity> = emptyList(),
+    val selectedTagIds: Set<Long> = emptySet(),
     val selectedCharacter: CharacterEntity? = null,
     val selectedResource: ResourceWithTagsCharacters? = null
 )
@@ -24,23 +30,38 @@ class RandomViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
     private val selectedCharacterId = MutableStateFlow<Long?>(null)
     private val selectedResourceId = MutableStateFlow<Long?>(null)
+    private val selectedTagIds = MutableStateFlow<Set<Long>>(emptySet())
 
     val uiState: StateFlow<RandomUiState> = combine(
         repo.observeCharacters(),
         repo.observeResourcesWithRelations(),
+        repo.observeCategories(),
+        repo.observeAllTags(),
         selectedCharacterId,
-        selectedResourceId
-    ) { characters, resources, charId, resId ->
+        selectedResourceId,
+        selectedTagIds
+    ) { characters, resources, categories, tags, charId, resId, tagIds ->
         val selectedCharacter = characters.firstOrNull { it.id == charId }
         val matchingResources = if (selectedCharacter == null) {
             emptyList()
         } else {
             resources.filter { res -> res.characters.any { it.id == selectedCharacter.id } }
         }
-        val selectedResource = matchingResources.firstOrNull { it.resource.id == resId }
+        val filteredResources = if (tagIds.isEmpty()) {
+            matchingResources
+        } else {
+            matchingResources.filter { res -> res.tags.any { tagIds.contains(it.id) } }
+        }
+        val selectedResource = filteredResources.firstOrNull { it.resource.id == resId }
+        val resourceCategories = categories.filter { it.type == TagCategoryType.RESOURCE }
+        val categoryIds = resourceCategories.map { it.id }.toSet()
+        val resourceTags = tags.filter { it.categoryId in categoryIds }
         RandomUiState(
             characters = characters,
-            resources = matchingResources,
+            resources = filteredResources,
+            categories = resourceCategories,
+            tags = resourceTags,
+            selectedTagIds = tagIds,
             selectedCharacter = selectedCharacter,
             selectedResource = selectedResource
         )
@@ -73,5 +94,10 @@ class RandomViewModel(app: Application) : AndroidViewModel(app) {
     fun reset() {
         selectedCharacterId.value = null
         selectedResourceId.value = null
+        selectedTagIds.value = emptySet()
+    }
+
+    fun updateTagFilter(tagIds: Set<Long>) {
+        selectedTagIds.value = tagIds
     }
 }

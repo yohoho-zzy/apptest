@@ -58,6 +58,8 @@ data class SceneMessageDraft(
 
 data class FlowUpdateItem(
     val type: ResourceType,
+    val title: String? = null,
+    val resourceId: Long? = null,
     val text: String? = null,
     val sceneMessages: List<SceneMessageDraft> = emptyList(),
     val images: List<ImageUpdateItem> = emptyList(),
@@ -295,6 +297,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         items.forEach { item ->
             val obj = org.json.JSONObject()
             obj.put("type", item.type.name)
+            item.title?.takeIf { it.isNotBlank() }?.let { obj.put("title", it) }
+            item.resourceId?.let { obj.put("resourceId", it) }
             when (item.type) {
                 ResourceType.TEXT -> obj.put("text", item.text.orEmpty())
                 ResourceType.SCENE -> {

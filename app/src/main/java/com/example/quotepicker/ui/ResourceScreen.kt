@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -62,6 +63,7 @@ import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
+import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
@@ -76,6 +78,7 @@ import com.example.quotepicker.vm.VideoUpdateItem
 @Composable
 fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewModel()) {
     val ui by vm.uiState.collectAsState()
+    val allResources by vm.allResources.collectAsState()
     var showAddMenu by remember { mutableStateOf(false) }
     var createMode by remember { mutableStateOf<CreateMode?>(null) }
     var previewTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
@@ -91,6 +94,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
+            availableResources = allResources,
             vm = vm,
             onBack = { createMode = null }
         )
@@ -103,6 +107,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             categories = ui.categories,
             tags = ui.tags,
             characters = ui.characters,
+            availableResources = allResources,
             vm = vm,
             onBack = { editTarget = null }
         )
@@ -412,6 +417,7 @@ private fun ResourceCreateScreen(
     categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
     characters: List<CharacterEntity>,
+    availableResources: List<ResourceWithTagsCharacters>,
     vm: ResourceViewModel,
     onBack: () -> Unit
 ) {
@@ -471,6 +477,9 @@ private fun ResourceCreateScreen(
 
     val selectedSpeakerNames = remember(selectedCharacters, characters) {
         characters.filter { selectedCharacters.contains(it.id) }.map { it.name }
+    }
+    val flowResources = remember(availableResources) {
+        availableResources.filter { it.resource.type != ResourceType.FLOW }
     }
 
     Scaffold(
@@ -561,7 +570,7 @@ private fun ResourceCreateScreen(
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Text(
-                                                text = typeLabel(item.type),
+                                                text = item.title?.ifBlank { null } ?: typeLabel(item.type),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
@@ -750,6 +759,7 @@ private fun ResourceCreateScreen(
         FlowStepDialog(
             allowedSpeakers = selectedSpeakerNames,
             initialItem = editFlowIndex?.let { flowItems.getOrNull(it) },
+            availableResources = flowResources,
             onConfirm = { item ->
                 val updated = flowItems.toMutableList()
                 if (editFlowIndex != null) {
@@ -776,6 +786,7 @@ private fun ResourceEditScreen(
     categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
     characters: List<CharacterEntity>,
+    availableResources: List<ResourceWithTagsCharacters>,
     vm: ResourceViewModel,
     onBack: () -> Unit
 ) {
@@ -815,6 +826,9 @@ private fun ResourceEditScreen(
 
     val selectedSpeakerNames = remember(selectedCharacters, characters) {
         characters.filter { selectedCharacters.contains(it.id) }.map { it.name }
+    }
+    val flowResources = remember(availableResources) {
+        availableResources.filter { it.resource.type != ResourceType.FLOW }
     }
 
     val canSave = title.isNotBlank() && selectedCharacters.isNotEmpty() && when (resource.resource.type) {
@@ -1185,8 +1199,8 @@ private fun ResourceEditScreen(
     }
     if (showFlowDialog) {
         FlowStepDialog(
-            allowedSpeakers = selectedSpeakerNames,
             initialItem = editFlowIndex?.let { flowItems.getOrNull(it) },
+            availableResources = flowResources,
             onConfirm = { item ->
                 val updated = flowItems.toMutableList()
                 if (editFlowIndex != null) {
@@ -1251,7 +1265,7 @@ private fun ResourceCharacterPickerRow(
         } else {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 selectedCharacters.forEach { character ->
-                    AssistChip(onClick = {}, label = { Text(character.name) })
+                    CharacterBadge(name = character.name)
                 }
             }
         }
@@ -1473,44 +1487,24 @@ private fun SceneMessageDialog(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FlowStepDialog(
-    allowedSpeakers: List<String>,
     initialItem: FlowUpdateItem?,
+    availableResources: List<ResourceWithTagsCharacters>,
     onConfirm: (FlowUpdateItem) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedType by remember { mutableStateOf(initialItem?.type ?: ResourceType.TEXT) }
-    var text by remember { mutableStateOf(initialItem?.text.orEmpty()) }
-    var sceneMessages by remember { mutableStateOf(initialItem?.sceneMessages ?: emptyList()) }
-    var imageItems by remember { mutableStateOf(initialItem?.images ?: emptyList()) }
-    var videoItems by remember { mutableStateOf(initialItem?.videos ?: emptyList()) }
-    var showSceneDialog by remember { mutableStateOf(false) }
-    var editSceneIndex by remember { mutableStateOf<Int?>(null) }
+    val initialResourceId = remember(initialItem, availableResources) {
+        initialItem?.resourceId
+            ?: availableResources.firstOrNull {
+                it.resource.title == initialItem?.title && it.resource.type == initialItem?.type
+            }?.resource?.id
+    }
+    var selectedResourceId by remember(initialResourceId) { mutableStateOf(initialResourceId) }
 
-    val context = LocalContext.current
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        val updated = imageItems.toMutableList()
-        uris.forEach { uri -> updated.add(ImageUpdateItem(uri = uri)) }
-        imageItems = updated
+    val resourcesOfType = remember(selectedType, availableResources) {
+        availableResources.filter { it.resource.type == selectedType }
     }
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        val updated = videoItems.toMutableList()
-        uris.forEach { uri ->
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-            updated.add(VideoUpdateItem(uri = uri))
-        }
-        videoItems = updated
-    }
-
-    val canSubmit = when (selectedType) {
-        ResourceType.TEXT -> text.isNotBlank()
-        ResourceType.SCENE -> sceneMessages.isNotEmpty() && allowedSpeakers.isNotEmpty()
-        ResourceType.IMAGE -> imageItems.isNotEmpty()
-        ResourceType.VIDEO -> videoItems.isNotEmpty()
-        else -> false
-    }
+    val selectedResource = resourcesOfType.firstOrNull { it.resource.id == selectedResourceId }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1525,187 +1519,56 @@ private fun FlowStepDialog(
                     listOf(ResourceType.TEXT, ResourceType.SCENE, ResourceType.IMAGE, ResourceType.VIDEO).forEach { type ->
                         FilterChip(
                             selected = selectedType == type,
-                            onClick = { selectedType = type },
+                            onClick = {
+                                selectedType = type
+                                selectedResourceId = null
+                            },
                             label = { Text(typeLabel(type)) }
                         )
                     }
                 }
-                when (selectedType) {
-                    ResourceType.TEXT -> {
-                        OutlinedTextField(
-                            value = text,
-                            onValueChange = { text = it },
-                            label = { Text("文本内容") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    ResourceType.SCENE -> {
-                        TextButton(onClick = { showSceneDialog = true }, enabled = allowedSpeakers.isNotEmpty()) {
-                            Icon(Icons.Default.Chat, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("添加对话")
-                        }
-                        if (sceneMessages.isEmpty()) {
-                            Text("暂无对话", style = MaterialTheme.typography.labelSmall)
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                sceneMessages.forEachIndexed { index, message ->
-                                    androidx.compose.material3.OutlinedCard {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = message.speaker.ifBlank { "角色" },
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                                Text(text = message.content)
-                                            }
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                IconButton(onClick = {
-                                                    editSceneIndex = index
-                                                    showSceneDialog = true
-                                                }) {
-                                                    Icon(Icons.Default.Edit, contentDescription = "编辑")
-                                                }
-                                                IconButton(onClick = {
-                                                    sceneMessages = sceneMessages.toMutableList().also { it.removeAt(index) }
-                                                }) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "删除")
-                                                }
-                                            }
-                                        }
+                Text("选择资源")
+                if (resourcesOfType.isEmpty()) {
+                    Text("暂无可用资源", style = MaterialTheme.typography.labelSmall)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        resourcesOfType.forEach { res ->
+                            val isSelected = selectedResourceId == res.resource.id
+                            androidx.compose.material3.OutlinedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedResourceId = res.resource.id }
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = res.resource.title,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    val summary = resourceSummary(res)
+                                    if (summary.isNotBlank()) {
+                                        Text(summary, style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
                             }
                         }
                     }
-                    ResourceType.IMAGE -> {
-                        TextButton(onClick = { imagePicker.launch("image/*") }) {
-                            Icon(Icons.Default.Image, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("选择图片")
-                        }
-                        if (imageItems.isEmpty()) {
-                            Text("未选择图片")
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("已选择 ${imageItems.size} 张图片")
-                                imageItems.forEachIndexed { index, _ ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("图片 ${index + 1}")
-                                        IconButton(onClick = {
-                                            imageItems = imageItems.toMutableList().also { it.removeAt(index) }
-                                        }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "删除")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ResourceType.VIDEO -> {
-                        TextButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) {
-                            Icon(Icons.Default.Videocam, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("选择视频")
-                        }
-                        if (videoItems.isEmpty()) {
-                            Text("未选择视频")
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("已选择 ${videoItems.size} 个视频")
-                                videoItems.forEachIndexed { index, _ ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("视频 ${index + 1}")
-                                        IconButton(onClick = {
-                                            videoItems = videoItems.toMutableList().also { it.removeAt(index) }
-                                        }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "删除")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else -> {}
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    onConfirm(
-                        FlowUpdateItem(
-                            type = selectedType,
-                            text = text,
-                            sceneMessages = sceneMessages,
-                            images = imageItems,
-                            videos = videoItems
-                        )
-                    )
-                },
-                enabled = canSubmit
+                onClick = { selectedResource?.let { onConfirm(flowItemFromResource(it)) } },
+                enabled = selectedResource != null
             ) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
-
-    if (showSceneDialog) {
-        SceneMessageDialog(
-            title = if (editSceneIndex == null) "添加对话" else "编辑对话",
-            allowedSpeakers = allowedSpeakers,
-            initialSpeaker = editSceneIndex?.let { sceneMessages.getOrNull(it)?.speaker }.orEmpty(),
-            initialContent = editSceneIndex?.let { sceneMessages.getOrNull(it)?.content }.orEmpty(),
-            onConfirm = { speaker, content ->
-                if (speaker.isBlank() && content.isBlank()) {
-                    showSceneDialog = false
-                    editSceneIndex = null
-                } else {
-                    val updated = sceneMessages.toMutableList()
-                    if (editSceneIndex != null) {
-                        updated[editSceneIndex!!] = SceneMessageDraft(speaker.trim(), content.trim())
-                    } else {
-                        updated.add(SceneMessageDraft(speaker.trim(), content.trim()))
-                    }
-                    sceneMessages = updated
-                    showSceneDialog = false
-                    editSceneIndex = null
-                }
-            },
-            onAddAnother = if (editSceneIndex == null) {
-                { speaker, content ->
-                    if (speaker.isNotBlank() || content.isNotBlank()) {
-                        val updated = sceneMessages.toMutableList()
-                        updated.add(SceneMessageDraft(speaker.trim(), content.trim()))
-                        sceneMessages = updated
-                    }
-                }
-            } else {
-                null
-            },
-            onDismiss = {
-                showSceneDialog = false
-                editSceneIndex = null
-            }
-        )
-    }
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {
@@ -1752,6 +1615,57 @@ private fun parseVideoItems(raw: String?): List<VideoUpdateItem> {
     return list.map { VideoUpdateItem(path = it) }
 }
 
+private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpdateItem {
+    val data = resource.resource
+    return when (data.type) {
+        ResourceType.TEXT -> FlowUpdateItem(
+            type = data.type,
+            title = data.title,
+            resourceId = data.id,
+            text = data.quoteText.orEmpty()
+        )
+        ResourceType.SCENE -> FlowUpdateItem(
+            type = data.type,
+            title = data.title,
+            resourceId = data.id,
+            sceneMessages = parseSceneMessages(data.sceneJson)
+        )
+        ResourceType.IMAGE -> FlowUpdateItem(
+            type = data.type,
+            title = data.title,
+            resourceId = data.id,
+            images = parseImageItems(data.quoteImageBase64)
+        )
+        ResourceType.VIDEO -> FlowUpdateItem(
+            type = data.type,
+            title = data.title,
+            resourceId = data.id,
+            videos = parseVideoItems(data.contentUriOrPath)
+        )
+        else -> FlowUpdateItem(type = data.type, title = data.title, resourceId = data.id)
+    }
+}
+
+private fun resourceSummary(resource: ResourceWithTagsCharacters): String {
+    val data = resource.resource
+    return when (data.type) {
+        ResourceType.TEXT -> data.quoteText.orEmpty()
+        ResourceType.SCENE -> {
+            val messages = parseSceneMessages(data.sceneJson)
+            if (messages.isEmpty()) "" else "对话 ${messages.size} 条"
+        }
+        ResourceType.IMAGE -> {
+            val images = parseImageItems(data.quoteImageBase64)
+            if (images.isEmpty()) "" else "图片 ${images.size} 张"
+        }
+        ResourceType.VIDEO -> {
+            val videos = parseVideoItems(data.contentUriOrPath)
+            if (videos.isEmpty()) "" else "视频 ${videos.size} 个"
+        }
+        else -> ""
+    }
+}
+
 private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
     if (raw.isNullOrBlank()) return emptyList()
     return runCatching {
@@ -1760,9 +1674,16 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
             for (i in 0 until array.length()) {
                 val obj = array.optJSONObject(i) ?: continue
                 val type = runCatching { ResourceType.valueOf(obj.optString("type")) }.getOrNull() ?: continue
+                val title = obj.optString("title").ifBlank { null }
+                val resourceId = obj.optLong("resourceId", -1L).takeIf { it > 0 }
                 when (type) {
                     ResourceType.TEXT -> add(
-                        FlowUpdateItem(type = type, text = obj.optString("text"))
+                        FlowUpdateItem(
+                            type = type,
+                            title = title,
+                            resourceId = resourceId,
+                            text = obj.optString("text")
+                        )
                     )
                     ResourceType.SCENE -> {
                         val messages = obj.optJSONArray("messages")
@@ -1778,7 +1699,14 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
                                 }
                             }
                         }
-                        add(FlowUpdateItem(type = type, sceneMessages = parsed))
+                        add(
+                            FlowUpdateItem(
+                                type = type,
+                                title = title,
+                                resourceId = resourceId,
+                                sceneMessages = parsed
+                            )
+                        )
                     }
                     ResourceType.IMAGE -> {
                         val images = obj.optJSONArray("images")
@@ -1790,7 +1718,14 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
                                 }
                             }
                         }
-                        add(FlowUpdateItem(type = type, images = parsed))
+                        add(
+                            FlowUpdateItem(
+                                type = type,
+                                title = title,
+                                resourceId = resourceId,
+                                images = parsed
+                            )
+                        )
                     }
                     ResourceType.VIDEO -> {
                         val videos = obj.optJSONArray("videos")
@@ -1802,7 +1737,14 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
                                 }
                             }
                         }
-                        add(FlowUpdateItem(type = type, videos = parsed))
+                        add(
+                            FlowUpdateItem(
+                                type = type,
+                                title = title,
+                                resourceId = resourceId,
+                                videos = parsed
+                            )
+                        )
                     }
                     else -> {}
                 }
