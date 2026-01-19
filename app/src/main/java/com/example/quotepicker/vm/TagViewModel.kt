@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
+import com.example.quotepicker.data.TagCategoryType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +46,7 @@ class TagViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(id: Long?) { selectedCategoryId.value = id }
 
-    fun addCategory(name: String) = viewModelScope.launch { repo.addCategory(name) }
+    fun addCategory(name: String, type: TagCategoryType) = viewModelScope.launch { repo.addCategory(name, type) }
     fun updateCategory(category: TagCategoryEntity) = viewModelScope.launch { repo.updateCategory(category) }
     fun deleteCategory(category: TagCategoryEntity) = viewModelScope.launch { repo.deleteCategory(category) }
 

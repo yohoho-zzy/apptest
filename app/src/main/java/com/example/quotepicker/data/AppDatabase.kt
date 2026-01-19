@@ -13,6 +13,12 @@ class Converters {
 
     @TypeConverter
     fun toType(raw: String): ResourceType = ResourceType.valueOf(raw)
+
+    @TypeConverter
+    fun fromCategoryType(type: TagCategoryType): String = type.name
+
+    @TypeConverter
+    fun toCategoryType(raw: String): TagCategoryType = TagCategoryType.valueOf(raw)
 }
 
 @Database(
@@ -25,7 +31,7 @@ class Converters {
         CharacterTagCrossRef::class,
         ResourceCharacterCrossRef::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

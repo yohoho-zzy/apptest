@@ -13,26 +13,31 @@ class Repository private constructor(context: Context) {
 
     fun observeCategories(): Flow<List<TagCategoryEntity>> = categoryDao.observeCategories()
     fun observeTagsByCategory(categoryId: Long): Flow<List<TagEntity>> = tagDao.observeTagsByCategory(categoryId)
+    fun observeCategoriesByType(type: TagCategoryType): Flow<List<TagCategoryEntity>> =
+        categoryDao.observeCategoriesByType(type)
     fun observeAllTags(): Flow<List<TagEntity>> = tagDao.observeAllTags()
     fun observeCharacters(): Flow<List<CharacterEntity>> = characterDao.observeCharacters()
     fun observeCharactersWithTags(): Flow<List<CharacterWithTags>> = characterDao.observeCharactersWithTags()
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
 
-    suspend fun addCategory(name: String) = categoryDao.insert(TagCategoryEntity(name = name))
-    suspend fun updateCategory(category: TagCategoryEntity) = categoryDao.update(category.copy(updatedAt = System.currentTimeMillis()))
+    suspend fun addCategory(name: String, type: TagCategoryType) =
+        categoryDao.insert(TagCategoryEntity(name = name, type = type))
+
+    suspend fun updateCategory(category: TagCategoryEntity) =
+        categoryDao.update(category.copy(updatedAt = System.currentTimeMillis()))
     suspend fun deleteCategory(category: TagCategoryEntity) {
         if (category.name == ORPHAN_CATEGORY_NAME) return
-        val orphan = ensureOrphanCategory()
+        val orphan = ensureOrphanCategory(category.type)
         tagDao.reassignCategory(category.id, orphan.id)
         categoryDao.delete(category)
     }
 
-    suspend fun ensureOrphanCategory(): TagCategoryEntity {
-        val existing = categoryDao.findByName(ORPHAN_CATEGORY_NAME)
+    suspend fun ensureOrphanCategory(type: TagCategoryType): TagCategoryEntity {
+        val existing = categoryDao.findByName(ORPHAN_CATEGORY_NAME, type)
         if (existing != null) return existing
-        val id = categoryDao.insert(TagCategoryEntity(name = ORPHAN_CATEGORY_NAME))
-        return TagCategoryEntity(id = id, name = ORPHAN_CATEGORY_NAME)
+        val id = categoryDao.insert(TagCategoryEntity(name = ORPHAN_CATEGORY_NAME, type = type))
+        return TagCategoryEntity(id = id, name = ORPHAN_CATEGORY_NAME, type = type)
     }
 
     suspend fun addTag(categoryId: Long, name: String, colorArgb: Int) =

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
@@ -22,8 +23,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,6 +48,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.SquareGridItem
@@ -67,6 +72,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     val isInCategory = ui.currentCategory != null
     val categoryTagCounts = remember(ui.allTags) {
         ui.allTags.groupingBy { it.categoryId }.eachCount()
+    }
+    val characterCategories = remember(ui.categories) {
+        ui.categories.filter { it.type == TagCategoryType.CHARACTER }
+    }
+    val resourceCategories = remember(ui.categories) {
+        ui.categories.filter { it.type == TagCategoryType.RESOURCE }
     }
 
     Scaffold(
@@ -93,26 +104,55 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
             if (!isInCategory) {
-                if (ui.categories.isEmpty()) {
+                if (characterCategories.isEmpty() && resourceCategories.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("暂无标签类别，点击右下角添加")
                     }
                 } else {
-                    val categories = ui.categories.sortedBy { it.name.lowercase() }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(5),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(categories, key = { it.id }) { category ->
-                            val count = categoryTagCounts[category.id] ?: 0
-                            SquareGridItem(
-                                title = category.name,
-                                subtitle = "标签 $count",
-                                onClick = { vm.selectCategory(category.id) },
-                                onLongClick = { bottomSheetTarget = category }
-                            )
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text("角色标签", style = MaterialTheme.typography.titleMedium)
+                        }
+                        if (characterCategories.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text("暂无角色标签类别", style = MaterialTheme.typography.labelMedium)
+                            }
+                        } else {
+                            items(characterCategories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
+                                val count = categoryTagCounts[category.id] ?: 0
+                                SquareGridItem(
+                                    title = category.name,
+                                    subtitle = "标签 $count",
+                                    onClick = { vm.selectCategory(category.id) },
+                                    onLongClick = { bottomSheetTarget = category }
+                                )
+                            }
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text("资源标签", style = MaterialTheme.typography.titleMedium)
+                        }
+                        if (resourceCategories.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text("暂无资源标签类别", style = MaterialTheme.typography.labelMedium)
+                            }
+                        } else {
+                            items(resourceCategories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
+                                val count = categoryTagCounts[category.id] ?: 0
+                                SquareGridItem(
+                                    title = category.name,
+                                    subtitle = "标签 $count",
+                                    onClick = { vm.selectCategory(category.id) },
+                                    onLongClick = { bottomSheetTarget = category }
+                                )
+                            }
                         }
                     }
                 }
@@ -147,10 +187,9 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     }
 
     if (showCategoryDialog) {
-        NameDialog(
+        CategoryDialog(
             title = "新增类别",
-            initial = "",
-            onConfirm = { vm.addCategory(it) },
+            onConfirm = { name, type -> vm.addCategory(name, type) },
             onDismiss = { showCategoryDialog = false }
         )
     }
@@ -291,6 +330,59 @@ private fun TagDialog(
         confirmButton = {
             TextButton(onClick = {
                 if (name.isNotBlank()) onConfirm(name.trim(), palette[colorIndex])
+                onDismiss()
+            }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun CategoryDialog(
+    title: String,
+    onConfirm: (String, TagCategoryType) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(TagCategoryType.CHARACTER) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("类别名称") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selectedType == TagCategoryType.CHARACTER,
+                        onClick = { selectedType = TagCategoryType.CHARACTER },
+                        label = { Text("角色标签") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                    FilterChip(
+                        selected = selectedType == TagCategoryType.RESOURCE,
+                        onClick = { selectedType = TagCategoryType.RESOURCE },
+                        label = { Text("资源标签") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (name.isNotBlank()) onConfirm(name.trim(), selectedType)
                 onDismiss()
             }) { Text("确定") }
         },

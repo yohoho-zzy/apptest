@@ -55,6 +55,15 @@ import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
 
+private data class FlowPreviewItem(
+    val type: ResourceType,
+    val text: String = "",
+    val sceneMessages: List<SceneMessage> = emptyList(),
+    val images: List<android.graphics.Bitmap> = emptyList(),
+    val mediaUris: List<Uri> = emptyList(),
+    val mediaFailed: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ResourcePreviewScreen(
@@ -67,25 +76,23 @@ fun ResourcePreviewScreen(
     var mediaLoadFailed by remember { mutableStateOf(false) }
     var mediaReloadKey by remember { mutableStateOf(0) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
+    var flowItems by remember { mutableStateOf<List<FlowPreviewItem>>(emptyList()) }
     val scrollState = rememberScrollState()
 
     LaunchedEffect(resource.resource.id, mediaReloadKey) {
         val res = resource.resource
         quoteImages = emptyList()
         mediaLoadFailed = false
+        flowItems = emptyList()
         if (res.type == ResourceType.IMAGE) {
-            val images = mutableListOf<android.graphics.Bitmap>()
-            res.contentUriOrPath?.let { path ->
-                val bytes = vm.loadDecryptedBytes(path)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { images.add(it) }
-            }
-            images.addAll(decodeQuoteImages(res.quoteImageBase64, vm))
-            quoteImages = images
-        } else if (res.type == ResourceType.QUOTE) {
             quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
+        } else if (res.type == ResourceType.TEXT) {
+            quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
+        } else if (res.type == ResourceType.FLOW) {
+            flowItems = parseFlowItems(res.sceneJson.orEmpty(), vm)
         }
         mediaUris = when (res.type) {
-            ResourceType.VIDEO, ResourceType.AUDIO -> {
+            ResourceType.VIDEO -> {
                 val raw = res.contentUriOrPath
                 if (raw.isNullOrBlank()) {
                     Log.e("ResourcePreview", "Missing media path for type=${res.type} id=${res.id}")
@@ -100,7 +107,7 @@ fun ResourcePreviewScreen(
                 }
                 val uriList = mutableListOf<Uri>()
                 paths.forEachIndexed { index, path ->
-                    val extension = resolvePreviewExtension(path, res.type)
+                    val extension = resolvePreviewExtension(path)
                     Log.d(
                         "ResourcePreview",
                         "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
@@ -124,7 +131,7 @@ fun ResourcePreviewScreen(
             }
             else -> emptyList()
         }
-        sceneMessages = parseSceneMessages(res.sceneJson.orEmpty())
+        sceneMessages = if (res.type == ResourceType.SCENE) parseSceneMessages(res.sceneJson.orEmpty()) else emptyList()
     }
 
     Scaffold(
@@ -191,7 +198,7 @@ fun ResourcePreviewScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (resource.resource.type) {
-                        ResourceType.QUOTE -> {
+                        ResourceType.TEXT -> {
                             if (!resource.resource.quoteText.isNullOrBlank()) {
                                 Text(resource.resource.quoteText.orEmpty())
                             }
@@ -219,22 +226,6 @@ fun ResourcePreviewScreen(
                                 Text("视频加载中…")
                             }
                         }
-                        ResourceType.AUDIO -> {
-                            if (mediaUris.isNotEmpty()) {
-                                MediaPreview(uri = mediaUris.first())
-                                Text("音频播放中")
-                            } else if (mediaLoadFailed) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("音频加载失败")
-                                    AssistChip(
-                                        onClick = { mediaReloadKey += 1 },
-                                        label = { Text("重试") }
-                                    )
-                                }
-                            } else {
-                                Text("音频加载中…")
-                            }
-                        }
                         ResourceType.SCENE -> {
                             if (sceneMessages.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -244,6 +235,45 @@ fun ResourcePreviewScreen(
                                 }
                             } else {
                                 Text(resource.resource.sceneJson.orEmpty())
+                            }
+                        }
+                        ResourceType.FLOW -> {
+                            if (flowItems.isEmpty()) {
+                                Text("流程内容为空")
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    flowItems.forEachIndexed { index, item ->
+                                        Card(modifier = Modifier.fillMaxWidth()) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("步骤 ${index + 1} - ${typeLabel(item.type)}")
+                                                when (item.type) {
+                                                    ResourceType.TEXT -> Text(item.text)
+                                                    ResourceType.SCENE -> {
+                                                        item.sceneMessages.forEach { message ->
+                                                            SceneBubble(message = message)
+                                                        }
+                                                    }
+                                                    ResourceType.IMAGE -> QuoteImagePager(images = item.images)
+                                                    ResourceType.VIDEO -> {
+                                                        if (item.mediaUris.isNotEmpty()) {
+                                                            MediaPreviewPager(uris = item.mediaUris)
+                                                        } else if (item.mediaFailed) {
+                                                            Text("视频加载失败")
+                                                        } else {
+                                                            Text("视频加载中…")
+                                                        }
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -321,8 +351,8 @@ private fun parseMediaPaths(raw: String): List<String> {
     return listOf(raw)
 }
 
-private fun resolvePreviewExtension(path: String, type: ResourceType): String {
-    val fallback = if (type == ResourceType.VIDEO) "mp4" else "mp3"
+private fun resolvePreviewExtension(path: String): String {
+    val fallback = "mp4"
     val fileName = File(path).name.removeSuffix(".enc")
     val ext = fileName.substringAfterLast('.', "")
     return if (ext.isNotBlank()) ext else fallback
@@ -364,6 +394,82 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
             }
         }
     }.getOrDefault(emptyList())
+}
+
+private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<FlowPreviewItem> {
+    if (raw.isBlank()) return emptyList()
+    return runCatching {
+        val array = JSONArray(raw)
+        buildList {
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val type = runCatching { ResourceType.valueOf(obj.optString("type")) }.getOrNull() ?: continue
+                when (type) {
+                    ResourceType.TEXT -> add(
+                        FlowPreviewItem(type = type, text = obj.optString("text"))
+                    )
+                    ResourceType.SCENE -> {
+                        val messages = obj.optJSONArray("messages") ?: JSONArray()
+                        val parsed = buildList {
+                            for (j in 0 until messages.length()) {
+                                val msg = messages.optJSONObject(j) ?: continue
+                                val speaker = msg.optString("speaker")
+                                val content = msg.optString("text")
+                                if (speaker.isNotBlank() || content.isNotBlank()) {
+                                    add(SceneMessage(speaker.ifBlank { "角色" }, content))
+                                }
+                            }
+                        }
+                        add(FlowPreviewItem(type = type, sceneMessages = parsed))
+                    }
+                    ResourceType.IMAGE -> {
+                        val images = obj.optJSONArray("images") ?: JSONArray()
+                        val bitmaps = buildList {
+                            for (j in 0 until images.length()) {
+                                val item = images.optString(j)
+                                if (item.isNotBlank()) {
+                                    vm.decodeBase64ToBitmap(item)?.let { add(it) }
+                                }
+                            }
+                        }
+                        add(FlowPreviewItem(type = type, images = bitmaps))
+                    }
+                    ResourceType.VIDEO -> {
+                        val videos = obj.optJSONArray("videos") ?: JSONArray()
+                        val uriList = mutableListOf<Uri>()
+                        var failed = false
+                        for (j in 0 until videos.length()) {
+                            val path = videos.optString(j)
+                            if (path.isBlank()) continue
+                            val extension = resolvePreviewExtension(path)
+                            val file = vm.writeDecryptedToCache(path, extension)
+                            if (file == null || !file.exists() || file.length() == 0L) {
+                                failed = true
+                            } else {
+                                uriList.add(Uri.fromFile(file))
+                            }
+                        }
+                        add(
+                            FlowPreviewItem(
+                                type = type,
+                                mediaUris = uriList,
+                                mediaFailed = failed
+                            )
+                        )
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
+}
+
+private fun typeLabel(type: ResourceType): String = when (type) {
+    ResourceType.FLOW -> "流程"
+    ResourceType.TEXT -> "文本"
+    ResourceType.IMAGE -> "图片"
+    ResourceType.VIDEO -> "视频"
+    ResourceType.SCENE -> "情景"
 }
 
 @Composable

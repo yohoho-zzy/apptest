@@ -13,8 +13,11 @@ interface TagCategoryDao {
     @Query("SELECT * FROM tag_categories ORDER BY name COLLATE NOCASE ASC")
     fun observeCategories(): Flow<List<TagCategoryEntity>>
 
-    @Query("SELECT * FROM tag_categories WHERE name = :name LIMIT 1")
-    suspend fun findByName(name: String): TagCategoryEntity?
+    @Query("SELECT * FROM tag_categories WHERE type = :type ORDER BY name COLLATE NOCASE ASC")
+    fun observeCategoriesByType(type: TagCategoryType): Flow<List<TagCategoryEntity>>
+
+    @Query("SELECT * FROM tag_categories WHERE name = :name AND type = :type LIMIT 1")
+    suspend fun findByName(name: String, type: TagCategoryType): TagCategoryEntity?
 
     @Insert
     suspend fun insert(category: TagCategoryEntity): Long
