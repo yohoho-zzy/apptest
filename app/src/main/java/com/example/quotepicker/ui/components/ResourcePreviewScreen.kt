@@ -49,6 +49,7 @@ import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.vm.ResourceViewModel
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -86,11 +87,21 @@ fun ResourcePreviewScreen(
         }
         mediaUris = when (res.type) {
             ResourceType.VIDEO, ResourceType.AUDIO -> {
-                val raw = res.contentUriOrPath ?: return@LaunchedEffect
+                val raw = res.contentUriOrPath
+                if (raw.isNullOrBlank()) {
+                    Log.e("ResourcePreview", "Missing media path for type=${res.type} id=${res.id}")
+                    mediaLoadFailed = true
+                    return@LaunchedEffect
+                }
                 val paths = parseMediaPaths(raw)
-                val extension = if (res.type == ResourceType.VIDEO) "mp4" else "mp3"
+                if (paths.isEmpty()) {
+                    Log.e("ResourcePreview", "Empty media path list for type=${res.type} id=${res.id}")
+                    mediaLoadFailed = true
+                    return@LaunchedEffect
+                }
                 val uriList = mutableListOf<Uri>()
                 paths.forEachIndexed { index, path ->
+                    val extension = resolvePreviewExtension(path, res.type)
                     Log.d(
                         "ResourcePreview",
                         "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
@@ -296,6 +307,13 @@ private fun parseMediaPaths(raw: String): List<String> {
         }.getOrDefault(listOf(raw))
     }
     return listOf(raw)
+}
+
+private fun resolvePreviewExtension(path: String, type: ResourceType): String {
+    val fallback = if (type == ResourceType.VIDEO) "mp4" else "mp3"
+    val fileName = File(path).name.removeSuffix(".enc")
+    val ext = fileName.substringAfterLast('.', "")
+    return if (ext.isNotBlank()) ext else fallback
 }
 
 @Composable
