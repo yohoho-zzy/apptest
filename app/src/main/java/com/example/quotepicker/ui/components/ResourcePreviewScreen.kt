@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -551,7 +553,7 @@ private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: ()
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
             IconButton(
@@ -567,6 +569,7 @@ private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: ()
 @Composable
 private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
+        var landscape by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -598,13 +601,28 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
                         view.setVideoURI(uri)
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = if (landscape) 90f else 0f
+                    }
             )
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
+                TextButton(
+                    onClick = { landscape = !landscape },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                ) {
+                    Text(if (landscape) "竖屏" else "横屏")
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
+                }
             }
         }
     }
