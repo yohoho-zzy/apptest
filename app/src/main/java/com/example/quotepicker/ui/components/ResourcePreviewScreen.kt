@@ -51,7 +51,6 @@ import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.vm.ResourceViewModel
 import java.io.File
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
@@ -106,9 +105,7 @@ fun ResourcePreviewScreen(
                         "ResourcePreview",
                         "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
                     )
-                    val file = withTimeoutOrNull(60_000) {
-                        vm.writeDecryptedToCache(path, extension)
-                    }
+                    val file = vm.writeDecryptedToCache(path, extension)
                     if (file == null || !file.exists() || file.length() == 0L) {
                         Log.e(
                             "ResourcePreview",
