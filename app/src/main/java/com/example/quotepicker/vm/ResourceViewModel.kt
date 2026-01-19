@@ -16,6 +16,9 @@ import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.ImageCompression
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -154,9 +157,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun addVideoGroup(title: String, uris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
-            val uriStrings = uris.mapNotNull { uri -> uri.toString().ifBlank { null } }
-            if (uriStrings.isEmpty()) return@launch
-            val payload = org.json.JSONArray(uriStrings).toString()
+            val storedUris = uris.mapNotNull { uri -> storeVideoToInternal(uri) }
+            if (storedUris.isEmpty()) return@launch
+            val payload = org.json.JSONArray(storedUris).toString()
             repo.addResource(
                 ResourceEntity(
                     type = ResourceType.VIDEO,
@@ -275,7 +278,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun resolveVideoItems(items: List<VideoUpdateItem>): List<String> {
         return items.mapNotNull { item ->
-            item.path ?: item.uri?.toString()
+            item.path?.ifBlank { null } ?: item.uri?.let { uri -> storeVideoToInternal(uri) }
         }.filter { it.isNotBlank() }
     }
 
@@ -317,6 +320,19 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         return runCatching {
             val bytes = Base64.decode(b64, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+
+    private fun storeVideoToInternal(uri: Uri): String? {
+        return runCatching {
+            val dir = File(getApplication<Application>().filesDir, "videos").apply { mkdirs() }
+            val target = File(dir, "video_${System.currentTimeMillis()}_${UUID.randomUUID()}.bin")
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(target).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            Uri.fromFile(target).toString()
         }.getOrNull()
     }
 }
