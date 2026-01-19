@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.security.KeyStoreException
 import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -18,6 +19,7 @@ import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.EncryptedFileManager
 import com.example.quotepicker.util.ImageCompression
 import java.io.File
+import javax.crypto.AEADBadTagException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -234,7 +236,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun loadDecryptedBytes(path: String): ByteArray = withContext(Dispatchers.IO) {
-        fileManager.openDecryptedStream(path).use { it.readBytes() }
+        runCatching {
+            fileManager.openDecryptedStream(path).use { it.readBytes() }
+        }
+            .onFailure { error -> handleDecryptionFailure(path, error) }
+            .getOrDefault(ByteArray(0))
     }
 
     suspend fun writeDecryptedToCache(path: String, extension: String? = null): File? = withContext(Dispatchers.IO) {
@@ -246,7 +252,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
             temp
-        }
+            }
             .onSuccess {
                 Log.d(
                     "ResourceViewModel",
@@ -254,9 +260,22 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             .onFailure { error ->
+                handleDecryptionFailure(path, error)
+                runCatching { if (temp.exists()) temp.delete() }
                 Log.e("ResourceViewModel", "Failed to decrypt media path=$path", error)
             }
             .getOrNull()
+    }
+
+    private fun handleDecryptionFailure(path: String, error: Throwable) {
+        if (!isDecryptionFailure(error)) return
+        Log.w("ResourceViewModel", "Deleting corrupted encrypted media path=$path", error)
+        fileManager.deleteEncryptedFile(path)
+    }
+
+    private fun isDecryptionFailure(error: Throwable): Boolean {
+        return generateSequence(error) { it.cause }
+            .any { cause -> cause is AEADBadTagException || cause is KeyStoreException }
     }
 
     fun decodeBase64ToBitmap(b64: String): Bitmap? {
