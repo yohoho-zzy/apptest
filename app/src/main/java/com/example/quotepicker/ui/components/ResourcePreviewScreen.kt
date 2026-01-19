@@ -50,8 +50,7 @@ import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.vm.ResourceViewModel
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
@@ -106,10 +105,10 @@ fun ResourcePreviewScreen(
                         "ResourcePreview",
                         "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
                     )
-                    val file = withContext(Dispatchers.IO) {
+                    val file = withTimeoutOrNull(60_000) {
                         vm.writeDecryptedToCache(path, extension)
                     }
-                    if (file == null) {
+                    if (file == null || !file.exists() || file.length() == 0L) {
                         Log.e(
                             "ResourcePreview",
                             "Failed to load media preview type=${res.type} id=${res.id} index=$index path=$path"
@@ -117,7 +116,11 @@ fun ResourcePreviewScreen(
                         mediaLoadFailed = true
                     } else {
                         uriList.add(Uri.fromFile(file))
+                        mediaUris = uriList.toList()
                     }
+                }
+                if (uriList.isEmpty()) {
+                    mediaLoadFailed = true
                 }
                 uriList
             }
