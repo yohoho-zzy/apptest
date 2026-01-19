@@ -4,10 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.security.KeyStoreException
 import android.util.Base64
-import android.util.Log
-import android.webkit.MimeTypeMap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
@@ -18,20 +15,14 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
-import com.example.quotepicker.util.EncryptedFileManager
 import com.example.quotepicker.util.ImageCompression
-import java.io.File
-import javax.crypto.AEADBadTagException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 data class ResourceFilterState(
     val selectedType: ResourceType? = null,
@@ -72,7 +63,6 @@ data class FlowUpdateItem(
 
 class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
-    private val fileManager = EncryptedFileManager(app)
 
     private val filters = MutableStateFlow(ResourceFilterState())
 
@@ -164,9 +154,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun addVideoGroup(title: String, uris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
-            val encryptedPaths = encryptMediaGroup(ResourceType.VIDEO, uris)
-            if (encryptedPaths.isEmpty()) return@launch
-            val payload = org.json.JSONArray(encryptedPaths).toString()
+            val uriStrings = uris.mapNotNull { uri -> uri.toString().ifBlank { null } }
+            if (uriStrings.isEmpty()) return@launch
+            val payload = org.json.JSONArray(uriStrings).toString()
             repo.addResource(
                 ResourceEntity(
                     type = ResourceType.VIDEO,
@@ -185,104 +175,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
-        val payload = buildFlowPayloadWithVideos(items).first
+        val payload = buildFlowPayloadWithVideos(items)
         repo.addResource(
             ResourceEntity(
                 type = ResourceType.FLOW,
                 title = title,
                 sceneJson = payload
-            ),
-            tagIds,
-            characterIds
-        )
-    }
-
-    fun addEncryptedMedia(
-        type: ResourceType,
-        title: String,
-        uri: Uri,
-        tagIds: List<Long>,
-        characterIds: List<Long>
-    ) = viewModelScope.launch(Dispatchers.IO) {
-        if (characterIds.isEmpty()) return@launch
-        val extension = resolveMediaExtension(uri)
-        val targetName = buildEncryptedName(type, extension)
-        val resolver = getApplication<Application>().contentResolver
-        val input = runCatching { resolver.openInputStream(uri) }
-            .onFailure { error ->
-                Log.e("ResourceViewModel", "Failed to open media uri=$uri type=$type", error)
-            }
-            .getOrNull()
-            ?: return@launch
-        val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
-            .onFailure { error ->
-                Log.e("ResourceViewModel", "Failed to encrypt media uri=$uri type=$type", error)
-            }
-            .getOrNull()
-            ?: return@launch
-        Log.d(
-            "ResourceViewModel",
-            "Encrypted media saved type=$type path=${encryptedFile.absolutePath} size=${encryptedFile.length()}"
-        )
-        repo.addResource(
-            ResourceEntity(
-                type = type,
-                title = title,
-                contentUriOrPath = encryptedFile.absolutePath
-            ),
-            tagIds,
-            characterIds
-        )
-    }
-
-    fun addEncryptedMediaGroup(
-        type: ResourceType,
-        title: String,
-        uris: List<Uri>,
-        tagIds: List<Long>,
-        characterIds: List<Long>
-    ) = viewModelScope.launch(Dispatchers.IO) {
-        if (characterIds.isEmpty()) return@launch
-        if (uris.isEmpty()) return@launch
-        val resolver = getApplication<Application>().contentResolver
-        val encryptedPaths = mutableListOf<String>()
-        uris.forEachIndexed { index, uri ->
-            val extension = resolveMediaExtension(uri)
-            val targetName = buildEncryptedName(type, extension, index)
-            val input = runCatching { resolver.openInputStream(uri) }
-                .onFailure { error ->
-                    Log.e("ResourceViewModel", "Failed to open media uri=$uri type=$type", error)
-                }
-                .getOrNull()
-            if (input == null) {
-                Log.w("ResourceViewModel", "Skip media uri=$uri type=$type due to open failure")
-                return@forEachIndexed
-            }
-            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
-                .onFailure { error ->
-                    Log.e("ResourceViewModel", "Failed to encrypt media uri=$uri type=$type", error)
-                }
-                .getOrNull()
-            if (encryptedFile != null) {
-                encryptedPaths.add(encryptedFile.absolutePath)
-                Log.d(
-                    "ResourceViewModel",
-                    "Encrypted media saved type=$type path=${encryptedFile.absolutePath} size=${encryptedFile.length()}"
-                )
-            } else {
-                Log.w("ResourceViewModel", "Skip media uri=$uri type=$type due to encryption failure")
-            }
-        }
-        if (encryptedPaths.isEmpty()) {
-            Log.e("ResourceViewModel", "No media saved for group type=$type title=$title")
-            return@launch
-        }
-        val payload = org.json.JSONArray(encryptedPaths).toString()
-        repo.addResource(
-            ResourceEntity(
-                type = type,
-                title = title,
-                contentUriOrPath = payload
             ),
             tagIds,
             characterIds
@@ -343,12 +241,10 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
-        val oldPaths = parseMediaPaths(resource.contentUriOrPath)
-        val newPaths = resolveVideoItems(items)
-        if (newPaths.isEmpty()) return@launch
-        val payload = org.json.JSONArray(newPaths).toString()
+        val newUris = resolveVideoItems(items)
+        if (newUris.isEmpty()) return@launch
+        val payload = org.json.JSONArray(newUris).toString()
         repo.updateResource(resource.copy(title = title, contentUriOrPath = payload))
-        deleteEncryptedPaths(oldPaths.filterNot { it in newPaths })
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -361,10 +257,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
-        val (payload, newPaths) = buildFlowPayloadWithVideos(items)
-        val oldPaths = extractFlowVideoPaths(resource.sceneJson)
+        val payload = buildFlowPayloadWithVideos(items)
         repo.updateResource(resource.copy(title = title, sceneJson = payload))
-        deleteEncryptedPaths(oldPaths.filterNot { it in newPaths })
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -376,137 +270,13 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.updateResourceCharacters(resourceId, characterIds) }
 
     fun deleteResource(resource: ResourceEntity) = viewModelScope.launch(Dispatchers.IO) {
-        val paths = when (resource.type) {
-            ResourceType.VIDEO -> parseMediaPaths(resource.contentUriOrPath)
-            ResourceType.FLOW -> extractFlowVideoPaths(resource.sceneJson)
-            else -> emptyList()
-        }
-        deleteEncryptedPaths(paths)
         repo.deleteResource(resource)
     }
 
-    suspend fun loadDecryptedBytes(path: String): ByteArray = withContext(Dispatchers.IO) {
-        runCatching {
-            fileManager.openDecryptedStream(path).use { it.readBytes() }
-        }
-            .onFailure { error -> handleDecryptionFailure(path, error) }
-            .getOrDefault(ByteArray(0))
-    }
-
-    suspend fun writeDecryptedToCache(
-        path: String,
-        extension: String? = null,
-        timeoutMs: Long = 60_000
-    ): File? = withContext(Dispatchers.IO) {
-        val cacheDir = getApplication<Application>().cacheDir
-        val normalizedExtension = extension?.let { if (it.startsWith(".")) it else ".$it" } ?: ".media"
-        val temp = File(cacheDir, "preview_${System.currentTimeMillis()}$normalizedExtension")
-        val result = withTimeoutOrNull(timeoutMs) {
-            runCatching {
-                fileManager.openDecryptedStream(path).use { input ->
-                    temp.outputStream().use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        while (true) {
-                            ensureActive()
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
-                        }
-                        output.flush()
-                    }
-                }
-                temp
-            }
-                .onSuccess {
-                    Log.d(
-                        "ResourceViewModel",
-                        "Decrypted media cached path=$path temp=${temp.absolutePath} size=${temp.length()}"
-                    )
-                }
-                .onFailure { error ->
-                    handleDecryptionFailure(path, error)
-                    runCatching { if (temp.exists()) temp.delete() }
-                    Log.e("ResourceViewModel", "Failed to decrypt media path=$path", error)
-                }
-                .getOrNull()
-        }
-        if (result == null) {
-            Log.e("ResourceViewModel", "Decrypt media timeout path=$path after ${timeoutMs}ms")
-            runCatching { if (temp.exists()) temp.delete() }
-        }
-        result
-    }
-
-    private fun deleteEncryptedPaths(paths: List<String>) {
-        paths.forEach { fileManager.deleteEncryptedFile(it) }
-    }
-
-    private fun parseMediaPaths(raw: String?): List<String> {
-        if (raw.isNullOrBlank()) return emptyList()
-        val trimmed = raw.trim()
-        if (trimmed.startsWith("[")) {
-            return runCatching {
-                val arr = org.json.JSONArray(trimmed)
-                List(arr.length()) { index -> arr.getString(index) }
-            }.getOrDefault(listOf(raw))
-        }
-        return listOf(raw)
-    }
-
-    private fun extractFlowVideoPaths(flowJson: String?): List<String> {
-        if (flowJson.isNullOrBlank()) return emptyList()
-        return runCatching {
-            val array = org.json.JSONArray(flowJson)
-            buildList {
-                for (i in 0 until array.length()) {
-                    val obj = array.optJSONObject(i) ?: continue
-                    if (obj.optString("type") != ResourceType.VIDEO.name) continue
-                    val videos = obj.optJSONArray("videos") ?: continue
-                    for (j in 0 until videos.length()) {
-                        val path = videos.optString(j)
-                        if (path.isNotBlank()) add(path)
-                    }
-                }
-            }
-        }.getOrDefault(emptyList())
-    }
-
     private suspend fun resolveVideoItems(items: List<VideoUpdateItem>): List<String> {
-        val resolver = getApplication<Application>().contentResolver
-        val result = mutableListOf<String>()
-        items.forEachIndexed { index, item ->
-            item.path?.let {
-                result.add(it)
-                return@forEachIndexed
-            }
-            val uri = item.uri ?: return@forEachIndexed
-            val extension = resolveMediaExtension(uri)
-            val targetName = buildEncryptedName(ResourceType.VIDEO, extension, index)
-            val input = runCatching { resolver.openInputStream(uri) }
-                .getOrNull()
-                ?: return@forEachIndexed
-            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
-                .getOrNull()
-                ?: return@forEachIndexed
-            result.add(encryptedFile.absolutePath)
-        }
-        return result
-    }
-
-    private suspend fun encryptMediaGroup(type: ResourceType, uris: List<Uri>): List<String> {
-        if (uris.isEmpty()) return emptyList()
-        val resolver = getApplication<Application>().contentResolver
-        val encryptedPaths = mutableListOf<String>()
-        uris.forEachIndexed { index, uri ->
-            val extension = resolveMediaExtension(uri)
-            val targetName = buildEncryptedName(type, extension, index)
-            val input = runCatching { resolver.openInputStream(uri) }.getOrNull() ?: return@forEachIndexed
-            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
-                .getOrNull()
-                ?: return@forEachIndexed
-            encryptedPaths.add(encryptedFile.absolutePath)
-        }
-        return encryptedPaths
+        return items.mapNotNull { item ->
+            item.path ?: item.uri?.toString()
+        }.filter { it.isNotBlank() }
     }
 
     private suspend fun encodeImageItems(items: List<ImageUpdateItem>): List<String> {
@@ -517,9 +287,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun buildFlowPayloadWithVideos(items: List<FlowUpdateItem>): Pair<String, List<String>> {
+    private suspend fun buildFlowPayloadWithVideos(items: List<FlowUpdateItem>): String {
         val array = org.json.JSONArray()
-        val videoPaths = mutableListOf<String>()
         items.forEach { item ->
             val obj = org.json.JSONObject()
             obj.put("type", item.type.name)
@@ -536,39 +305,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                     obj.put("messages", messages)
                 }
                 ResourceType.IMAGE -> obj.put("images", org.json.JSONArray(encodeImageItems(item.images)))
-                ResourceType.VIDEO -> {
-                    val paths = resolveVideoItems(item.videos)
-                    videoPaths.addAll(paths)
-                    obj.put("videos", org.json.JSONArray(paths))
-                }
+                ResourceType.VIDEO -> obj.put("videos", org.json.JSONArray(resolveVideoItems(item.videos)))
                 ResourceType.FLOW -> obj.put("text", item.text.orEmpty())
             }
             array.put(obj)
         }
-        return array.toString() to videoPaths
-    }
-
-    private fun handleDecryptionFailure(path: String, error: Throwable) {
-        if (!isDecryptionFailure(error)) return
-        Log.w("ResourceViewModel", "Deleting corrupted encrypted media path=$path", error)
-        fileManager.deleteEncryptedFile(path)
-    }
-
-    private fun isDecryptionFailure(error: Throwable): Boolean {
-        return generateSequence(error) { it.cause }
-            .any { cause -> cause is AEADBadTagException || cause is KeyStoreException }
-    }
-
-    private fun buildEncryptedName(type: ResourceType, extension: String?, index: Int? = null): String {
-        val suffix = index?.let { "_$it" }.orEmpty()
-        val ext = extension?.let { ".$it" }.orEmpty()
-        return "${type.name.lowercase()}_${System.currentTimeMillis()}$suffix$ext.enc"
-    }
-
-    private fun resolveMediaExtension(uri: Uri): String? {
-        val resolver = getApplication<Application>().contentResolver
-        val mime = resolver.getType(uri)
-        return mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        return array.toString()
     }
 
     fun decodeBase64ToBitmap(b64: String): Bitmap? {

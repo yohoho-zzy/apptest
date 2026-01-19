@@ -50,7 +50,6 @@ import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.vm.ResourceViewModel
-import java.io.File
 import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
@@ -95,36 +94,16 @@ fun ResourcePreviewScreen(
             ResourceType.VIDEO -> {
                 val raw = res.contentUriOrPath
                 if (raw.isNullOrBlank()) {
-                    Log.e("ResourcePreview", "Missing media path for type=${res.type} id=${res.id}")
+                    Log.e("ResourcePreview", "Missing media uri for type=${res.type} id=${res.id}")
                     mediaLoadFailed = true
                     return@LaunchedEffect
                 }
                 val paths = parseMediaPaths(raw)
-                if (paths.isEmpty()) {
-                    Log.e("ResourcePreview", "Empty media path list for type=${res.type} id=${res.id}")
-                    mediaLoadFailed = true
-                    return@LaunchedEffect
-                }
-                val uriList = mutableListOf<Uri>()
-                paths.forEachIndexed { index, path ->
-                    val extension = resolvePreviewExtension(path)
-                    Log.d(
-                        "ResourcePreview",
-                        "Preparing media preview type=${res.type} id=${res.id} index=$index path=$path"
-                    )
-                    val file = vm.writeDecryptedToCache(path, extension)
-                    if (file == null || !file.exists() || file.length() == 0L) {
-                        Log.e(
-                            "ResourcePreview",
-                            "Failed to load media preview type=${res.type} id=${res.id} index=$index path=$path"
-                        )
-                        mediaLoadFailed = true
-                    } else {
-                        uriList.add(Uri.fromFile(file))
-                        mediaUris = uriList.toList()
-                    }
+                val uriList = paths.mapNotNull { path ->
+                    path.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
                 }
                 if (uriList.isEmpty()) {
+                    Log.e("ResourcePreview", "Empty media uri list for type=${res.type} id=${res.id}")
                     mediaLoadFailed = true
                 }
                 uriList
@@ -351,13 +330,6 @@ private fun parseMediaPaths(raw: String): List<String> {
     return listOf(raw)
 }
 
-private fun resolvePreviewExtension(path: String): String {
-    val fallback = "mp4"
-    val fileName = File(path).name.removeSuffix(".enc")
-    val ext = fileName.substringAfterLast('.', "")
-    return if (ext.isNotBlank()) ext else fallback
-}
-
 @Composable
 private fun SceneBubble(message: SceneMessage) {
     Row(
@@ -440,22 +412,16 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                         var failed = false
                         for (j in 0 until videos.length()) {
                             val path = videos.optString(j)
-                            if (path.isBlank()) continue
-                            val extension = resolvePreviewExtension(path)
-                            val file = vm.writeDecryptedToCache(path, extension)
-                            if (file == null || !file.exists() || file.length() == 0L) {
+                            if (path.isBlank()) {
                                 failed = true
-                            } else {
-                                uriList.add(Uri.fromFile(file))
+                                continue
                             }
+                            uriList.add(Uri.parse(path))
                         }
-                        add(
-                            FlowPreviewItem(
-                                type = type,
-                                mediaUris = uriList,
-                                mediaFailed = failed
-                            )
-                        )
+                        if (uriList.isEmpty() && videos.length() > 0) {
+                            failed = true
+                        }
+                        add(FlowPreviewItem(type = type, mediaUris = uriList, mediaFailed = failed))
                     }
                     else -> {}
                 }
