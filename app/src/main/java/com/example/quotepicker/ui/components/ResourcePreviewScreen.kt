@@ -85,7 +85,7 @@ fun ResourcePreviewScreen(
         mediaLoadFailed = false
         flowItems = emptyList()
         if (res.type == ResourceType.IMAGE) {
-            quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
+            quoteImages = decodeImageSources(res.contentUriOrPath ?: res.quoteImageBase64, vm)
         } else if (res.type == ResourceType.TEXT) {
             quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
         } else if (res.type == ResourceType.FLOW) {
@@ -131,7 +131,8 @@ fun ResourcePreviewScreen(
                 .padding(inner)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -301,7 +302,7 @@ private fun MediaPreview(uri: Uri) {
         },
         modifier = Modifier
             .fillMaxWidth()
-            .height(320.dp)
+            .height(420.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
     )
 }
@@ -332,6 +333,21 @@ private fun parseMediaPaths(raw: String): List<String> {
         }.getOrDefault(listOf(raw))
     }
     return listOf(raw)
+}
+
+private fun decodeImageSources(payload: String?, vm: ResourceViewModel): List<android.graphics.Bitmap> {
+    if (payload.isNullOrBlank()) return emptyList()
+    val items = parseMediaPaths(payload)
+    return items.mapNotNull { decodeImageSource(it, vm) }
+}
+
+private fun decodeImageSource(item: String, vm: ResourceViewModel): android.graphics.Bitmap? {
+    val uri = Uri.parse(item)
+    return if (uri.scheme != null) {
+        vm.decodeUriToBitmap(uri)
+    } else {
+        vm.decodeBase64ToBitmap(item)
+    }
 }
 
 @Composable
@@ -405,7 +421,7 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                             for (j in 0 until images.length()) {
                                 val item = images.optString(j)
                                 if (item.isNotBlank()) {
-                                    vm.decodeBase64ToBitmap(item)?.let { add(it) }
+                                    decodeImageSource(item, vm)?.let { add(it) }
                                 }
                             }
                         }
