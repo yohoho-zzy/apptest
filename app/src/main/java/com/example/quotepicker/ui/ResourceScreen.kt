@@ -333,6 +333,11 @@ private fun ManageStorageScreen(
     val context = LocalContext.current
     val imagesDir = remember { File(context.filesDir, "images").absolutePath }
     val videosDir = remember { File(context.filesDir, "videos").absolutePath }
+    var displayType by remember { mutableStateOf(ResourceType.IMAGE) }
+    var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val filteredItems = remember(items, displayType) { items.filter { it.type == displayType } }
 
     Scaffold(
         topBar = {
@@ -344,6 +349,15 @@ private fun ManageStorageScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = {
+                        displayType = if (displayType == ResourceType.IMAGE) {
+                            ResourceType.VIDEO
+                        } else {
+                            ResourceType.IMAGE
+                        }
+                    }) {
+                        Text(if (displayType == ResourceType.IMAGE) "显示视频" else "显示图片")
+                    }
                     TextButton(onClick = onRefresh) { Text("刷新") }
                 }
             )
@@ -361,17 +375,70 @@ private fun ManageStorageScreen(
                 Text("图片目录：$imagesDir", style = MaterialTheme.typography.labelSmall)
                 Text("视频目录：$videosDir", style = MaterialTheme.typography.labelSmall)
             }
-            Text("长按文件可选择目录恢复", style = MaterialTheme.typography.labelSmall)
-            if (items.isEmpty()) {
+            Text("长按文件可选择恢复或删除", style = MaterialTheme.typography.labelSmall)
+            if (filteredItems.isEmpty()) {
                 Text("暂无文件", style = MaterialTheme.typography.labelMedium)
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(items, key = { it.path }) { item ->
-                        StorageMediaRow(item = item, vm = vm, onRestore = onRestore)
+                    items(filteredItems, key = { it.path }) { item ->
+                        StorageMediaRow(
+                            item = item,
+                            vm = vm,
+                            onLongPress = { actionTarget = item }
+                        )
                     }
                 }
             }
         }
+    }
+
+    actionTarget?.let { target ->
+        ModalBottomSheet(onDismissRequest = { actionTarget = null }) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(onClick = {
+                    actionTarget = null
+                    onRestore(target)
+                }) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("恢复到目录")
+                }
+                TextButton(onClick = {
+                    actionTarget = null
+                    deleteTarget = target
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("删除")
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除文件") },
+            text = { Text("确定删除该文件吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTarget = null
+                    coroutineScope.launch(Dispatchers.IO) {
+                        vm.deleteStoredMedia(target)
+                        withContext(Dispatchers.Main) {
+                            onRefresh()
+                        }
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -380,7 +447,7 @@ private fun ManageStorageScreen(
 private fun StorageMediaRow(
     item: StoredMediaItem,
     vm: ResourceViewModel,
-    onRestore: (StoredMediaItem) -> Unit
+    onLongPress: (StoredMediaItem) -> Unit
 ) {
     val thumbnail by produceState<android.graphics.Bitmap?>(initialValue = null, item.path) {
         value = if (item.type == ResourceType.IMAGE) {
@@ -394,7 +461,7 @@ private fun StorageMediaRow(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = {},
-                onLongClick = { onRestore(item) }
+                onLongClick = { onLongPress(item) }
             )
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
