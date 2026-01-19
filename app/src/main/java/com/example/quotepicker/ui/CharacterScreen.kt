@@ -70,6 +70,7 @@ fun CharacterScreen(
 ) {
     val ui by vm.uiState.collectAsState()
     val resources by resourceVm.allResources.collectAsState()
+    val resourceUi by resourceVm.uiState.collectAsState()
     var selectedId by remember { mutableStateOf<Long?>(null) }
     val selected = ui.characters.firstOrNull { it.character.id == selectedId }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -218,8 +219,8 @@ fun CharacterScreen(
     }
     if (filterTagDialog) {
         TagFilterDialog(
-            categories = ui.categories,
-            tags = ui.tags,
+            categories = resourceUi.categories,
+            tags = resourceUi.tags,
             selectedIds = selectedTagIds,
             onConfirm = { selectedTagIds = it },
             onDismiss = { filterTagDialog = false }
@@ -358,11 +359,11 @@ private fun CharacterResourceFilterBar(
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val orderedTypes = listOf(
-                ResourceType.QUOTE,
+                ResourceType.FLOW,
+                ResourceType.TEXT,
                 ResourceType.IMAGE,
                 ResourceType.VIDEO,
-                ResourceType.SCENE,
-                ResourceType.AUDIO
+                ResourceType.SCENE
             )
             orderedTypes.forEach { type ->
                 FilterChip(
@@ -409,10 +410,10 @@ private fun TagFilterDialog(
 }
 
 private fun typeLabel(type: ResourceType): String = when (type) {
+    ResourceType.FLOW -> "流程"
     ResourceType.IMAGE -> "图片"
     ResourceType.VIDEO -> "视频"
-    ResourceType.AUDIO -> "声音"
-    ResourceType.QUOTE -> "文本"
+    ResourceType.TEXT -> "文本"
     ResourceType.SCENE -> "情景"
 }
 

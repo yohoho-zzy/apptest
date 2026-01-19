@@ -6,14 +6,17 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-enum class ResourceType { IMAGE, VIDEO, AUDIO, QUOTE, SCENE }
+enum class ResourceType { FLOW, TEXT, IMAGE, VIDEO, SCENE }
+
+enum class TagCategoryType { CHARACTER, RESOURCE }
 
 @Entity(
     tableName = "tag_categories",
-    indices = [Index(value = ["name"], unique = true)]
+    indices = [Index(value = ["type", "name"], unique = true)]
 )
 data class TagCategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: TagCategoryType = TagCategoryType.RESOURCE,
     val name: String,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()

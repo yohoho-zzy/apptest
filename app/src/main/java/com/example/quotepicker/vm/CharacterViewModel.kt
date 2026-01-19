@@ -7,6 +7,7 @@ import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.CharacterWithTags
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +29,10 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeCategories(),
         repo.observeAllTags()
     ) { characters, categories, tags ->
-        CharacterUiState(characters = characters, categories = categories, tags = tags)
+        val roleCategories = categories.filter { it.type == TagCategoryType.CHARACTER }
+        val roleCategoryIds = roleCategories.map { it.id }.toSet()
+        val roleTags = tags.filter { it.categoryId in roleCategoryIds }
+        CharacterUiState(characters = characters, categories = roleCategories, tags = roleTags)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CharacterUiState())
 
     fun addCharacter(name: String) = viewModelScope.launch { repo.addCharacter(name) }

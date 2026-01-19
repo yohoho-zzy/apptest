@@ -15,6 +15,7 @@ import com.example.quotepicker.data.ResourceEntity
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.EncryptedFileManager
@@ -46,6 +47,29 @@ data class ResourceUiState(
     val filters: ResourceFilterState = ResourceFilterState()
 )
 
+data class ImageUpdateItem(
+    val base64: String? = null,
+    val uri: Uri? = null
+)
+
+data class VideoUpdateItem(
+    val path: String? = null,
+    val uri: Uri? = null
+)
+
+data class SceneMessageDraft(
+    val speaker: String,
+    val content: String
+)
+
+data class FlowUpdateItem(
+    val type: ResourceType,
+    val text: String? = null,
+    val sceneMessages: List<SceneMessageDraft> = emptyList(),
+    val images: List<ImageUpdateItem> = emptyList(),
+    val videos: List<VideoUpdateItem> = emptyList()
+)
+
 class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
     private val fileManager = EncryptedFileManager(app)
@@ -62,6 +86,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeCharacters(),
         filters
     ) { resources, categories, tags, characters, filter ->
+        val resourceCategories = categories.filter { it.type == TagCategoryType.RESOURCE }
+        val resourceCategoryIds = resourceCategories.map { it.id }.toSet()
+        val resourceTags = tags.filter { it.categoryId in resourceCategoryIds }
         val filtered = resources.filter { res ->
             val typeMatch = filter.selectedType?.let { it == res.resource.type } ?: true
             val charMatch = filter.selectedCharacterId?.let { id ->
@@ -76,8 +103,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
         ResourceUiState(
             resources = filtered,
-            categories = categories,
-            tags = tags,
+            categories = resourceCategories,
+            tags = resourceTags,
             characters = characters,
             filters = filter
         )
@@ -95,17 +122,17 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         filters.value = filters.value.copy(selectedCharacterId = characterId)
     }
 
-    fun addTextQuote(title: String, text: String, tagIds: List<Long>, characterIds: List<Long>) =
+    fun addTextResource(title: String, text: String, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch {
             if (characterIds.isEmpty()) return@launch
             repo.addResource(
-                ResourceEntity(type = ResourceType.QUOTE, title = title, quoteText = text),
+                ResourceEntity(type = ResourceType.TEXT, title = title, quoteText = text),
                 tagIds,
                 characterIds
             )
         }
 
-    fun addImageQuote(title: String, imageUris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
+    fun addImageGroup(title: String, imageUris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
             val base64List = imageUris.mapNotNull { uri ->
@@ -133,6 +160,42 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 characterIds
             )
         }
+
+    fun addVideoGroup(title: String, uris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
+        viewModelScope.launch(Dispatchers.IO) {
+            if (characterIds.isEmpty()) return@launch
+            val encryptedPaths = encryptMediaGroup(ResourceType.VIDEO, uris)
+            if (encryptedPaths.isEmpty()) return@launch
+            val payload = org.json.JSONArray(encryptedPaths).toString()
+            repo.addResource(
+                ResourceEntity(
+                    type = ResourceType.VIDEO,
+                    title = title,
+                    contentUriOrPath = payload
+                ),
+                tagIds,
+                characterIds
+            )
+        }
+
+    fun addFlow(
+        title: String,
+        items: List<FlowUpdateItem>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        val payload = buildFlowPayloadWithVideos(items).first
+        repo.addResource(
+            ResourceEntity(
+                type = ResourceType.FLOW,
+                title = title,
+                sceneJson = payload
+            ),
+            tagIds,
+            characterIds
+        )
+    }
 
     fun addEncryptedMedia(
         type: ResourceType,
@@ -229,6 +292,83 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun updateResource(resource: ResourceEntity) =
         viewModelScope.launch { repo.updateResource(resource) }
 
+    fun updateTextResource(
+        resource: ResourceEntity,
+        title: String,
+        text: String,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch {
+        if (characterIds.isEmpty()) return@launch
+        repo.updateResource(resource.copy(title = title, quoteText = text))
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
+    fun updateSceneResource(
+        resource: ResourceEntity,
+        title: String,
+        description: String?,
+        sceneJson: String,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch {
+        if (characterIds.isEmpty()) return@launch
+        repo.updateResource(
+            resource.copy(title = title, quoteText = description, sceneJson = sceneJson)
+        )
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
+    fun updateImageGroup(
+        resource: ResourceEntity,
+        title: String,
+        items: List<ImageUpdateItem>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        val payload = org.json.JSONArray(encodeImageItems(items)).toString()
+        repo.updateResource(resource.copy(title = title, quoteImageBase64 = payload))
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
+    fun updateVideoGroup(
+        resource: ResourceEntity,
+        title: String,
+        items: List<VideoUpdateItem>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        val oldPaths = parseMediaPaths(resource.contentUriOrPath)
+        val newPaths = resolveVideoItems(items)
+        if (newPaths.isEmpty()) return@launch
+        val payload = org.json.JSONArray(newPaths).toString()
+        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload))
+        deleteEncryptedPaths(oldPaths.filterNot { it in newPaths })
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
+    fun updateFlow(
+        resource: ResourceEntity,
+        title: String,
+        items: List<FlowUpdateItem>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        val (payload, newPaths) = buildFlowPayloadWithVideos(items)
+        val oldPaths = extractFlowVideoPaths(resource.sceneJson)
+        repo.updateResource(resource.copy(title = title, sceneJson = payload))
+        deleteEncryptedPaths(oldPaths.filterNot { it in newPaths })
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
     fun updateResourceTags(resourceId: Long, tagIds: List<Long>) =
         viewModelScope.launch { repo.updateResourceTags(resourceId, tagIds) }
 
@@ -236,7 +376,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.updateResourceCharacters(resourceId, characterIds) }
 
     fun deleteResource(resource: ResourceEntity) = viewModelScope.launch(Dispatchers.IO) {
-        fileManager.deleteEncryptedFile(resource.contentUriOrPath)
+        val paths = when (resource.type) {
+            ResourceType.VIDEO -> parseMediaPaths(resource.contentUriOrPath)
+            ResourceType.FLOW -> extractFlowVideoPaths(resource.sceneJson)
+            else -> emptyList()
+        }
+        deleteEncryptedPaths(paths)
         repo.deleteResource(resource)
     }
 
@@ -290,6 +435,117 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { if (temp.exists()) temp.delete() }
         }
         result
+    }
+
+    private fun deleteEncryptedPaths(paths: List<String>) {
+        paths.forEach { fileManager.deleteEncryptedFile(it) }
+    }
+
+    private fun parseMediaPaths(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val trimmed = raw.trim()
+        if (trimmed.startsWith("[")) {
+            return runCatching {
+                val arr = org.json.JSONArray(trimmed)
+                List(arr.length()) { index -> arr.getString(index) }
+            }.getOrDefault(listOf(raw))
+        }
+        return listOf(raw)
+    }
+
+    private fun extractFlowVideoPaths(flowJson: String?): List<String> {
+        if (flowJson.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = org.json.JSONArray(flowJson)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    if (obj.optString("type") != ResourceType.VIDEO.name) continue
+                    val videos = obj.optJSONArray("videos") ?: continue
+                    for (j in 0 until videos.length()) {
+                        val path = videos.optString(j)
+                        if (path.isNotBlank()) add(path)
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private suspend fun resolveVideoItems(items: List<VideoUpdateItem>): List<String> {
+        val resolver = getApplication<Application>().contentResolver
+        val result = mutableListOf<String>()
+        items.forEachIndexed { index, item ->
+            item.path?.let {
+                result.add(it)
+                return@forEachIndexed
+            }
+            val uri = item.uri ?: return@forEachIndexed
+            val extension = resolveMediaExtension(uri)
+            val targetName = buildEncryptedName(ResourceType.VIDEO, extension, index)
+            val input = runCatching { resolver.openInputStream(uri) }
+                .getOrNull()
+                ?: return@forEachIndexed
+            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
+                .getOrNull()
+                ?: return@forEachIndexed
+            result.add(encryptedFile.absolutePath)
+        }
+        return result
+    }
+
+    private suspend fun encryptMediaGroup(type: ResourceType, uris: List<Uri>): List<String> {
+        if (uris.isEmpty()) return emptyList()
+        val resolver = getApplication<Application>().contentResolver
+        val encryptedPaths = mutableListOf<String>()
+        uris.forEachIndexed { index, uri ->
+            val extension = resolveMediaExtension(uri)
+            val targetName = buildEncryptedName(type, extension, index)
+            val input = runCatching { resolver.openInputStream(uri) }.getOrNull() ?: return@forEachIndexed
+            val encryptedFile = runCatching { input.use { fileManager.encryptToFile(it, targetName) } }
+                .getOrNull()
+                ?: return@forEachIndexed
+            encryptedPaths.add(encryptedFile.absolutePath)
+        }
+        return encryptedPaths
+    }
+
+    private suspend fun encodeImageItems(items: List<ImageUpdateItem>): List<String> {
+        return items.mapNotNull { item ->
+            item.base64 ?: item.uri?.let { uri ->
+                ImageCompression.encodeToBase64(getApplication(), uri).ifBlank { null }
+            }
+        }
+    }
+
+    private suspend fun buildFlowPayloadWithVideos(items: List<FlowUpdateItem>): Pair<String, List<String>> {
+        val array = org.json.JSONArray()
+        val videoPaths = mutableListOf<String>()
+        items.forEach { item ->
+            val obj = org.json.JSONObject()
+            obj.put("type", item.type.name)
+            when (item.type) {
+                ResourceType.TEXT -> obj.put("text", item.text.orEmpty())
+                ResourceType.SCENE -> {
+                    val messages = org.json.JSONArray()
+                    item.sceneMessages.forEach { message ->
+                        val msg = org.json.JSONObject()
+                        msg.put("speaker", message.speaker)
+                        msg.put("text", message.content)
+                        messages.put(msg)
+                    }
+                    obj.put("messages", messages)
+                }
+                ResourceType.IMAGE -> obj.put("images", org.json.JSONArray(encodeImageItems(item.images)))
+                ResourceType.VIDEO -> {
+                    val paths = resolveVideoItems(item.videos)
+                    videoPaths.addAll(paths)
+                    obj.put("videos", org.json.JSONArray(paths))
+                }
+                ResourceType.FLOW -> obj.put("text", item.text.orEmpty())
+            }
+            array.put(obj)
+        }
+        return array.toString() to videoPaths
     }
 
     private fun handleDecryptionFailure(path: String, error: Throwable) {
