@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.documentfile.provider.DocumentFile
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceEntity
 import com.example.quotepicker.data.ResourceType
@@ -397,7 +398,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private fun storeBitmapToInternal(bitmap: Bitmap): String? {
         return runCatching {
             val dir = File(getApplication<Application>().filesDir, "images").apply { mkdirs() }
-            val target = File(dir, "image_${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg")
+            val target = File(dir, "media_${System.currentTimeMillis()}_${UUID.randomUUID()}.dat")
             FileOutputStream(target).use { output ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
             }
@@ -406,15 +407,20 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun deleteSourceUri(uri: Uri) {
-        runCatching {
-            getApplication<Application>().contentResolver.delete(uri, null, null)
+        val app = getApplication<Application>()
+        val deleted = runCatching {
+            val doc = DocumentFile.fromSingleUri(app, uri)
+            doc?.delete() ?: false
+        }.getOrDefault(false)
+        if (!deleted) {
+            runCatching { app.contentResolver.delete(uri, null, null) }
         }
     }
 
     private fun storeVideoToInternal(uri: Uri): String? {
         return runCatching {
             val dir = File(getApplication<Application>().filesDir, "videos").apply { mkdirs() }
-            val target = File(dir, "video_${System.currentTimeMillis()}_${UUID.randomUUID()}.bin")
+            val target = File(dir, "media_${System.currentTimeMillis()}_${UUID.randomUUID()}.dat")
             getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(target).use { output ->
                     input.copyTo(output)
