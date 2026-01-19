@@ -6,6 +6,7 @@ import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,10 +46,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
@@ -311,15 +319,30 @@ private fun MediaPreview(uri: Uri) {
 @Composable
 private fun MediaPreviewPager(uris: List<Uri>) {
     val pagerState = rememberPagerState(pageCount = { uris.size })
+    var fullScreenUri by remember { mutableStateOf<Uri?>(null) }
+    if (fullScreenUri != null) {
+        FullScreenVideoDialog(uri = fullScreenUri!!, onDismiss = { fullScreenUri = null })
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalPager(state = pagerState) { page ->
             MediaPreview(uri = uris[page])
         }
-        if (uris.size > 1) {
-            Text(
-                text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
-                style = MaterialTheme.typography.labelSmall
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (uris.size > 1) {
+                    Text(
+                        text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            TextButton(onClick = { fullScreenUri = uris[pagerState.currentPage] }) {
+                Text("全屏播放")
+            }
         }
     }
 }
@@ -485,11 +508,17 @@ private fun ResourceMetaRow(
 @Composable
 private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
     if (images.isEmpty()) return
+    var fullScreenImage by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    if (fullScreenImage != null) {
+        FullScreenImageDialog(bitmap = fullScreenImage!!, onDismiss = { fullScreenImage = null })
+    }
     if (images.size == 1) {
         Image(
             bitmap = images.first().asImageBitmap(),
             contentDescription = null,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { fullScreenImage = images.first() }
         )
         return
     }
@@ -499,7 +528,9 @@ private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
             Image(
                 bitmap = images[page].asImageBitmap(),
                 contentDescription = null,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { fullScreenImage = images[page] }
             )
         }
         Text(
@@ -507,6 +538,93 @@ private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
+    }
+}
+
+@Composable
+private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(onClick = onDismiss)
+        ) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        var landscape by remember { mutableStateOf(false) }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            val viewHolder = remember { mutableStateOf<VideoView?>(null) }
+            DisposableEffect(Unit) {
+                onDispose {
+                    viewHolder.value?.stopPlayback()
+                }
+            }
+            AndroidView(
+                factory = { context ->
+                    VideoView(context).apply {
+                        val controller = MediaController(context)
+                        controller.setAnchorView(this)
+                        setMediaController(controller)
+                        setVideoURI(uri)
+                        tag = uri
+                        setOnPreparedListener { mediaPlayer ->
+                            mediaPlayer.start()
+                        }
+                        viewHolder.value = this
+                    }
+                },
+                update = { view ->
+                    if (view.tag != uri) {
+                        view.tag = uri
+                        view.setVideoURI(uri)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = if (landscape) 90f else 0f
+                    }
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { landscape = !landscape },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                ) {
+                    Text(if (landscape) "竖屏" else "横屏")
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
+                }
+            }
+        }
     }
 }
 
