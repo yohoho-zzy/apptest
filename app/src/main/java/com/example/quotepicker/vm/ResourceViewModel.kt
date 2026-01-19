@@ -7,6 +7,7 @@ import android.net.Uri
 import android.security.KeyStoreException
 import android.util.Base64
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
@@ -139,7 +140,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
-        val targetName = "${type.name.lowercase()}_${System.currentTimeMillis()}.enc"
+        val extension = resolveMediaExtension(uri)
+        val targetName = buildEncryptedName(type, extension)
         val resolver = getApplication<Application>().contentResolver
         val input = runCatching { resolver.openInputStream(uri) }
             .onFailure { error ->
@@ -180,7 +182,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val resolver = getApplication<Application>().contentResolver
         val encryptedPaths = mutableListOf<String>()
         uris.forEachIndexed { index, uri ->
-            val targetName = "${type.name.lowercase()}_${System.currentTimeMillis()}_$index.enc"
+            val extension = resolveMediaExtension(uri)
+            val targetName = buildEncryptedName(type, extension, index)
             val input = runCatching { resolver.openInputStream(uri) }
                 .onFailure { error ->
                     Log.e("ResourceViewModel", "Failed to open media uri=$uri type=$type", error)
@@ -276,6 +279,18 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private fun isDecryptionFailure(error: Throwable): Boolean {
         return generateSequence(error) { it.cause }
             .any { cause -> cause is AEADBadTagException || cause is KeyStoreException }
+    }
+
+    private fun buildEncryptedName(type: ResourceType, extension: String?, index: Int? = null): String {
+        val suffix = index?.let { "_$it" }.orEmpty()
+        val ext = extension?.let { ".$it" }.orEmpty()
+        return "${type.name.lowercase()}_${System.currentTimeMillis()}$suffix$ext.enc"
+    }
+
+    private fun resolveMediaExtension(uri: Uri): String? {
+        val resolver = getApplication<Application>().contentResolver
+        val mime = resolver.getType(uri)
+        return mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
     }
 
     fun decodeBase64ToBitmap(b64: String): Bitmap? {
