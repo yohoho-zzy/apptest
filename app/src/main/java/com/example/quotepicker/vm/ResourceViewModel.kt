@@ -27,8 +27,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class ResourceFilterState(
     val selectedType: ResourceType? = null,
@@ -246,28 +248,48 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             .getOrDefault(ByteArray(0))
     }
 
-    suspend fun writeDecryptedToCache(path: String, extension: String? = null): File? = withContext(Dispatchers.IO) {
+    suspend fun writeDecryptedToCache(
+        path: String,
+        extension: String? = null,
+        timeoutMs: Long = 60_000
+    ): File? = withContext(Dispatchers.IO) {
         val cacheDir = getApplication<Application>().cacheDir
         val normalizedExtension = extension?.let { if (it.startsWith(".")) it else ".$it" } ?: ".media"
         val temp = File(cacheDir, "preview_${System.currentTimeMillis()}$normalizedExtension")
-        runCatching {
-            fileManager.openDecryptedStream(path).use { input ->
-                temp.outputStream().use { output -> input.copyTo(output) }
+        val result = withTimeoutOrNull(timeoutMs) {
+            runCatching {
+                fileManager.openDecryptedStream(path).use { input ->
+                    temp.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            ensureActive()
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                        }
+                        output.flush()
+                    }
+                }
+                temp
             }
-            temp
-            }
-            .onSuccess {
-                Log.d(
-                    "ResourceViewModel",
-                    "Decrypted media cached path=$path temp=${temp.absolutePath} size=${temp.length()}"
-                )
-            }
-            .onFailure { error ->
-                handleDecryptionFailure(path, error)
-                runCatching { if (temp.exists()) temp.delete() }
-                Log.e("ResourceViewModel", "Failed to decrypt media path=$path", error)
-            }
-            .getOrNull()
+                .onSuccess {
+                    Log.d(
+                        "ResourceViewModel",
+                        "Decrypted media cached path=$path temp=${temp.absolutePath} size=${temp.length()}"
+                    )
+                }
+                .onFailure { error ->
+                    handleDecryptionFailure(path, error)
+                    runCatching { if (temp.exists()) temp.delete() }
+                    Log.e("ResourceViewModel", "Failed to decrypt media path=$path", error)
+                }
+                .getOrNull()
+        }
+        if (result == null) {
+            Log.e("ResourceViewModel", "Decrypt media timeout path=$path after ${timeoutMs}ms")
+            runCatching { if (temp.exists()) temp.delete() }
+        }
+        result
     }
 
     private fun handleDecryptionFailure(path: String, error: Throwable) {
