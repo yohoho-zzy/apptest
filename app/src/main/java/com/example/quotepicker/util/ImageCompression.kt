@@ -12,23 +12,26 @@ object ImageCompression {
     private const val MAX_EDGE = 1920
 
     fun encodeToBase64(context: Context, uri: Uri): String {
+        val scaled = decodeToBitmap(context, uri) ?: return ""
+        return ByteArrayOutputStream().use { baos ->
+            scaled.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        }
+    }
+
+    fun decodeToBitmap(context: Context, uri: Uri): Bitmap? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input, null, bounds)
         }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return ""
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         val sampleSize = calculateInSampleSize(bounds, MAX_EDGE, MAX_EDGE)
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         val bitmap = resolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input, null, decodeOptions)
-        } ?: return ""
-
-        val scaled = scale(bitmap)
-        return ByteArrayOutputStream().use { baos ->
-            scaled.compress(Bitmap.CompressFormat.JPEG, 85, baos)
-            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-        }
+        } ?: return null
+        return scale(bitmap)
     }
 
     private fun scale(bitmap: Bitmap): Bitmap {

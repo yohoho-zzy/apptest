@@ -7,7 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -51,6 +52,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +74,9 @@ import com.example.quotepicker.vm.FlowUpdateItem
 import com.example.quotepicker.vm.ImageUpdateItem
 import com.example.quotepicker.vm.ResourceViewModel
 import com.example.quotepicker.vm.SceneMessageDraft
+import com.example.quotepicker.vm.StoredMediaItem
 import com.example.quotepicker.vm.VideoUpdateItem
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +91,19 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var deleteTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
+    var manageDialog by remember { mutableStateOf(false) }
+    var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
+    var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val target = restoreTarget
+        if (uri != null && target != null) {
+            coroutineScope.launch {
+                vm.restoreMediaToDirectory(target.path, target.type, uri)
+            }
+        }
+        restoreTarget = null
+    }
 
     createMode?.let { mode ->
         ResourceCreateScreen(
@@ -131,6 +148,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 actions = {
                     IconButton(onClick = { filterTagDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "筛选标签")
+                    }
+                    IconButton(onClick = {
+                        manageItems = vm.listStoredMedia()
+                        manageDialog = true
+                    }) {
+                        Icon(Icons.Default.Settings, contentDescription = "管理资源")
                     }
                 }
             )
@@ -224,6 +247,53 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             onConfirm = { vm.updateCharacterFilter(it) },
             onDismiss = { filterCharacterDialog = false }
         )
+    }
+
+    if (manageDialog) {
+        ModalBottomSheet(onDismissRequest = { manageDialog = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("本地存储文件", style = MaterialTheme.typography.titleMedium)
+                Text("长按文件可选择目录恢复", style = MaterialTheme.typography.labelSmall)
+                if (manageItems.isEmpty()) {
+                    Text("暂无文件", style = MaterialTheme.typography.labelMedium)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        manageItems.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            restoreTarget = item
+                                            restorePicker.launch(null)
+                                        }
+                                    )
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (item.type == ResourceType.IMAGE) "图片" else "视频",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    Text(
+                                        text = item.path,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     bottomSheetTarget?.let { target ->
@@ -438,8 +508,14 @@ private fun ResourceCreateScreen(
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
 
     val context = LocalContext.current
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
-        imageUris = it
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        imageUris = uris
+        uris.forEach { uri ->
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
     }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         videoUris = uris
@@ -613,7 +689,7 @@ private fun ResourceCreateScreen(
                     )
                 }
                 CreateMode.ImageGroup -> {
-                    TextButton(onClick = { imagePicker.launch("image/*") }) {
+                    TextButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
                         Icon(Icons.Default.Image, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("选择图片")
@@ -797,7 +873,9 @@ private fun ResourceEditScreen(
     var textContent by remember { mutableStateOf(resource.resource.quoteText.orEmpty()) }
     var description by remember { mutableStateOf(resource.resource.quoteText.orEmpty()) }
     var sceneMessages by remember { mutableStateOf(parseSceneMessages(resource.resource.sceneJson)) }
-    var imageItems by remember { mutableStateOf(parseImageItems(resource.resource.quoteImageBase64)) }
+    var imageItems by remember {
+        mutableStateOf(parseImageItems(resource.resource.contentUriOrPath, resource.resource.quoteImageBase64))
+    }
     var videoItems by remember { mutableStateOf(parseVideoItems(resource.resource.contentUriOrPath)) }
     var flowItems by remember { mutableStateOf(parseFlowItems(resource.resource.sceneJson)) }
     var showSceneDialog by remember { mutableStateOf(false) }
@@ -806,9 +884,15 @@ private fun ResourceEditScreen(
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
 
     val context = LocalContext.current
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val updated = imageItems.toMutableList()
-        uris.forEach { uri -> updated.add(ImageUpdateItem(uri = uri)) }
+        uris.forEach { uri ->
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            updated.add(ImageUpdateItem(uri = uri))
+        }
         imageItems = updated
     }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -917,7 +1001,7 @@ private fun ResourceEditScreen(
                     )
                 }
                 ResourceType.IMAGE -> {
-                    TextButton(onClick = { imagePicker.launch("image/*") }) {
+                    TextButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
                         Icon(Icons.Default.Image, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("追加图片")
@@ -1588,22 +1672,31 @@ private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {
 }
 
 private fun parseImageItems(payload: String?): List<ImageUpdateItem> {
+    return parseImageItems(payload, null)
+}
+
+private fun parseImageItems(pathPayload: String?, base64Payload: String?): List<ImageUpdateItem> {
+    val payload = pathPayload?.takeIf { it.isNotBlank() } ?: base64Payload
     if (payload.isNullOrBlank()) return emptyList()
-    val base64List = runCatching {
-        val array = org.json.JSONArray(payload)
-        buildList {
-            for (i in 0 until array.length()) {
-                val item = array.optString(i)
-                if (item.isNotBlank()) add(item)
-            }
+    val list = parsePathList(payload)
+    return list.map { item ->
+        val uri = Uri.parse(item)
+        if (uri.scheme != null) {
+            ImageUpdateItem(path = item)
+        } else {
+            ImageUpdateItem(base64 = item)
         }
-    }.getOrElse { listOf(payload) }
-    return base64List.map { ImageUpdateItem(base64 = it) }
+    }
 }
 
 private fun parseVideoItems(raw: String?): List<VideoUpdateItem> {
     if (raw.isNullOrBlank()) return emptyList()
-    val list = if (raw.trim().startsWith("[")) {
+    val list = parsePathList(raw)
+    return list.map { VideoUpdateItem(path = it) }
+}
+
+private fun parsePathList(raw: String): List<String> {
+    return if (raw.trim().startsWith("[")) {
         runCatching {
             val array = org.json.JSONArray(raw)
             List(array.length()) { index -> array.getString(index) }
@@ -1611,7 +1704,6 @@ private fun parseVideoItems(raw: String?): List<VideoUpdateItem> {
     } else {
         listOf(raw)
     }
-    return list.map { VideoUpdateItem(path = it) }
 }
 
 private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpdateItem {
@@ -1633,7 +1725,7 @@ private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpda
             type = data.type,
             title = data.title,
             resourceId = data.id,
-            images = parseImageItems(data.quoteImageBase64)
+            images = parseImageItems(data.contentUriOrPath, data.quoteImageBase64)
         )
         ResourceType.VIDEO -> FlowUpdateItem(
             type = data.type,
@@ -1654,7 +1746,7 @@ private fun resourceSummary(resource: ResourceWithTagsCharacters): String {
             if (messages.isEmpty()) "" else "对话 ${messages.size} 条"
         }
         ResourceType.IMAGE -> {
-            val images = parseImageItems(data.quoteImageBase64)
+            val images = parseImageItems(data.contentUriOrPath, data.quoteImageBase64)
             if (images.isEmpty()) "" else "图片 ${images.size} 张"
         }
         ResourceType.VIDEO -> {
@@ -1713,7 +1805,14 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
                             if (images != null) {
                                 for (j in 0 until images.length()) {
                                     val item = images.optString(j)
-                                    if (item.isNotBlank()) add(ImageUpdateItem(base64 = item))
+                                    if (item.isNotBlank()) {
+                                        val uri = Uri.parse(item)
+                                        if (uri.scheme != null) {
+                                            add(ImageUpdateItem(path = item))
+                                        } else {
+                                            add(ImageUpdateItem(base64 = item))
+                                        }
+                                    }
                                 }
                             }
                         }

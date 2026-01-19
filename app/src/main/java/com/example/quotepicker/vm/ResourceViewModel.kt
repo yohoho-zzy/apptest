@@ -42,6 +42,7 @@ data class ResourceUiState(
 )
 
 data class ImageUpdateItem(
+    val path: String? = null,
     val base64: String? = null,
     val uri: Uri? = null
 )
@@ -49,6 +50,11 @@ data class ImageUpdateItem(
 data class VideoUpdateItem(
     val path: String? = null,
     val uri: Uri? = null
+)
+
+data class StoredMediaItem(
+    val path: String,
+    val type: ResourceType
 )
 
 data class SceneMessageDraft(
@@ -130,12 +136,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun addImageGroup(title: String, imageUris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
-            val base64List = imageUris.mapNotNull { uri ->
-                ImageCompression.encodeToBase64(getApplication(), uri).ifBlank { null }
-            }
-            val payload = org.json.JSONArray(base64List).toString()
+            val storedPaths = imageUris.mapNotNull { uri -> storeImageToInternal(uri) }
+            if (storedPaths.isEmpty()) return@launch
+            val payload = org.json.JSONArray(storedPaths).toString()
             repo.addResource(
-                ResourceEntity(type = ResourceType.IMAGE, title = title, quoteImageBase64 = payload),
+                ResourceEntity(type = ResourceType.IMAGE, title = title, contentUriOrPath = payload),
                 tagIds,
                 characterIds
             )
@@ -232,8 +237,10 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
-        val payload = org.json.JSONArray(encodeImageItems(items)).toString()
-        repo.updateResource(resource.copy(title = title, quoteImageBase64 = payload))
+        val resolved = resolveImageItems(items)
+        if (resolved.isEmpty()) return@launch
+        val payload = org.json.JSONArray(resolved).toString()
+        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload, quoteImageBase64 = null))
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -284,11 +291,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.filter { it.isNotBlank() }
     }
 
-    private suspend fun encodeImageItems(items: List<ImageUpdateItem>): List<String> {
+    private suspend fun resolveImageItems(items: List<ImageUpdateItem>): List<String> {
         return items.mapNotNull { item ->
-            item.base64 ?: item.uri?.let { uri ->
-                ImageCompression.encodeToBase64(getApplication(), uri).ifBlank { null }
-            }
+            item.path?.ifBlank { null }
+                ?: item.uri?.let { uri -> storeImageToInternal(uri) }
+                ?: item.base64?.let { base64 -> storeBase64ImageToInternal(base64) }
         }
     }
 
@@ -311,7 +318,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     obj.put("messages", messages)
                 }
-                ResourceType.IMAGE -> obj.put("images", org.json.JSONArray(encodeImageItems(item.images)))
+                ResourceType.IMAGE -> obj.put("images", org.json.JSONArray(resolveImageItems(item.images)))
                 ResourceType.VIDEO -> obj.put("videos", org.json.JSONArray(resolveVideoItems(item.videos)))
                 ResourceType.FLOW -> obj.put("text", item.text.orEmpty())
             }
@@ -327,6 +334,83 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrNull()
     }
 
+    fun decodeUriToBitmap(uri: Uri): Bitmap? {
+        return runCatching {
+            val resolver = getApplication<Application>().contentResolver
+            resolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input)
+            }
+        }.getOrNull()
+    }
+
+    fun listStoredMedia(): List<StoredMediaItem> {
+        val app = getApplication<Application>()
+        val images = File(app.filesDir, "images")
+            .listFiles()
+            ?.sortedByDescending { it.lastModified() }
+            ?.map { StoredMediaItem(path = Uri.fromFile(it).toString(), type = ResourceType.IMAGE) }
+            .orEmpty()
+        val videos = File(app.filesDir, "videos")
+            .listFiles()
+            ?.sortedByDescending { it.lastModified() }
+            ?.map { StoredMediaItem(path = Uri.fromFile(it).toString(), type = ResourceType.VIDEO) }
+            .orEmpty()
+        return images + videos
+    }
+
+    fun restoreMediaToDirectory(path: String, type: ResourceType, directoryUri: Uri): Boolean {
+        val app = getApplication<Application>()
+        val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, directoryUri) ?: return false
+        val sourceUri = Uri.parse(path)
+        val sourcePath = sourceUri.path ?: return false
+        val sourceFile = File(sourcePath)
+        if (!sourceFile.exists()) return false
+        val mime = when (type) {
+            ResourceType.IMAGE -> "image/*"
+            ResourceType.VIDEO -> "video/*"
+            else -> "*/*"
+        }
+        val target = tree.createFile(mime, sourceFile.name) ?: return false
+        val output = app.contentResolver.openOutputStream(target.uri) ?: return false
+        return runCatching {
+            output.use { out ->
+                sourceFile.inputStream().use { input -> input.copyTo(out) }
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun storeBase64ImageToInternal(base64: String): String? {
+        val bitmap = decodeBase64ToBitmap(base64) ?: return null
+        return storeBitmapToInternal(bitmap)
+    }
+
+    private fun storeImageToInternal(uri: Uri): String? {
+        val bitmap = ImageCompression.decodeToBitmap(getApplication(), uri) ?: return null
+        val stored = storeBitmapToInternal(bitmap)
+        if (stored != null) {
+            deleteSourceUri(uri)
+        }
+        return stored
+    }
+
+    private fun storeBitmapToInternal(bitmap: Bitmap): String? {
+        return runCatching {
+            val dir = File(getApplication<Application>().filesDir, "images").apply { mkdirs() }
+            val target = File(dir, "image_${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg")
+            FileOutputStream(target).use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
+            }
+            Uri.fromFile(target).toString()
+        }.getOrNull()
+    }
+
+    private fun deleteSourceUri(uri: Uri) {
+        runCatching {
+            getApplication<Application>().contentResolver.delete(uri, null, null)
+        }
+    }
+
     private fun storeVideoToInternal(uri: Uri): String? {
         return runCatching {
             val dir = File(getApplication<Application>().filesDir, "videos").apply { mkdirs() }
@@ -336,6 +420,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                     input.copyTo(output)
                 }
             } ?: return null
+            deleteSourceUri(uri)
             Uri.fromFile(target).toString()
         }.getOrNull()
     }
