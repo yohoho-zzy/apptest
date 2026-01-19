@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
@@ -543,7 +545,10 @@ private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
 
 @Composable
 private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -553,7 +558,7 @@ private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: ()
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize()
             )
             IconButton(
@@ -568,8 +573,12 @@ private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: ()
 
 @Composable
 private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         var landscape by remember { mutableStateOf(false) }
+        var aspectRatio by remember { mutableStateOf(0f) }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -590,6 +599,12 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
                         setVideoURI(uri)
                         tag = uri
                         setOnPreparedListener { mediaPlayer ->
+                            aspectRatio =
+                                if (mediaPlayer.videoHeight > 0) {
+                                    mediaPlayer.videoWidth.toFloat() / mediaPlayer.videoHeight.toFloat()
+                                } else {
+                                    0f
+                                }
                             mediaPlayer.start()
                         }
                         viewHolder.value = this
@@ -603,6 +618,15 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
                 },
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(
+                        if (aspectRatio > 0f) {
+                            Modifier
+                                .align(Alignment.Center)
+                                .aspectRatio(aspectRatio)
+                        } else {
+                            Modifier
+                        }
+                    )
                     .graphicsLayer {
                         rotationZ = if (landscape) 90f else 0f
                     }
