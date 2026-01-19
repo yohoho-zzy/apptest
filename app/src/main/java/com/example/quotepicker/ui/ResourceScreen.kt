@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,10 +19,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -53,14 +57,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ResourceType
@@ -78,7 +85,10 @@ import com.example.quotepicker.vm.ResourceViewModel
 import com.example.quotepicker.vm.SceneMessageDraft
 import com.example.quotepicker.vm.StoredMediaItem
 import com.example.quotepicker.vm.VideoUpdateItem
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -93,7 +103,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var deleteTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
-    var manageDialog by remember { mutableStateOf(false) }
+    var manageScreen by remember { mutableStateOf(false) }
     var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
     var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -105,6 +115,22 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             }
         }
         restoreTarget = null
+    }
+
+    if (manageScreen) {
+        ManageStorageScreen(
+            items = manageItems,
+            vm = vm,
+            onBack = { manageScreen = false },
+            onRestore = { item ->
+                restoreTarget = item
+                restorePicker.launch(null)
+            },
+            onRefresh = {
+                manageItems = vm.listStoredMedia()
+            }
+        )
+        return
     }
 
     createMode?.let { mode ->
@@ -153,7 +179,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     }
                     IconButton(onClick = {
                         manageItems = vm.listStoredMedia()
-                        manageDialog = true
+                        manageScreen = true
                     }) {
                         Icon(Icons.Default.Settings, contentDescription = "管理资源")
                     }
@@ -187,7 +213,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(ui.resources, key = { it.resource.id }) { res ->
+                    gridItems(ui.resources, key = { it.resource.id }) { res ->
                         ResourceGridCard(
                             title = res.resource.title,
                             typeLabel = typeLabel(res.resource.type),
@@ -251,53 +277,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         )
     }
 
-    if (manageDialog) {
-        ModalBottomSheet(onDismissRequest = { manageDialog = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("本地存储文件", style = MaterialTheme.typography.titleMedium)
-                Text("长按文件可选择目录恢复", style = MaterialTheme.typography.labelSmall)
-                if (manageItems.isEmpty()) {
-                    Text("暂无文件", style = MaterialTheme.typography.labelMedium)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        manageItems.forEach { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = {},
-                                        onLongClick = {
-                                            restoreTarget = item
-                                            restorePicker.launch(null)
-                                        }
-                                    )
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (item.type == ResourceType.IMAGE) "图片" else "视频",
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                    Text(
-                                        text = item.path,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     bottomSheetTarget?.let { target ->
         ModalBottomSheet(onDismissRequest = { bottomSheetTarget = null }) {
             Row(
@@ -339,6 +318,119 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ManageStorageScreen(
+    items: List<StoredMediaItem>,
+    vm: ResourceViewModel,
+    onBack: () -> Unit,
+    onRestore: (StoredMediaItem) -> Unit,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+    val imagesDir = remember { File(context.filesDir, "images").absolutePath }
+    val videosDir = remember { File(context.filesDir, "videos").absolutePath }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("资源存储") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onRefresh) { Text("刷新") }
+                }
+            )
+        }
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .padding(inner)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("App 资源存储路径", style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("图片目录：$imagesDir", style = MaterialTheme.typography.labelSmall)
+                Text("视频目录：$videosDir", style = MaterialTheme.typography.labelSmall)
+            }
+            Text("长按文件可选择目录恢复", style = MaterialTheme.typography.labelSmall)
+            if (items.isEmpty()) {
+                Text("暂无文件", style = MaterialTheme.typography.labelMedium)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(items, key = { it.path }) { item ->
+                        StorageMediaRow(item = item, vm = vm, onRestore = onRestore)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StorageMediaRow(
+    item: StoredMediaItem,
+    vm: ResourceViewModel,
+    onRestore: (StoredMediaItem) -> Unit
+) {
+    val thumbnail by produceState<android.graphics.Bitmap?>(initialValue = null, item.path) {
+        value = if (item.type == ResourceType.IMAGE) {
+            withContext(Dispatchers.IO) { vm.decodeUriToBitmap(Uri.parse(item.path)) }
+        } else {
+            null
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { onRestore(item) }
+            )
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (item.type == ResourceType.IMAGE && thumbnail != null) {
+            Image(
+                bitmap = thumbnail!!.asImageBitmap(),
+                contentDescription = "图片预览",
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(MaterialTheme.shapes.small)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(MaterialTheme.shapes.small),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (item.type == ResourceType.IMAGE) Icons.Default.Image else Icons.Default.Videocam,
+                    contentDescription = null
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (item.type == ResourceType.IMAGE) "图片" else "视频",
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                text = item.path,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -524,7 +616,7 @@ private fun ResourceCreateScreen(
         uris.forEach { uri ->
             context.contentResolver.takePersistableUriPermission(
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
         }
     }
@@ -902,7 +994,7 @@ private fun ResourceEditScreen(
         uris.forEach { uri ->
             context.contentResolver.takePersistableUriPermission(
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             updated.add(VideoUpdateItem(uri = uri))
         }
