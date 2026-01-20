@@ -24,7 +24,7 @@ fun TagBadge(
             .background(bg, shape = MaterialTheme.shapes.small)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(text = tag.name, color = textColor, style = MaterialTheme.typography.labelSmall)
+        Text(text = formatTagLabel(tag.name), color = textColor, style = MaterialTheme.typography.labelSmall)
     }
 }
 

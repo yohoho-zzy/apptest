@@ -52,6 +52,7 @@ import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.SquareGridItem
+import com.example.quotepicker.ui.components.formatTagLabel
 import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.combinedClickable
@@ -173,7 +174,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                             val bg = Color(tag.colorArgb)
                             val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
                             SquareGridItem(
-                                title = tag.name,
+                                title = formatTagLabel(tag.name),
                                 backgroundColor = bg,
                                 contentColor = textColor,
                                 onClick = {},
@@ -272,7 +273,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     deleteTag?.let { tag ->
         ConfirmDeleteDialog(
             title = "删除标签",
-            message = "确定删除“${tag.name}”吗？",
+            message = "确定删除“${formatTagLabel(tag.name)}”吗？",
             onConfirm = { vm.deleteTag(tag) },
             onDismiss = { deleteTag = null }
         )

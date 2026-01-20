@@ -78,6 +78,7 @@ import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.rememberFormattedText
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.vm.FlowUpdateItem
 import com.example.quotepicker.vm.ImageUpdateItem
@@ -813,7 +814,7 @@ private fun ResourceCreateScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             val summary = when (item.type) {
-                                                ResourceType.TEXT -> item.text.orEmpty()
+                                                ResourceType.TEXT -> rememberFormattedText(item.text.orEmpty())
                                                 ResourceType.SCENE -> "对话 ${item.sceneMessages.size} 条"
                                                 ResourceType.IMAGE -> "图片 ${item.images.size} 张"
                                                 ResourceType.VIDEO -> "视频 ${item.videos.size} 个"
@@ -1372,7 +1373,7 @@ private fun ResourceEditScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             val summary = when (item.type) {
-                                                ResourceType.TEXT -> item.text.orEmpty()
+                                                ResourceType.TEXT -> rememberFormattedText(item.text.orEmpty())
                                                 ResourceType.SCENE -> "对话 ${item.sceneMessages.size} 条"
                                                 ResourceType.IMAGE -> "图片 ${item.images.size} 张"
                                                 ResourceType.VIDEO -> "视频 ${item.videos.size} 个"
@@ -1930,10 +1931,11 @@ private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpda
     }
 }
 
+@Composable
 private fun resourceSummary(resource: ResourceWithTagsCharacters): String {
     val data = resource.resource
     return when (data.type) {
-        ResourceType.TEXT -> data.quoteText.orEmpty()
+        ResourceType.TEXT -> rememberFormattedText(data.quoteText.orEmpty())
         ResourceType.SCENE -> {
             val messages = parseSceneMessages(data.sceneJson)
             if (messages.isEmpty()) "" else "对话 ${messages.size} 条"
