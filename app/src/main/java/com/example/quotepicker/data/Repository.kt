@@ -21,6 +21,34 @@ class Repository private constructor(context: Context) {
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
 
+    suspend fun exportSnapshot(): BackupSnapshot =
+        BackupSnapshot(
+            categories = categoryDao.listAll(),
+            tags = tagDao.listAll(),
+            characters = characterDao.listAll(),
+            resources = resourceDao.listAll(),
+            resourceTagRefs = crossRefDao.listResourceTags(),
+            characterTagRefs = crossRefDao.listCharacterTags(),
+            resourceCharacterRefs = crossRefDao.listResourceCharacters()
+        )
+
+    suspend fun replaceSnapshot(snapshot: BackupSnapshot) {
+        crossRefDao.deleteAllResourceTags()
+        crossRefDao.deleteAllCharacterTags()
+        crossRefDao.deleteAllResourceCharacters()
+        resourceDao.deleteAll()
+        characterDao.deleteAll()
+        tagDao.deleteAll()
+        categoryDao.deleteAll()
+        if (snapshot.categories.isNotEmpty()) categoryDao.insertAll(snapshot.categories)
+        if (snapshot.tags.isNotEmpty()) tagDao.insertAll(snapshot.tags)
+        if (snapshot.characters.isNotEmpty()) characterDao.insertAll(snapshot.characters)
+        if (snapshot.resources.isNotEmpty()) resourceDao.insertAll(snapshot.resources)
+        if (snapshot.resourceTagRefs.isNotEmpty()) crossRefDao.insertResourceTags(snapshot.resourceTagRefs)
+        if (snapshot.characterTagRefs.isNotEmpty()) crossRefDao.insertCharacterTags(snapshot.characterTagRefs)
+        if (snapshot.resourceCharacterRefs.isNotEmpty()) crossRefDao.insertResourceCharacters(snapshot.resourceCharacterRefs)
+    }
+
     suspend fun addCategory(name: String, type: TagCategoryType) =
         categoryDao.insert(TagCategoryEntity(name = name, type = type))
 

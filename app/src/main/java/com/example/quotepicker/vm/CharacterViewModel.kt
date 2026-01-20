@@ -1,14 +1,18 @@
 package com.example.quotepicker.vm
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.quotepicker.data.BackupSnapshot
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.CharacterWithTags
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
+import java.nio.charset.Charset
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -40,4 +44,21 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCharacter(character: CharacterEntity) = viewModelScope.launch { repo.deleteCharacter(character) }
     fun updateCharacterTags(characterId: Long, tagIds: List<Long>) =
         viewModelScope.launch { repo.updateCharacterTags(characterId, tagIds) }
+
+    fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val snapshot = repo.exportSnapshot()
+        val payload = snapshot.toJsonString()
+        val resolver = getApplication<Application>().contentResolver
+        resolver.openOutputStream(uri)?.use { output ->
+            output.write(payload.toByteArray(Charset.forName("UTF-8")))
+        }
+    }
+
+    fun importSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val resolver = getApplication<Application>().contentResolver
+        val payload = resolver.openInputStream(uri)?.bufferedReader(Charset.forName("UTF-8"))?.use { it.readText() }
+            ?: return@launch
+        val snapshot = BackupSnapshot.fromJson(payload)
+        repo.replaceSnapshot(snapshot)
+    }
 }
