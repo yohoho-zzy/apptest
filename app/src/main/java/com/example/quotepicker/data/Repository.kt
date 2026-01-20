@@ -1,9 +1,14 @@
 package com.example.quotepicker.data
 
 import android.content.Context
+import android.net.Uri
+import android.util.Base64
+import java.io.File
+import org.json.JSONArray
 import kotlinx.coroutines.flow.Flow
 
 class Repository private constructor(context: Context) {
+    private val appContext = context.applicationContext
     private val db = AppDatabase.get(context)
     private val categoryDao = db.tagCategoryDao()
     private val tagDao = db.tagDao()
@@ -21,18 +26,43 @@ class Repository private constructor(context: Context) {
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
 
-    suspend fun exportSnapshot(): BackupSnapshot =
-        BackupSnapshot(
+    suspend fun exportSnapshot(): BackupSnapshot {
+        val resources = resourceDao.listAll()
+        val mediaItems = collectMediaPaths(resources).mapNotNull { (path, type) ->
+            readMedia(path)?.let { bytes ->
+                MediaBackupItem(
+                    originalPath = path,
+                    type = type,
+                    base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                )
+            }
+        }
+        return BackupSnapshot(
             categories = categoryDao.listAll(),
             tags = tagDao.listAll(),
             characters = characterDao.listAll(),
-            resources = resourceDao.listAll(),
+            resources = resources,
             resourceTagRefs = crossRefDao.listResourceTags(),
             characterTagRefs = crossRefDao.listCharacterTags(),
-            resourceCharacterRefs = crossRefDao.listResourceCharacters()
+            resourceCharacterRefs = crossRefDao.listResourceCharacters(),
+            media = mediaItems
         )
+    }
 
     suspend fun replaceSnapshot(snapshot: BackupSnapshot) {
+        val mediaMapping = restoreMedia(snapshot.media)
+        val restoredResources = snapshot.resources.map { resource ->
+            when (resource.type) {
+                ResourceType.IMAGE,
+                ResourceType.VIDEO -> resource.copy(
+                    contentUriOrPath = replacePathsInPayload(resource.contentUriOrPath, mediaMapping)
+                )
+                ResourceType.FLOW -> resource.copy(
+                    sceneJson = replacePathsInSceneJson(resource.sceneJson, mediaMapping)
+                )
+                else -> resource
+            }
+        }
         crossRefDao.deleteAllResourceTags()
         crossRefDao.deleteAllCharacterTags()
         crossRefDao.deleteAllResourceCharacters()
@@ -43,7 +73,7 @@ class Repository private constructor(context: Context) {
         if (snapshot.categories.isNotEmpty()) categoryDao.insertAll(snapshot.categories)
         if (snapshot.tags.isNotEmpty()) tagDao.insertAll(snapshot.tags)
         if (snapshot.characters.isNotEmpty()) characterDao.insertAll(snapshot.characters)
-        if (snapshot.resources.isNotEmpty()) resourceDao.insertAll(snapshot.resources)
+        if (restoredResources.isNotEmpty()) resourceDao.insertAll(restoredResources)
         if (snapshot.resourceTagRefs.isNotEmpty()) crossRefDao.insertResourceTags(snapshot.resourceTagRefs)
         if (snapshot.characterTagRefs.isNotEmpty()) crossRefDao.insertCharacterTags(snapshot.characterTagRefs)
         if (snapshot.resourceCharacterRefs.isNotEmpty()) crossRefDao.insertResourceCharacters(snapshot.resourceCharacterRefs)
@@ -115,6 +145,138 @@ class Repository private constructor(context: Context) {
 
     suspend fun resourceIdsForCharacter(characterId: Long) = crossRefDao.resourceIdsForCharacter(characterId)
     suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
+
+    private fun collectMediaPaths(resources: List<ResourceEntity>): List<Pair<String, ResourceType>> {
+        val unique = linkedSetOf<Pair<String, ResourceType>>()
+        resources.forEach { resource ->
+            when (resource.type) {
+                ResourceType.IMAGE,
+                ResourceType.VIDEO -> {
+                    parseMediaPaths(resource.contentUriOrPath).forEach { path ->
+                        unique.add(path to resource.type)
+                    }
+                }
+                ResourceType.FLOW -> {
+                    parseFlowMediaPaths(resource.sceneJson).forEach { (path, type) ->
+                        unique.add(path to type)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        return unique.toList()
+    }
+
+    private fun parseMediaPaths(payload: String?): List<String> {
+        if (payload.isNullOrBlank()) return emptyList()
+        val trimmed = payload.trim()
+        if (trimmed.startsWith("[")) {
+            return runCatching {
+                val array = JSONArray(trimmed)
+                List(array.length()) { index -> array.getString(index) }
+            }.getOrDefault(emptyList())
+        }
+        return listOf(trimmed)
+    }
+
+    private fun parseFlowMediaPaths(payload: String?): List<Pair<String, ResourceType>> {
+        if (payload.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(payload)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val type = runCatching {
+                        ResourceType.valueOf(obj.getString("type"))
+                    }.getOrNull() ?: continue
+                    when (type) {
+                        ResourceType.IMAGE -> {
+                            val images = obj.optJSONArray("images") ?: JSONArray()
+                            for (j in 0 until images.length()) {
+                                add(images.getString(j) to type)
+                            }
+                        }
+                        ResourceType.VIDEO -> {
+                            val videos = obj.optJSONArray("videos") ?: JSONArray()
+                            for (j in 0 until videos.length()) {
+                                add(videos.getString(j) to type)
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun readMedia(path: String): ByteArray? {
+        val uri = Uri.parse(path)
+        return runCatching {
+            if (uri.scheme == "file") {
+                val filePath = uri.path ?: return@runCatching null
+                File(filePath).takeIf { it.exists() }?.readBytes()
+            } else {
+                appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }
+        }.getOrNull()
+    }
+
+    private fun restoreMedia(items: List<MediaBackupItem>): Map<String, String> {
+        if (items.isEmpty()) return emptyMap()
+        val mapping = mutableMapOf<String, String>()
+        items.forEach { item ->
+            val bytes = runCatching { Base64.decode(item.base64, Base64.DEFAULT) }.getOrNull() ?: return@forEach
+            val folder = when (item.type) {
+                ResourceType.IMAGE -> "images"
+                ResourceType.VIDEO -> "videos"
+                else -> "media"
+            }
+            val dir = File(appContext.filesDir, folder).apply { mkdirs() }
+            val target = File(dir, "media_import_${System.currentTimeMillis()}_${item.originalPath.hashCode()}.dat")
+            runCatching {
+                target.writeBytes(bytes)
+                mapping[item.originalPath] = Uri.fromFile(target).toString()
+            }
+        }
+        return mapping
+    }
+
+    private fun replacePathsInPayload(payload: String?, mapping: Map<String, String>): String? {
+        if (payload.isNullOrBlank() || mapping.isEmpty()) return payload
+        val trimmed = payload.trim()
+        if (trimmed.startsWith("[")) {
+            return runCatching {
+                val array = JSONArray(trimmed)
+                val updated = JSONArray()
+                for (i in 0 until array.length()) {
+                    val raw = array.getString(i)
+                    updated.put(mapping[raw] ?: raw)
+                }
+                updated.toString()
+            }.getOrDefault(payload)
+        }
+        return mapping[trimmed] ?: payload
+    }
+
+    private fun replacePathsInSceneJson(payload: String?, mapping: Map<String, String>): String? {
+        if (payload.isNullOrBlank() || mapping.isEmpty()) return payload
+        return runCatching {
+            val array = JSONArray(payload)
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                listOf("images", "videos").forEach { key ->
+                    val items = obj.optJSONArray(key) ?: return@forEach
+                    val updated = JSONArray()
+                    for (j in 0 until items.length()) {
+                        val raw = items.getString(j)
+                        updated.put(mapping[raw] ?: raw)
+                    }
+                    obj.put(key, updated)
+                }
+            }
+            array.toString()
+        }.getOrDefault(payload)
+    }
 
     companion object {
         const val ORPHAN_CATEGORY_NAME = "未分类"

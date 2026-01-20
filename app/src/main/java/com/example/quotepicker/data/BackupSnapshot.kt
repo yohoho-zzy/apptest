@@ -10,13 +10,14 @@ data class BackupSnapshot(
     val resources: List<ResourceEntity>,
     val resourceTagRefs: List<ResourceTagCrossRef>,
     val characterTagRefs: List<CharacterTagCrossRef>,
-    val resourceCharacterRefs: List<ResourceCharacterCrossRef>
+    val resourceCharacterRefs: List<ResourceCharacterCrossRef>,
+    val media: List<MediaBackupItem> = emptyList()
 ) {
     fun toJsonString(): String = toJson().toString()
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
-            put("version", 1)
+            put("version", 2)
             put("categories", JSONArray(categories.map(::categoryToJson)))
             put("tags", JSONArray(tags.map(::tagToJson)))
             put("characters", JSONArray(characters.map(::characterToJson)))
@@ -24,6 +25,7 @@ data class BackupSnapshot(
             put("resourceTagRefs", JSONArray(resourceTagRefs.map(::resourceTagToJson)))
             put("characterTagRefs", JSONArray(characterTagRefs.map(::characterTagToJson)))
             put("resourceCharacterRefs", JSONArray(resourceCharacterRefs.map(::resourceCharacterToJson)))
+            put("media", JSONArray(media.map(::mediaToJson)))
         }
     }
 
@@ -37,11 +39,18 @@ data class BackupSnapshot(
                 resources = parseArray(obj, "resources", ::resourceFromJson),
                 resourceTagRefs = parseArray(obj, "resourceTagRefs", ::resourceTagFromJson),
                 characterTagRefs = parseArray(obj, "characterTagRefs", ::characterTagFromJson),
-                resourceCharacterRefs = parseArray(obj, "resourceCharacterRefs", ::resourceCharacterFromJson)
+                resourceCharacterRefs = parseArray(obj, "resourceCharacterRefs", ::resourceCharacterFromJson),
+                media = parseArray(obj, "media", ::mediaFromJson)
             )
         }
     }
 }
+
+data class MediaBackupItem(
+    val originalPath: String,
+    val type: ResourceType,
+    val base64: String
+)
 
 private fun categoryToJson(category: TagCategoryEntity): JSONObject =
     JSONObject()
@@ -94,6 +103,12 @@ private fun resourceCharacterToJson(ref: ResourceCharacterCrossRef): JSONObject 
     JSONObject()
         .put("resourceId", ref.resourceId)
         .put("characterId", ref.characterId)
+
+private fun mediaToJson(item: MediaBackupItem): JSONObject =
+    JSONObject()
+        .put("path", item.originalPath)
+        .put("type", item.type.name)
+        .put("base64", item.base64)
 
 private fun categoryFromJson(obj: JSONObject): TagCategoryEntity =
     TagCategoryEntity(
@@ -152,6 +167,13 @@ private fun resourceCharacterFromJson(obj: JSONObject): ResourceCharacterCrossRe
     ResourceCharacterCrossRef(
         resourceId = obj.getLong("resourceId"),
         characterId = obj.getLong("characterId")
+    )
+
+private fun mediaFromJson(obj: JSONObject): MediaBackupItem =
+    MediaBackupItem(
+        originalPath = obj.getString("path"),
+        type = ResourceType.valueOf(obj.getString("type")),
+        base64 = obj.getString("base64")
     )
 
 private fun <T> parseArray(
