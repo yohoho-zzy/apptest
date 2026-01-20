@@ -1172,13 +1172,44 @@ private fun ResourceEditScreen(
                         Text("暂无图片", style = MaterialTheme.typography.labelSmall)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            imageItems.forEachIndexed { index, _ ->
+                            imageItems.forEachIndexed { index, item ->
+                                val thumbnail by produceState<android.graphics.Bitmap?>(initialValue = null, item) {
+                                    value = withContext(Dispatchers.IO) {
+                                        when {
+                                            item.base64 != null -> vm.decodeBase64ToBitmap(item.base64)
+                                            item.uri != null -> vm.decodeUriToBitmap(item.uri)
+                                            item.path != null -> vm.decodeUriToBitmap(Uri.parse(item.path))
+                                            else -> null
+                                        }
+                                    }
+                                }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = "图片 ${index + 1}")
+                                    if (thumbnail != null) {
+                                        Image(
+                                            bitmap = thumbnail!!.asImageBitmap(),
+                                            contentDescription = "图片预览",
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(MaterialTheme.shapes.small)
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(MaterialTheme.shapes.small),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Image, contentDescription = null)
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = "图片 ${index + 1}",
+                                        modifier = Modifier.weight(1f)
+                                    )
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
                                             if (index > 0) {

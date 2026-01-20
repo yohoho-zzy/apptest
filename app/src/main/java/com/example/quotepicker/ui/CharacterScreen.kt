@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -30,6 +34,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +69,7 @@ import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.vm.CharacterViewModel
 import com.example.quotepicker.vm.ResourceViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +92,8 @@ fun CharacterScreen(
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
     var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerScope = rememberCoroutineScope()
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             vm.importSnapshot(uri)
@@ -167,18 +177,6 @@ fun CharacterScreen(
                 }
             } else {
                 val char = selected!!.character
-                TagSummarySection(
-                    categories = ui.categories,
-                    tags = selected!!.tags,
-                    onEdit = { showTagPicker = true }
-                )
-                Spacer(Modifier.height(12.dp))
-                CharacterResourceFilterBar(
-                    selectedType = selectedType,
-                    selectedTagIds = selectedTagIds,
-                    onTypeChange = { selectedType = it },
-                    onTagDialog = { filterTagDialog = true }
-                )
                 val filteredResources = resources.filter {
                     it.characters.any { c -> c.id == char.id }
                 }.filter { res ->
@@ -186,25 +184,66 @@ fun CharacterScreen(
                     val tagMatch = if (selectedTagIds.isEmpty()) true else res.tags.any { selectedTagIds.contains(it.id) }
                     typeMatch && tagMatch
                 }
-                if (filteredResources.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("暂无资源")
+                TabRow(selectedTabIndex = pagerState.currentPage) {
+                    listOf("标签", "资源").forEachIndexed { index, title ->
+                        Tab(
+                            selected = pagerState.currentPage == index,
+                            onClick = { pagerScope.launch { pagerState.animateScrollToPage(index) } },
+                            text = { Text(title) }
+                        )
                     }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(filteredResources, key = { it.resource.id }) { resource ->
-                            ResourceGridCard(
-                                title = resource.resource.title,
-                                typeLabel = typeLabel(resource.resource.type),
-                                tags = resource.tags,
-                                onClick = { previewTarget = resource },
-                                onLongClick = {}
-                            )
+                }
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                TagSummarySection(
+                                    categories = ui.categories,
+                                    tags = selected!!.tags,
+                                    onEdit = { showTagPicker = true }
+                                )
+                            }
+                        }
+                        1 -> {
+                            Column(Modifier.fillMaxSize()) {
+                                Spacer(Modifier.height(12.dp))
+                                CharacterResourceFilterBar(
+                                    selectedType = selectedType,
+                                    selectedTagIds = selectedTagIds,
+                                    onTypeChange = { selectedType = it },
+                                    onTagDialog = { filterTagDialog = true }
+                                )
+                                if (filteredResources.isEmpty()) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text("暂无资源")
+                                    }
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(3),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        items(filteredResources, key = { it.resource.id }) { resource ->
+                                            ResourceGridCard(
+                                                title = resource.resource.title,
+                                                typeLabel = typeLabel(resource.resource.type),
+                                                tags = resource.tags,
+                                                onClick = { previewTarget = resource },
+                                                onLongClick = {}
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
