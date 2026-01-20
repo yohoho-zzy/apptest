@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 data class RandomUiState(
     val characters: List<CharacterEntity> = emptyList(),
     val resources: List<ResourceWithTagsCharacters> = emptyList(),
+    val characterResources: List<ResourceWithTagsCharacters> = emptyList(),
     val categories: List<TagCategoryEntity> = emptyList(),
     val tags: List<TagEntity> = emptyList(),
     val selectedTagIds: Set<Long> = emptySet(),
@@ -79,6 +80,7 @@ class RandomViewModel(app: Application) : AndroidViewModel(app) {
         RandomUiState(
             characters = inputs.characters,
             resources = filteredResources,
+            characterResources = matchingResources,
             categories = resourceCategories,
             tags = resourceTags,
             selectedTagIds = tagIds,
