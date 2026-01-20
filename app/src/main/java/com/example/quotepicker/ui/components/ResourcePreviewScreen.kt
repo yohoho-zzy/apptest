@@ -192,8 +192,10 @@ fun ResourcePreviewScreen(
                 ) {
                     when (resource.resource.type) {
                         ResourceType.TEXT -> {
-                            if (!resource.resource.quoteText.isNullOrBlank()) {
-                                Text(resource.resource.quoteText.orEmpty())
+                            val quoteText = resource.resource.quoteText.orEmpty()
+                            if (quoteText.isNotBlank()) {
+                                val displayText = rememberFormattedText(quoteText)
+                                Text(displayText)
                             }
                             QuoteImagePager(images = quoteImages)
                         }
@@ -246,7 +248,10 @@ fun ResourcePreviewScreen(
                                                 val title = item.title?.ifBlank { null } ?: typeLabel(item.type)
                                                 Text(title, style = MaterialTheme.typography.titleMedium)
                                                 when (item.type) {
-                                                    ResourceType.TEXT -> Text(item.text)
+                                                    ResourceType.TEXT -> {
+                                                        val displayText = rememberFormattedText(item.text)
+                                                        Text(displayText)
+                                                    }
                                                     ResourceType.SCENE -> {
                                                         item.sceneMessages.forEach { message ->
                                                             SceneBubble(message = message)
@@ -392,7 +397,8 @@ private fun SceneBubble(message: SceneMessage) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Spacer(Modifier.height(4.dp))
-            Text(text = message.content)
+            val content = rememberFormattedText(message.content)
+            Text(text = content)
         }
     }
 }

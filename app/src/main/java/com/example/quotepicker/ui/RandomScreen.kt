@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.rememberFormattedText
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
@@ -126,7 +127,8 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
                     res.resource.title.take(2) == "要点"
             }
             if (introCandidates.size == 1) {
-                Text(introCandidates.first().resource.quoteText.orEmpty())
+                val introText = rememberFormattedText(introCandidates.first().resource.quoteText.orEmpty())
+                Text(introText)
             } else {
                 Text("资源错误")
             }
