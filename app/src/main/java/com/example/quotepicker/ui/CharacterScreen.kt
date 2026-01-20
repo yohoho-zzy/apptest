@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -82,6 +84,16 @@ fun CharacterScreen(
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
     var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            vm.importSnapshot(uri)
+        }
+    }
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            vm.exportSnapshot(uri)
+        }
+    }
 
     LaunchedEffect(selectedId) {
         selectedTagIds = emptySet()
@@ -106,6 +118,18 @@ fun CharacterScreen(
                     if (selected != null) {
                         IconButton(onClick = { selectedId = null }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
+                actions = {
+                    if (selected == null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { importPicker.launch(arrayOf("application/json")) }) {
+                                Text("导入")
+                            }
+                            TextButton(onClick = { exportPicker.launch("quote_backup.json") }) {
+                                Text("导出")
+                            }
                         }
                     }
                 }

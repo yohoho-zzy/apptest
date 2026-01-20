@@ -44,6 +44,7 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
     val ui by vm.uiState.collectAsState()
     var showPreview by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
+    var showIntro by remember { mutableStateOf(false) }
 
     if (showPreview && ui.selectedResource != null) {
         ResourcePreviewScreen(
@@ -55,10 +56,18 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
     }
 
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = { vm.randomCharacter() }) {
-            Icon(Icons.Default.Casino, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("随机角色")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                vm.randomCharacter()
+                showIntro = false
+            }) {
+                Icon(Icons.Default.Casino, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("随机角色")
+            }
+            Button(onClick = { showIntro = true }, enabled = ui.selectedCharacter != null) {
+                Text("显示介绍")
+            }
         }
         if (ui.selectedCharacter == null) {
             Text("未选择角色")
@@ -109,6 +118,10 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
                 Spacer(Modifier.width(8.dp))
                 Text("预览")
             }
+        }
+        if (showIntro && ui.selectedCharacter != null) {
+            val focus = ui.selectedCharacter!!.name.take(2)
+            Text("${focus}为要点")
         }
     }
 
