@@ -672,8 +672,6 @@ private fun ResourceCreateScreen(
     var showFlowDialog by remember { mutableStateOf(false) }
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
     val scrollState = rememberScrollState()
-    val scrollState = rememberScrollState()
-    val scrollState = rememberScrollState()
 
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
