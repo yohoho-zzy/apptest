@@ -453,10 +453,12 @@ private fun StorageMediaRow(
     onLongPress: (StoredMediaItem) -> Unit
 ) {
     val thumbnail by produceState<android.graphics.Bitmap?>(initialValue = null, item.path) {
-        value = if (item.type == ResourceType.IMAGE) {
-            withContext(Dispatchers.IO) { vm.decodeUriToBitmap(Uri.parse(item.path)) }
-        } else {
-            null
+        value = withContext(Dispatchers.IO) {
+            when (item.type) {
+                ResourceType.IMAGE -> vm.decodeUriToBitmap(Uri.parse(item.path))
+                ResourceType.VIDEO -> vm.decodeVideoFrame(Uri.parse(item.path))
+                else -> null
+            }
         }
     }
     Row(
@@ -470,10 +472,10 @@ private fun StorageMediaRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (item.type == ResourceType.IMAGE && thumbnail != null) {
+        if (thumbnail != null) {
             Image(
                 bitmap = thumbnail!!.asImageBitmap(),
-                contentDescription = "图片预览",
+                contentDescription = if (item.type == ResourceType.IMAGE) "图片预览" else "视频预览",
                 modifier = Modifier
                     .size(56.dp)
                     .clip(MaterialTheme.shapes.small)
@@ -1260,13 +1262,37 @@ private fun ResourceEditScreen(
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             videoItems.forEachIndexed { index, item ->
+                                val previewUri = item.uri ?: item.path?.let { Uri.parse(it) }
+                                val thumbnail by produceState<android.graphics.Bitmap?>(initialValue = null, item) {
+                                    value = previewUri?.let { uri ->
+                                        withContext(Dispatchers.IO) { vm.decodeVideoFrame(uri) }
+                                    }
+                                }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    if (thumbnail != null) {
+                                        Image(
+                                            bitmap = thumbnail!!.asImageBitmap(),
+                                            contentDescription = "视频预览",
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(MaterialTheme.shapes.small)
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(MaterialTheme.shapes.small),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Videocam, contentDescription = null)
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
                                     val label = item.path?.let { "视频 ${index + 1}" } ?: "新视频 ${index + 1}"
-                                    Text(text = label)
+                                    Text(text = label, modifier = Modifier.weight(1f))
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
                                             if (index > 0) {

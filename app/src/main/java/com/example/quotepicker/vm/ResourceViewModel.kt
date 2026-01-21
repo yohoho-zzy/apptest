@@ -3,6 +3,7 @@ package com.example.quotepicker.vm
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -369,6 +370,19 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             val resolver = getApplication<Application>().contentResolver
             resolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input)
+            }
+        }.getOrNull()
+    }
+
+    fun decodeVideoFrame(uri: Uri): Bitmap? {
+        val app = getApplication<Application>()
+        return runCatching {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(app, uri)
+                retriever.getFrameAtTime(0)
+            } finally {
+                retriever.release()
             }
         }.getOrNull()
     }
