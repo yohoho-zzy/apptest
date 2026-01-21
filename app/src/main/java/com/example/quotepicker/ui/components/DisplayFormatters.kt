@@ -29,7 +29,7 @@ fun formatDisplayText(text: String, random: Random = Random.Default): String {
             "【${options.random(random)}】"
         }
     }
-    return replaced.replace("++", "")
+    return replaced
 }
 
 @Composable
