@@ -64,12 +64,17 @@ import org.json.JSONArray
 
 private data class SceneMessage(val speaker: String, val content: String)
 
+private data class ImagePreviewItem(
+    val bitmap: android.graphics.Bitmap,
+    val motionVideoUri: Uri? = null
+)
+
 private data class FlowPreviewItem(
     val type: ResourceType,
     val title: String? = null,
     val text: String = "",
     val sceneMessages: List<SceneMessage> = emptyList(),
-    val images: List<android.graphics.Bitmap> = emptyList(),
+    val images: List<ImagePreviewItem> = emptyList(),
     val mediaUris: List<Uri> = emptyList(),
     val mediaFailed: Boolean = false
 )
@@ -81,7 +86,7 @@ fun ResourcePreviewScreen(
     vm: ResourceViewModel,
     onBack: () -> Unit
 ) {
-    var quoteImages by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
+    var quoteImages by remember { mutableStateOf<List<ImagePreviewItem>>(emptyList()) }
     var mediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var mediaLoadFailed by remember { mutableStateOf(false) }
     var mediaReloadKey by remember { mutableStateOf(0) }
@@ -354,6 +359,11 @@ private fun MediaPreviewPager(uris: List<Uri>) {
     }
 }
 
+private data class ImagePayloadEntry(
+    val image: String,
+    val motionVideo: String? = null
+)
+
 private fun parseMediaPaths(raw: String): List<String> {
     val trimmed = raw.trim()
     if (trimmed.startsWith("[")) {
@@ -365,10 +375,49 @@ private fun parseMediaPaths(raw: String): List<String> {
     return listOf(raw)
 }
 
-private fun decodeImageSources(payload: String?, vm: ResourceViewModel): List<android.graphics.Bitmap> {
+private fun parseImagePayloadEntries(payload: String): List<ImagePayloadEntry> {
+    val trimmed = payload.trim()
+    return if (trimmed.startsWith("[")) {
+        runCatching {
+            val array = JSONArray(trimmed)
+            buildList {
+                for (i in 0 until array.length()) {
+                    when (val entry = array.get(i)) {
+                        is org.json.JSONObject -> {
+                            val image = entry.optString("image")
+                            val motion = entry.optString("motionVideo")
+                            if (image.isNotBlank()) {
+                                add(ImagePayloadEntry(image, motion.ifBlank { null }))
+                            }
+                        }
+                        else -> {
+                            val item = entry.toString()
+                            if (item.isNotBlank()) add(ImagePayloadEntry(item))
+                        }
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    } else if (trimmed.startsWith("{")) {
+        runCatching {
+            val obj = org.json.JSONObject(trimmed)
+            val image = obj.optString("image")
+            val motion = obj.optString("motionVideo")
+            if (image.isNotBlank()) listOf(ImagePayloadEntry(image, motion.ifBlank { null })) else emptyList()
+        }.getOrDefault(emptyList())
+    } else {
+        listOf(ImagePayloadEntry(trimmed))
+    }
+}
+
+private fun decodeImageSources(payload: String?, vm: ResourceViewModel): List<ImagePreviewItem> {
     if (payload.isNullOrBlank()) return emptyList()
-    val items = parseMediaPaths(payload)
-    return items.mapNotNull { decodeImageSource(it, vm) }
+    val items = parseImagePayloadEntries(payload)
+    return items.mapNotNull { entry ->
+        decodeImageSource(entry.image, vm)?.let { bitmap ->
+            ImagePreviewItem(bitmap = bitmap, motionVideoUri = entry.motionVideo?.let(Uri::parse))
+        }
+    }
 }
 
 private fun decodeImageSource(item: String, vm: ResourceViewModel): android.graphics.Bitmap? {
@@ -450,9 +499,22 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                         val images = obj.optJSONArray("images") ?: JSONArray()
                         val bitmaps = buildList {
                             for (j in 0 until images.length()) {
-                                val item = images.optString(j)
-                                if (item.isNotBlank()) {
-                                    decodeImageSource(item, vm)?.let { add(it) }
+                                when (val entry = images.get(j)) {
+                                    is org.json.JSONObject -> {
+                                        val image = entry.optString("image")
+                                        val motion = entry.optString("motionVideo")
+                                        if (image.isNotBlank()) {
+                                            decodeImageSource(image, vm)?.let {
+                                                add(ImagePreviewItem(it, motion.ifBlank { null }?.let(Uri::parse)))
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        val item = entry.toString()
+                                        if (item.isNotBlank()) {
+                                            decodeImageSource(item, vm)?.let { add(ImagePreviewItem(it)) }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -514,38 +576,62 @@ private fun ResourceMetaRow(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun QuoteImagePager(images: List<android.graphics.Bitmap>) {
+private fun QuoteImagePager(images: List<ImagePreviewItem>) {
     if (images.isEmpty()) return
     var fullScreenImage by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var fullScreenVideo by remember { mutableStateOf<Uri?>(null) }
     if (fullScreenImage != null) {
         FullScreenImageDialog(bitmap = fullScreenImage!!, onDismiss = { fullScreenImage = null })
     }
+    if (fullScreenVideo != null) {
+        FullScreenVideoDialog(uri = fullScreenVideo!!, onDismiss = { fullScreenVideo = null })
+    }
     if (images.size == 1) {
-        Image(
-            bitmap = images.first().asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { fullScreenImage = images.first() }
-        )
+        val item = images.first()
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(
+                bitmap = item.bitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { fullScreenImage = item.bitmap }
+            )
+            if (item.motionVideoUri != null) {
+                TextButton(onClick = { fullScreenVideo = item.motionVideoUri }) {
+                    Text("播放 Live")
+                }
+            }
+        }
         return
     }
     val pagerState = rememberPagerState(pageCount = { images.size })
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+            val item = images[page]
             Image(
-                bitmap = images[page].asImageBitmap(),
+                bitmap = item.bitmap.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { fullScreenImage = images[page] }
+                    .clickable { fullScreenImage = item.bitmap }
             )
         }
-        Text(
-            text = "${pagerState.currentPage + 1}/${images.size}",
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${pagerState.currentPage + 1}/${images.size}",
+                style = MaterialTheme.typography.labelSmall
+            )
+            val motionUri = images[pagerState.currentPage].motionVideoUri
+            if (motionUri != null) {
+                TextButton(onClick = { fullScreenVideo = motionUri }) {
+                    Text("播放 Live")
+                }
+            }
+        }
     }
 }
 
@@ -658,7 +744,7 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
     }
 }
 
-private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<android.graphics.Bitmap> {
+private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<ImagePreviewItem> {
     if (payload.isNullOrBlank()) return emptyList()
     val base64List = runCatching {
         val array = JSONArray(payload)
@@ -670,4 +756,5 @@ private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<and
         }
     }.getOrElse { listOf(payload) }
     return base64List.mapNotNull { vm.decodeBase64ToBitmap(it) }
+        .map { ImagePreviewItem(it) }
 }

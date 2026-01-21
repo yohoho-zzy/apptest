@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -669,6 +671,9 @@ private fun ResourceCreateScreen(
     var editSceneIndex by remember { mutableStateOf<Int?>(null) }
     var showFlowDialog by remember { mutableStateOf(false) }
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
+    val scrollState = rememberScrollState()
+    val scrollState = rememberScrollState()
+    val scrollState = rememberScrollState()
 
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -775,6 +780,7 @@ private fun ResourceCreateScreen(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1144,6 +1150,7 @@ private fun ResourceEditScreen(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1872,13 +1879,49 @@ private fun parseImageItems(payload: String?): List<ImageUpdateItem> {
 private fun parseImageItems(pathPayload: String?, base64Payload: String?): List<ImageUpdateItem> {
     val payload = pathPayload?.takeIf { it.isNotBlank() } ?: base64Payload
     if (payload.isNullOrBlank()) return emptyList()
-    val list = parsePathList(payload)
-    return list.map { item ->
-        val uri = Uri.parse(item)
+    val trimmed = payload.trim()
+    val parsedList = if (trimmed.startsWith("[")) {
+        runCatching {
+            val array = org.json.JSONArray(trimmed)
+            buildList {
+                for (i in 0 until array.length()) {
+                    when (val entry = array.get(i)) {
+                        is org.json.JSONObject -> {
+                            val image = entry.optString("image")
+                            val motion = entry.optString("motionVideo")
+                            if (image.isNotBlank()) {
+                                add(ImageUpdateItem(path = image, motionVideoPath = motion.ifBlank { null }))
+                            }
+                        }
+                        else -> {
+                            val item = entry.toString()
+                            if (item.isNotBlank()) add(ImageUpdateItem(path = item))
+                        }
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    } else if (trimmed.startsWith("{")) {
+        runCatching {
+            val obj = org.json.JSONObject(trimmed)
+            val image = obj.optString("image")
+            val motion = obj.optString("motionVideo")
+            if (image.isNotBlank()) {
+                listOf(ImageUpdateItem(path = image, motionVideoPath = motion.ifBlank { null }))
+            } else {
+                emptyList()
+            }
+        }.getOrDefault(emptyList())
+    } else {
+        listOf(ImageUpdateItem(path = payload))
+    }
+    return parsedList.map { item ->
+        val raw = item.path ?: item.base64 ?: return@map item
+        val uri = Uri.parse(raw)
         if (uri.scheme != null) {
-            ImageUpdateItem(path = item)
+            item.copy(path = raw, base64 = null)
         } else {
-            ImageUpdateItem(base64 = item)
+            item.copy(base64 = raw, path = null)
         }
     }
 }
@@ -1999,13 +2042,29 @@ private fun parseFlowItems(raw: String?): List<FlowUpdateItem> {
                         val parsed = buildList {
                             if (images != null) {
                                 for (j in 0 until images.length()) {
-                                    val item = images.optString(j)
-                                    if (item.isNotBlank()) {
-                                        val uri = Uri.parse(item)
-                                        if (uri.scheme != null) {
-                                            add(ImageUpdateItem(path = item))
-                                        } else {
-                                            add(ImageUpdateItem(base64 = item))
+                                    when (val entry = images.get(j)) {
+                                        is org.json.JSONObject -> {
+                                            val image = entry.optString("image")
+                                            val motion = entry.optString("motionVideo")
+                                            if (image.isNotBlank()) {
+                                                val uri = Uri.parse(image)
+                                                if (uri.scheme != null) {
+                                                    add(ImageUpdateItem(path = image, motionVideoPath = motion.ifBlank { null }))
+                                                } else {
+                                                    add(ImageUpdateItem(base64 = image, motionVideoPath = motion.ifBlank { null }))
+                                                }
+                                            }
+                                        }
+                                        else -> {
+                                            val item = entry.toString()
+                                            if (item.isNotBlank()) {
+                                                val uri = Uri.parse(item)
+                                                if (uri.scheme != null) {
+                                                    add(ImageUpdateItem(path = item))
+                                                } else {
+                                                    add(ImageUpdateItem(base64 = item))
+                                                }
+                                            }
                                         }
                                     }
                                 }
