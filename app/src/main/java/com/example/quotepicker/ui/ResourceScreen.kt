@@ -779,7 +779,8 @@ private fun ResourceCreateScreen(
                 .padding(inner)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(16.dp)
+                .padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
@@ -1150,7 +1151,8 @@ private fun ResourceEditScreen(
                 .padding(inner)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(16.dp)
+                .padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(text = typeLabel(resource.resource.type), style = MaterialTheme.typography.labelMedium)

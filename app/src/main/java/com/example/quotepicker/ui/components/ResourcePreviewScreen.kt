@@ -307,6 +307,9 @@ private fun MediaPreview(uri: Uri) {
                     Log.d("MediaPreview", "Video prepared uri=$uri duration=${mediaPlayer.duration}")
                     mediaPlayer.start()
                 }
+                setOnCompletionListener {
+                    it.start()
+                }
                 setOnErrorListener { _, what, extra ->
                     Log.e("MediaPreview", "Video error uri=$uri what=$what extra=$extra")
                     false
@@ -698,6 +701,9 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
                                     0f
                                 }
                             mediaPlayer.start()
+                        }
+                        setOnCompletionListener {
+                            it.start()
                         }
                         viewHolder.value = this
                     }
