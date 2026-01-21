@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -24,6 +25,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Visibility
@@ -42,6 +45,7 @@ import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.PreviewTextBlock
+import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.ui.components.rememberEventSequenceRunner
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
@@ -102,7 +106,10 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
                     Text("未选择标签")
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ui.tags.filter { ui.selectedTagIds.contains(it.id) }.forEach { tag ->
+                        sortTagsForDisplay(
+                            ui.tags.filter { ui.selectedTagIds.contains(it.id) },
+                            ui.categories
+                        ).forEach { tag ->
                             TagBadge(tag = tag)
                         }
                     }
@@ -154,21 +161,16 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
             }
         }
         if (eventRunner.overlayText != null) {
-            androidx.compose.material3.Card(
+            Text(
+                text = eventRunner.overlayText.orEmpty(),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 24.dp),
-                colors = androidx.compose.material3.CardDefaults.cardColors(
-                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Text(
-                    text = eventRunner.overlayText.orEmpty(),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(
+                    fontSize = androidx.compose.material3.MaterialTheme.typography.titleMedium.fontSize * 2
+                ),
+                color = androidx.compose.ui.graphics.Color.Red
+            )
         }
     }
 
@@ -201,7 +203,7 @@ private fun TagPickerDialog(
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TagSelectionSection(
                     categories = categories,
@@ -226,40 +228,78 @@ private fun TagSelectionSection(
     selected: Set<Long>,
     onChange: (Set<Long>) -> Unit
 ) {
-    val grouped = tags.groupBy { it.categoryId }
+    val sortedTags = sortTagsForDisplay(tags, categories)
+    val grouped = sortedTags.groupBy { it.categoryId }
     val knownCategoryIds = categories.map { it.id }.toSet()
-    val uncategorized = tags.filter { it.categoryId !in knownCategoryIds }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val uncategorized = sortedTags.filter { it.categoryId !in knownCategoryIds }
+    val expandedState = remember(categories) {
+        mutableStateOf(categories.associate { it.id to true }.toMutableMap())
+    }
+    var uncategorizedExpanded by remember { mutableStateOf(true) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
             if (items.isNotEmpty()) {
-                Text(category.name)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                val isExpanded = expandedState.value[category.id] ?: true
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedState.value = expandedState.value.toMutableMap().apply {
+                                put(category.id, !isExpanded)
+                            }
+                        },
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items.forEach { tag ->
+                    Text(category.name)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                }
+                if (isExpanded) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items.forEach { tag ->
+                            TagFilterChip(
+                                tag = tag,
+                                selected = selected,
+                                onChange = onChange
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (uncategorized.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uncategorizedExpanded = !uncategorizedExpanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("未分类")
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = if (uncategorizedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
+                )
+            }
+            if (uncategorizedExpanded) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    uncategorized.forEach { tag ->
                         TagFilterChip(
                             tag = tag,
                             selected = selected,
                             onChange = onChange
                         )
                     }
-                }
-            }
-        }
-        if (uncategorized.isNotEmpty()) {
-            Text("未分类")
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                uncategorized.forEach { tag ->
-                    TagFilterChip(
-                        tag = tag,
-                        selected = selected,
-                        onChange = onChange
-                    )
                 }
             }
         }

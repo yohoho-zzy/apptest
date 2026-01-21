@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.clickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -69,6 +72,7 @@ import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
+import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.CharacterViewModel
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
@@ -238,7 +242,7 @@ fun CharacterScreen(
                                             ResourceGridCard(
                                                 title = resource.resource.title,
                                                 typeLabel = typeLabel(resource.resource.type),
-                                                tags = resource.tags,
+                                                tags = sortTagsForDisplay(resource.tags, resourceUi.categories),
                                                 onClick = { previewTarget = resource },
                                                 onLongClick = {}
                                             )
@@ -379,7 +383,8 @@ private fun TagSummarySection(
     tags: List<TagEntity>,
     onEdit: () -> Unit
 ) {
-    val grouped = tags.groupBy { it.categoryId }
+    val sortedTags = sortTagsForDisplay(tags, categories)
+    val grouped = sortedTags.groupBy { it.categoryId }
     val categoryMap = categories.associateBy { it.id }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(
@@ -405,7 +410,7 @@ private fun TagSummarySection(
                 Spacer(Modifier.height(8.dp))
             }
         }
-        val uncategorized = tags.filter { it.categoryId !in categoryMap.keys }
+        val uncategorized = sortedTags.filter { it.categoryId !in categoryMap.keys }
         if (uncategorized.isNotEmpty()) {
             Text("未分类", style = MaterialTheme.typography.labelMedium)
             FlowRow(
@@ -525,26 +530,98 @@ private fun TagSelectionSection(
     selected: Set<Long>,
     onChange: (Set<Long>) -> Unit
 ) {
-    val grouped = tags.groupBy { it.categoryId }
+    val sortedTags = sortTagsForDisplay(tags, categories)
+    val grouped = sortedTags.groupBy { it.categoryId }
     val knownCategoryIds = categories.map { it.id }.toSet()
-    val uncategorized = tags.filter { it.categoryId !in knownCategoryIds }
+    val uncategorized = sortedTags.filter { it.categoryId !in knownCategoryIds }
+    val expandedState = remember(categories) {
+        mutableStateOf(categories.associate { it.id to true }.toMutableMap())
+    }
+    var uncategorizedExpanded by remember { mutableStateOf(true) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 360.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(label)
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
             if (items.isNotEmpty()) {
-                Text(category.name, style = MaterialTheme.typography.labelMedium)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                val isExpanded = expandedState.value[category.id] ?: true
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedState.value = expandedState.value.toMutableMap().apply {
+                                put(category.id, !isExpanded)
+                            }
+                        },
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items.forEach { tag ->
+                    Text(category.name, style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                }
+                if (isExpanded) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items.forEach { tag ->
+                            val isSelected = selected.contains(tag.id)
+                            val tagColor = Color(tag.colorArgb)
+                            val selectedTextColor = tagTextColor(tagColor)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val newSet = selected.toMutableSet()
+                                    if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
+                                    onChange(newSet)
+                                },
+                                label = {
+                                    Text(
+                                        text = tag.name,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = tagColor.copy(alpha = 0.2f),
+                                    selectedContainerColor = tagColor,
+                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedLabelColor = selectedTextColor
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (uncategorized.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uncategorizedExpanded = !uncategorizedExpanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("未分类", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = if (uncategorizedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
+                )
+            }
+            if (uncategorizedExpanded) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    uncategorized.forEach { tag ->
                         val isSelected = selected.contains(tag.id)
                         val tagColor = Color(tag.colorArgb)
                         val selectedTextColor = tagTextColor(tagColor)
@@ -570,40 +647,6 @@ private fun TagSelectionSection(
                             )
                         )
                     }
-                }
-            }
-        }
-        if (uncategorized.isNotEmpty()) {
-            Text("未分类", style = MaterialTheme.typography.labelMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                uncategorized.forEach { tag ->
-                    val isSelected = selected.contains(tag.id)
-                    val tagColor = Color(tag.colorArgb)
-                    val selectedTextColor = tagTextColor(tagColor)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            val newSet = selected.toMutableSet()
-                            if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
-                            onChange(newSet)
-                        },
-                        label = {
-                            Text(
-                                text = tag.name,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = tagColor.copy(alpha = 0.2f),
-                            selectedContainerColor = tagColor,
-                            labelColor = MaterialTheme.colorScheme.onSurface,
-                            selectedLabelColor = selectedTextColor
-                        )
-                    )
                 }
             }
         }

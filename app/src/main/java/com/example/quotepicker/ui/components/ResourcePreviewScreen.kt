@@ -60,6 +60,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.ResourceViewModel
 import org.json.JSONArray
 
@@ -96,6 +97,9 @@ fun ResourcePreviewScreen(
     val scrollState = rememberScrollState()
     val uiState by vm.uiState.collectAsState()
     val allResources by vm.allResources.collectAsState()
+    val sortedTags = remember(resource.tags, uiState.categories) {
+        sortTagsForDisplay(resource.tags, uiState.categories)
+    }
     val highlightedSpeaker = uiState.filters.selectedCharacterId?.let { id ->
         uiState.characters.firstOrNull { it.id == id }?.name
     }
@@ -169,12 +173,12 @@ fun ResourcePreviewScreen(
                 )
                 if (resource.resource.type != ResourceType.FLOW) {
                     ResourceMetaRow(label = "标签") {
-                        if (resource.tags.isNotEmpty()) {
+                        if (sortedTags.isNotEmpty()) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                resource.tags.forEach { tag ->
+                                sortedTags.forEach { tag ->
                                     TagBadge(tag = tag)
                                 }
                             }
@@ -313,19 +317,14 @@ fun ResourcePreviewScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.TopCenter
                 ) {
-                    Card(
+                    Text(
+                        text = eventRunner.overlayText.orEmpty(),
                         modifier = Modifier.padding(top = inner.calculateTopPadding() + 24.dp),
-                        colors = androidx.compose.material3.CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Text(
-                            text = eventRunner.overlayText.orEmpty(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = MaterialTheme.typography.titleMedium.fontSize * 2
+                        ),
+                        color = Color.Red
+                    )
                 }
             }
         }
