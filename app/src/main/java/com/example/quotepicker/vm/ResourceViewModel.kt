@@ -474,16 +474,21 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val resolver = getApplication<Application>().contentResolver
         val projection = arrayOf(
-            MediaStore.Images.Media.IS_MOTION_PHOTO,
-            MediaStore.Images.Media.MOTION_PHOTO_ASSOCIATED_VIDEO
+            COLUMN_IS_MOTION_PHOTO,
+            COLUMN_MOTION_PHOTO_ASSOCIATED_VIDEO
         )
         return resolver.query(uri, projection, null, null, null)?.use { cursor ->
             if (!cursor.moveToFirst()) return@use null
-            val isMotionIndex = cursor.getColumnIndex(MediaStore.Images.Media.IS_MOTION_PHOTO)
-            val videoIndex = cursor.getColumnIndex(MediaStore.Images.Media.MOTION_PHOTO_ASSOCIATED_VIDEO)
+            val isMotionIndex = cursor.getColumnIndex(COLUMN_IS_MOTION_PHOTO)
+            val videoIndex = cursor.getColumnIndex(COLUMN_MOTION_PHOTO_ASSOCIATED_VIDEO)
             val isMotion = isMotionIndex >= 0 && cursor.getInt(isMotionIndex) == 1
             val videoUri = if (videoIndex >= 0) cursor.getString(videoIndex) else null
             if (isMotion && !videoUri.isNullOrBlank()) Uri.parse(videoUri) else null
         }
+    }
+
+    private companion object {
+        const val COLUMN_IS_MOTION_PHOTO = "is_motion_photo"
+        const val COLUMN_MOTION_PHOTO_ASSOCIATED_VIDEO = "motion_photo_associated_video"
     }
 }
