@@ -83,6 +83,7 @@ import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.vm.FlowUpdateItem
 import com.example.quotepicker.vm.ImageUpdateItem
@@ -222,7 +223,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         ResourceGridCard(
                             title = res.resource.title,
                             typeLabel = typeLabel(res.resource.type),
-                            tags = res.tags,
+                            tags = sortTagsForDisplay(res.tags, ui.categories),
                             onClick = { previewTarget = res },
                             onLongClick = { bottomSheetTarget = res }
                         )
@@ -582,7 +583,7 @@ private fun FilterTagDialog(
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TagSelectionSection(
                     label = "标签",
@@ -1745,7 +1746,7 @@ private fun TagPickerDialog(
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TagSelectionSection(
                     label = "标签",
@@ -1820,41 +1821,81 @@ private fun TagSelectionSection(
     selected: Set<Long>,
     onChange: (Set<Long>) -> Unit
 ) {
-    val grouped = tags.groupBy { it.categoryId }
+    val sortedTags = sortTagsForDisplay(tags, categories)
+    val grouped = sortedTags.groupBy { it.categoryId }
     val knownCategoryIds = categories.map { it.id }.toSet()
-    val uncategorized = tags.filter { it.categoryId !in knownCategoryIds }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val uncategorized = sortedTags.filter { it.categoryId !in knownCategoryIds }
+    val expandedState = remember(categories) {
+        mutableStateOf(
+            categories.associate { it.id to true }.toMutableMap()
+        )
+    }
+    var uncategorizedExpanded by remember { mutableStateOf(true) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label)
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
             if (items.isNotEmpty()) {
-                Text(category.name, style = MaterialTheme.typography.labelMedium)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                val isExpanded = expandedState.value[category.id] ?: true
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedState.value = expandedState.value.toMutableMap().apply {
+                                put(category.id, !isExpanded)
+                            }
+                        },
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items.forEach { tag ->
+                    Text(category.name, style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                }
+                if (isExpanded) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items.forEach { tag ->
+                            TagFilterChip(
+                                tag = tag,
+                                selected = selected,
+                                onChange = onChange
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (uncategorized.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uncategorizedExpanded = !uncategorizedExpanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("未分类", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = if (uncategorizedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
+                )
+            }
+            if (uncategorizedExpanded) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    uncategorized.forEach { tag ->
                         TagFilterChip(
                             tag = tag,
                             selected = selected,
                             onChange = onChange
                         )
                     }
-                }
-            }
-        }
-        if (uncategorized.isNotEmpty()) {
-            Text("未分类", style = MaterialTheme.typography.labelMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                uncategorized.forEach { tag ->
-                    TagFilterChip(
-                        tag = tag,
-                        selected = selected,
-                        onChange = onChange
-                    )
                 }
             }
         }
