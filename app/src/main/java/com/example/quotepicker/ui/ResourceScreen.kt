@@ -1049,6 +1049,7 @@ private fun ResourceEditScreen(
     var editSceneIndex by remember { mutableStateOf<Int?>(null) }
     var showFlowDialog by remember { mutableStateOf(false) }
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
+    val scrollState = rememberScrollState()
 
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
