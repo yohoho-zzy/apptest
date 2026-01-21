@@ -17,7 +17,7 @@ data class BackupSnapshot(
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
-            put("version", 2)
+            put("version", 3)
             put("categories", JSONArray(categories.map(::categoryToJson)))
             put("tags", JSONArray(tags.map(::tagToJson)))
             put("characters", JSONArray(characters.map(::characterToJson)))
@@ -49,7 +49,8 @@ data class BackupSnapshot(
 data class MediaBackupItem(
     val originalPath: String,
     val type: ResourceType,
-    val base64: String
+    val base64: String? = null,
+    val fileName: String? = null
 )
 
 private fun categoryToJson(category: TagCategoryEntity): JSONObject =
@@ -105,10 +106,12 @@ private fun resourceCharacterToJson(ref: ResourceCharacterCrossRef): JSONObject 
         .put("characterId", ref.characterId)
 
 private fun mediaToJson(item: MediaBackupItem): JSONObject =
-    JSONObject()
-        .put("path", item.originalPath)
-        .put("type", item.type.name)
-        .put("base64", item.base64)
+    JSONObject().apply {
+        put("path", item.originalPath)
+        put("type", item.type.name)
+        item.base64?.let { put("base64", it) }
+        item.fileName?.let { put("fileName", it) }
+    }
 
 private fun categoryFromJson(obj: JSONObject): TagCategoryEntity =
     TagCategoryEntity(
@@ -173,7 +176,8 @@ private fun mediaFromJson(obj: JSONObject): MediaBackupItem =
     MediaBackupItem(
         originalPath = obj.getString("path"),
         type = ResourceType.valueOf(obj.getString("type")),
-        base64 = obj.getString("base64")
+        base64 = readNullableString(obj, "base64"),
+        fileName = readNullableString(obj, "fileName")
     )
 
 private fun <T> parseArray(

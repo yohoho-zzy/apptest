@@ -11,7 +11,11 @@ import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
+import java.io.ByteArrayInputStream
 import java.nio.charset.Charset
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,19 +50,58 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.updateCharacterTags(characterId, tagIds) }
 
     fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-        val snapshot = repo.exportSnapshot()
-        val payload = snapshot.toJsonString()
         val resolver = getApplication<Application>().contentResolver
+        val exportPackage = repo.exportSnapshotPackage()
         resolver.openOutputStream(uri)?.use { output ->
-            output.write(payload.toByteArray(Charset.forName("UTF-8")))
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+                zip.write(exportPackage.snapshot.toJsonString().toByteArray(Charset.forName("UTF-8")))
+                zip.closeEntry()
+                exportPackage.mediaPayloads.forEach { (fileName, bytes) ->
+                    zip.putNextEntry(ZipEntry("media/$fileName"))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
         }
     }
 
     fun importSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
         val resolver = getApplication<Application>().contentResolver
-        val payload = resolver.openInputStream(uri)?.bufferedReader(Charset.forName("UTF-8"))?.use { it.readText() }
-            ?: return@launch
-        val snapshot = BackupSnapshot.fromJson(payload)
-        repo.replaceSnapshot(snapshot)
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+        var snapshot: BackupSnapshot? = null
+        val mediaPayloads = mutableMapOf<String, ByteArray>()
+        if (bytes.size >= 2 && bytes[0] == ZIP_MAGIC_P && bytes[1] == ZIP_MAGIC_K) {
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+                var entry = zip.nextEntry
+                var payload: String? = null
+                while (entry != null) {
+                    when {
+                        entry.name == BACKUP_JSON_NAME -> {
+                            payload = zip.readBytes().toString(Charset.forName("UTF-8"))
+                        }
+                        entry.name.startsWith("media/") -> {
+                            val fileName = entry.name.removePrefix("media/")
+                            mediaPayloads[fileName] = zip.readBytes()
+                        }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+                if (!payload.isNullOrBlank()) {
+                    snapshot = BackupSnapshot.fromJson(payload)
+                }
+            }
+        } else {
+            val payload = bytes.toString(Charset.forName("UTF-8"))
+            snapshot = BackupSnapshot.fromJson(payload)
+        }
+        snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
+    }
+
+    private companion object {
+        const val BACKUP_JSON_NAME = "backup.json"
+        const val ZIP_MAGIC_P: Byte = 0x50
+        const val ZIP_MAGIC_K: Byte = 0x4B
     }
 }

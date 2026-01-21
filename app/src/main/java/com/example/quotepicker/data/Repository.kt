@@ -26,18 +26,27 @@ class Repository private constructor(context: Context) {
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
 
-    suspend fun exportSnapshot(): BackupSnapshot {
+    data class ExportPackage(
+        val snapshot: BackupSnapshot,
+        val mediaPayloads: Map<String, ByteArray>
+    )
+
+    suspend fun exportSnapshot(): BackupSnapshot = exportSnapshotPackage().snapshot
+
+    suspend fun exportSnapshotPackage(): ExportPackage {
         val resources = resourceDao.listAll()
+        val mediaPayloads = linkedMapOf<String, ByteArray>()
         val mediaItems = collectMediaPaths(resources).mapNotNull { (path, type) ->
-            readMedia(path)?.let { bytes ->
-                MediaBackupItem(
-                    originalPath = path,
-                    type = type,
-                    base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                )
-            }
+            val bytes = readMedia(path) ?: return@mapNotNull null
+            val fileName = "media_${mediaPayloads.size}_${path.hashCode()}.dat"
+            mediaPayloads[fileName] = bytes
+            MediaBackupItem(
+                originalPath = path,
+                type = type,
+                fileName = fileName
+            )
         }
-        return BackupSnapshot(
+        val snapshot = BackupSnapshot(
             categories = categoryDao.listAll(),
             tags = tagDao.listAll(),
             characters = characterDao.listAll(),
@@ -47,10 +56,11 @@ class Repository private constructor(context: Context) {
             resourceCharacterRefs = crossRefDao.listResourceCharacters(),
             media = mediaItems
         )
+        return ExportPackage(snapshot = snapshot, mediaPayloads = mediaPayloads)
     }
 
-    suspend fun replaceSnapshot(snapshot: BackupSnapshot) {
-        val mediaMapping = restoreMedia(snapshot.media)
+    suspend fun replaceSnapshot(snapshot: BackupSnapshot, mediaPayloads: Map<String, ByteArray> = emptyMap()) {
+        val mediaMapping = restoreMedia(snapshot.media, mediaPayloads)
         val restoredResources = snapshot.resources.map { resource ->
             when (resource.type) {
                 ResourceType.IMAGE,
@@ -274,11 +284,18 @@ class Repository private constructor(context: Context) {
         }.getOrNull()
     }
 
-    private fun restoreMedia(items: List<MediaBackupItem>): Map<String, String> {
+    private fun restoreMedia(
+        items: List<MediaBackupItem>,
+        mediaPayloads: Map<String, ByteArray>
+    ): Map<String, String> {
         if (items.isEmpty()) return emptyMap()
         val mapping = mutableMapOf<String, String>()
         items.forEach { item ->
-            val bytes = runCatching { Base64.decode(item.base64, Base64.DEFAULT) }.getOrNull() ?: return@forEach
+            val bytes = when {
+                item.base64 != null -> runCatching { Base64.decode(item.base64, Base64.DEFAULT) }.getOrNull()
+                item.fileName != null -> mediaPayloads[item.fileName]
+                else -> null
+            } ?: return@forEach
             val folder = when (item.type) {
                 ResourceType.IMAGE -> "images"
                 ResourceType.VIDEO -> "videos"
