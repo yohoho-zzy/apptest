@@ -51,6 +51,7 @@ private suspend fun runEventSequence(
     toneGenerator: ToneGenerator,
     onOverlayUpdate: (String?) -> Unit
 ) {
+    val tone = resolveTone(sequence.toneIndex)
     for (step in sequence.steps) {
         when (step) {
             is EventStep.Display -> {
@@ -61,11 +62,22 @@ private suspend fun runEventSequence(
                 val interval = step.intervalMs ?: step.randomRange?.random() ?: 1000L
                 for (count in step.total downTo 1) {
                     onOverlayUpdate(count.toString())
-                    toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+                    toneGenerator.startTone(tone, 80)
                     delay(interval)
                 }
             }
         }
     }
     onOverlayUpdate(null)
+}
+
+private fun resolveTone(index: Int?): Int {
+    val tones = listOf(
+        ToneGenerator.TONE_PROP_BEEP,
+        ToneGenerator.TONE_PROP_ACK,
+        ToneGenerator.TONE_PROP_NACK,
+        ToneGenerator.TONE_PROP_PROMPT
+    )
+    val resolved = index?.takeIf { it in tones.indices } ?: 0
+    return tones[resolved]
 }

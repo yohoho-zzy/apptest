@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -96,12 +95,13 @@ fun ResourcePreviewScreen(
     var flowItems by remember { mutableStateOf<List<FlowPreviewItem>>(emptyList()) }
     val scrollState = rememberScrollState()
     val uiState by vm.uiState.collectAsState()
+    val allResources by vm.allResources.collectAsState()
     val highlightedSpeaker = uiState.filters.selectedCharacterId?.let { id ->
         uiState.characters.firstOrNull { it.id == id }?.name
     }
     val eventRunner = rememberEventSequenceRunner()
 
-    LaunchedEffect(resource.resource.id, mediaReloadKey) {
+    LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
         val res = resource.resource
         quoteImages = emptyList()
         mediaLoadFailed = false
@@ -111,7 +111,7 @@ fun ResourcePreviewScreen(
         } else if (res.type == ResourceType.TEXT) {
             quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
         } else if (res.type == ResourceType.FLOW) {
-            flowItems = parseFlowItems(res.sceneJson.orEmpty(), vm)
+            flowItems = parseFlowItems(res.sceneJson.orEmpty(), vm, allResources)
         }
         mediaUris = when (res.type) {
             ResourceType.VIDEO -> {
@@ -532,8 +532,13 @@ private fun parseSceneMessages(raw: String): List<SceneMessage> {
     }.getOrDefault(emptyList())
 }
 
-private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<FlowPreviewItem> {
+private suspend fun parseFlowItems(
+    raw: String,
+    vm: ResourceViewModel,
+    resources: List<ResourceWithTagsCharacters>
+): List<FlowPreviewItem> {
     if (raw.isBlank()) return emptyList()
+    val resourceMap = resources.associateBy { it.resource.id }
     return runCatching {
         val array = JSONArray(raw)
         buildList {
@@ -541,6 +546,12 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
                 val obj = array.optJSONObject(i) ?: continue
                 val type = runCatching { ResourceType.valueOf(obj.optString("type")) }.getOrNull() ?: continue
                 val title = obj.optString("title").ifBlank { null }
+                val resourceId = obj.optLong("resourceId", -1L).takeIf { it > 0 }
+                val resource = resourceId?.let { id -> resourceMap[id] }
+                if (resource != null) {
+                    add(flowPreviewItemFromResource(resource, vm))
+                    continue
+                }
                 when (type) {
                     ResourceType.TEXT -> add(
                         FlowPreviewItem(type = type, title = title, text = obj.optString("text"))
@@ -606,6 +617,42 @@ private suspend fun parseFlowItems(raw: String, vm: ResourceViewModel): List<Flo
             }
         }
     }.getOrDefault(emptyList())
+}
+
+private suspend fun flowPreviewItemFromResource(
+    resource: ResourceWithTagsCharacters,
+    vm: ResourceViewModel
+): FlowPreviewItem {
+    val data = resource.resource
+    return when (data.type) {
+        ResourceType.TEXT -> FlowPreviewItem(
+            type = data.type,
+            title = data.title,
+            text = data.quoteText.orEmpty()
+        )
+        ResourceType.SCENE -> FlowPreviewItem(
+            type = data.type,
+            title = data.title,
+            sceneMessages = parseSceneMessages(data.sceneJson.orEmpty())
+        )
+        ResourceType.IMAGE -> FlowPreviewItem(
+            type = data.type,
+            title = data.title,
+            images = decodeImageSources(data.contentUriOrPath ?: data.quoteImageBase64, vm)
+        )
+        ResourceType.VIDEO -> {
+            val raw = data.contentUriOrPath
+            val paths = raw?.takeIf { it.isNotBlank() }?.let { parseMediaPaths(it) }.orEmpty()
+            val uriList = paths.mapNotNull { path -> path.takeIf { it.isNotBlank() }?.let(Uri::parse) }
+            FlowPreviewItem(
+                type = data.type,
+                title = data.title,
+                mediaUris = uriList,
+                mediaFailed = raw.isNullOrBlank() || (uriList.isEmpty() && raw.isNotBlank())
+            )
+        }
+        else -> FlowPreviewItem(type = data.type, title = data.title)
+    }
 }
 
 private fun typeLabel(type: ResourceType): String = when (type) {
