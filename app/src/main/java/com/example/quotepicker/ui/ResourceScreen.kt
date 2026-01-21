@@ -57,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -753,6 +754,12 @@ private fun ResourceCreateScreen(
         availableResources.filter { it.resource.type != ResourceType.FLOW }
     }
 
+    LaunchedEffect(availableResources) {
+        if (mode == CreateMode.Flow) {
+            flowItems = refreshFlowItemsFromResources(flowItems, availableResources)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1155,6 +1162,12 @@ private fun ResourceEditScreen(
     }
     val flowResources = remember(availableResources) {
         availableResources.filter { it.resource.type != ResourceType.FLOW }
+    }
+
+    LaunchedEffect(availableResources) {
+        if (resource.resource.type == ResourceType.FLOW) {
+            flowItems = refreshFlowItemsFromResources(flowItems, availableResources)
+        }
     }
 
     val canSave = title.isNotBlank() && selectedCharacters.isNotEmpty() && when (resource.resource.type) {
@@ -2173,6 +2186,19 @@ private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpda
             videos = parseVideoItems(data.contentUriOrPath)
         )
         else -> FlowUpdateItem(type = data.type, title = data.title, resourceId = data.id)
+    }
+}
+
+private fun refreshFlowItemsFromResources(
+    items: List<FlowUpdateItem>,
+    resources: List<ResourceWithTagsCharacters>
+): List<FlowUpdateItem> {
+    if (items.isEmpty()) return items
+    val resourceMap = resources.associateBy { it.resource.id }
+    return items.map { item ->
+        val resourceId = item.resourceId ?: return@map item
+        val resource = resourceMap[resourceId] ?: return@map item
+        flowItemFromResource(resource)
     }
 }
 

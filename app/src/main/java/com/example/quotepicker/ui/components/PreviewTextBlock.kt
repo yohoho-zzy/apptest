@@ -24,7 +24,8 @@ sealed interface PreviewSegment {
 
 data class EventSequence(
     val label: String,
-    val steps: List<EventStep>
+    val steps: List<EventStep>,
+    val toneIndex: Int? = null
 )
 
 sealed interface EventStep {
@@ -69,8 +70,12 @@ fun parsePreviewSegments(text: String, random: Random = Random.Default): List<Pr
 }
 
 fun parseEventSequence(raw: String): EventSequence? {
+    val trimmed = raw.trim()
+    val toneMatch = Regex("^(\\d+)").find(trimmed)
+    val toneIndex = toneMatch?.value?.toIntOrNull()?.minus(1)
+    val content = if (toneMatch != null) trimmed.drop(toneMatch.value.length) else trimmed
     val steps = mutableListOf<EventStep>()
-    eventStepRegex.findAll(raw).forEach { match ->
+    eventStepRegex.findAll(content).forEach { match ->
         val parts = match.groupValues.getOrNull(1)
             ?.split(",", limit = 2)
             ?.map { it.trim() }
@@ -90,7 +95,7 @@ fun parseEventSequence(raw: String): EventSequence? {
     }
     if (steps.isEmpty()) return null
     val label = (steps.firstOrNull { it is EventStep.Display } as? EventStep.Display)?.text ?: "开始"
-    return EventSequence(label = label, steps = steps)
+    return EventSequence(label = label, steps = steps, toneIndex = toneIndex)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
