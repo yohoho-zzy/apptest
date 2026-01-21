@@ -1495,11 +1495,25 @@ private fun ResourceEditScreen(
                                             modifier = Modifier.weight(1f),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            Text(
-                                                text = typeLabel(item.type),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
+                                            val title = item.title?.ifBlank { null }
+                                            if (title != null) {
+                                                Text(
+                                                    text = title,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    text = typeLabel(item.type),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = typeLabel(item.type),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                             val summary = when (item.type) {
                                                 ResourceType.TEXT -> item.text.orEmpty()
                                                 ResourceType.SCENE -> "对话 ${item.sceneMessages.size} 条"
