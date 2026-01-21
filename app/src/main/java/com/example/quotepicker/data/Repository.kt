@@ -150,7 +150,11 @@ class Repository private constructor(context: Context) {
         val unique = linkedSetOf<Pair<String, ResourceType>>()
         resources.forEach { resource ->
             when (resource.type) {
-                ResourceType.IMAGE,
+                ResourceType.IMAGE -> {
+                    parseImageMediaPaths(resource.contentUriOrPath).forEach { (path, type) ->
+                        unique.add(path to type)
+                    }
+                }
                 ResourceType.VIDEO -> {
                     parseMediaPaths(resource.contentUriOrPath).forEach { path ->
                         unique.add(path to resource.type)
@@ -179,6 +183,44 @@ class Repository private constructor(context: Context) {
         return listOf(trimmed)
     }
 
+    private fun parseImageMediaPaths(payload: String?): List<Pair<String, ResourceType>> {
+        if (payload.isNullOrBlank()) return emptyList()
+        val trimmed = payload.trim()
+        return if (trimmed.startsWith("[")) {
+            runCatching {
+                val array = JSONArray(trimmed)
+                buildList {
+                    for (i in 0 until array.length()) {
+                        when (val entry = array.get(i)) {
+                            is org.json.JSONObject -> {
+                                val image = entry.optString("image")
+                                val motionVideo = entry.optString("motionVideo")
+                                if (image.isNotBlank()) add(image to ResourceType.IMAGE)
+                                if (motionVideo.isNotBlank()) add(motionVideo to ResourceType.VIDEO)
+                            }
+                            else -> {
+                                val item = entry.toString()
+                                if (item.isNotBlank()) add(item to ResourceType.IMAGE)
+                            }
+                        }
+                    }
+                }
+            }.getOrDefault(emptyList())
+        } else if (trimmed.startsWith("{")) {
+            runCatching {
+                val obj = org.json.JSONObject(trimmed)
+                val image = obj.optString("image")
+                val motionVideo = obj.optString("motionVideo")
+                buildList {
+                    if (image.isNotBlank()) add(image to ResourceType.IMAGE)
+                    if (motionVideo.isNotBlank()) add(motionVideo to ResourceType.VIDEO)
+                }
+            }.getOrDefault(emptyList())
+        } else {
+            listOf(trimmed to ResourceType.IMAGE)
+        }
+    }
+
     private fun parseFlowMediaPaths(payload: String?): List<Pair<String, ResourceType>> {
         if (payload.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -193,7 +235,18 @@ class Repository private constructor(context: Context) {
                         ResourceType.IMAGE -> {
                             val images = obj.optJSONArray("images") ?: JSONArray()
                             for (j in 0 until images.length()) {
-                                add(images.getString(j) to type)
+                                when (val entry = images.get(j)) {
+                                    is org.json.JSONObject -> {
+                                        val image = entry.optString("image")
+                                        val motionVideo = entry.optString("motionVideo")
+                                        if (image.isNotBlank()) add(image to ResourceType.IMAGE)
+                                        if (motionVideo.isNotBlank()) add(motionVideo to ResourceType.VIDEO)
+                                    }
+                                    else -> {
+                                        val item = entry.toString()
+                                        if (item.isNotBlank()) add(item to type)
+                                    }
+                                }
                             }
                         }
                         ResourceType.VIDEO -> {
@@ -249,10 +302,35 @@ class Repository private constructor(context: Context) {
                 val array = JSONArray(trimmed)
                 val updated = JSONArray()
                 for (i in 0 until array.length()) {
-                    val raw = array.getString(i)
-                    updated.put(mapping[raw] ?: raw)
+                    when (val entry = array.get(i)) {
+                        is org.json.JSONObject -> {
+                            val image = entry.optString("image")
+                            val motionVideo = entry.optString("motionVideo")
+                            if (image.isNotBlank()) {
+                                entry.put("image", mapping[image] ?: image)
+                            }
+                            if (motionVideo.isNotBlank()) {
+                                entry.put("motionVideo", mapping[motionVideo] ?: motionVideo)
+                            }
+                            updated.put(entry)
+                        }
+                        else -> {
+                            val raw = entry.toString()
+                            updated.put(mapping[raw] ?: raw)
+                        }
+                    }
                 }
                 updated.toString()
+            }.getOrDefault(payload)
+        }
+        if (trimmed.startsWith("{")) {
+            return runCatching {
+                val obj = org.json.JSONObject(trimmed)
+                val image = obj.optString("image")
+                val motionVideo = obj.optString("motionVideo")
+                if (image.isNotBlank()) obj.put("image", mapping[image] ?: image)
+                if (motionVideo.isNotBlank()) obj.put("motionVideo", mapping[motionVideo] ?: motionVideo)
+                obj.toString()
             }.getOrDefault(payload)
         }
         return mapping[trimmed] ?: payload
@@ -268,8 +346,23 @@ class Repository private constructor(context: Context) {
                     val items = obj.optJSONArray(key) ?: return@forEach
                     val updated = JSONArray()
                     for (j in 0 until items.length()) {
-                        val raw = items.getString(j)
-                        updated.put(mapping[raw] ?: raw)
+                        when (val entry = items.get(j)) {
+                            is org.json.JSONObject -> {
+                                val image = entry.optString("image")
+                                val motionVideo = entry.optString("motionVideo")
+                                if (image.isNotBlank()) {
+                                    entry.put("image", mapping[image] ?: image)
+                                }
+                                if (motionVideo.isNotBlank()) {
+                                    entry.put("motionVideo", mapping[motionVideo] ?: motionVideo)
+                                }
+                                updated.put(entry)
+                            }
+                            else -> {
+                                val raw = entry.toString()
+                                updated.put(mapping[raw] ?: raw)
+                            }
+                        }
                     }
                     obj.put(key, updated)
                 }

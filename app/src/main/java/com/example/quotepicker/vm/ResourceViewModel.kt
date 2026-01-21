@@ -4,6 +4,8 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -45,12 +47,19 @@ data class ResourceUiState(
 data class ImageUpdateItem(
     val path: String? = null,
     val base64: String? = null,
-    val uri: Uri? = null
+    val uri: Uri? = null,
+    val motionVideoPath: String? = null,
+    val motionVideoUri: Uri? = null
 )
 
 data class VideoUpdateItem(
     val path: String? = null,
     val uri: Uri? = null
+)
+
+data class StoredImageResult(
+    val imagePath: String,
+    val motionVideoPath: String? = null
 )
 
 data class StoredMediaItem(
@@ -138,6 +147,15 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
             val storedPaths = imageUris.mapNotNull { uri -> storeImageToInternal(uri) }
+                .map { stored ->
+                    if (stored.motionVideoPath != null) {
+                        org.json.JSONObject()
+                            .put("image", stored.imagePath)
+                            .put("motionVideo", stored.motionVideoPath)
+                    } else {
+                        stored.imagePath
+                    }
+                }
             if (storedPaths.isEmpty()) return@launch
             val payload = org.json.JSONArray(storedPaths).toString()
             repo.addResource(
@@ -292,11 +310,22 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.filter { it.isNotBlank() }
     }
 
-    private suspend fun resolveImageItems(items: List<ImageUpdateItem>): List<String> {
+    private suspend fun resolveImageItems(items: List<ImageUpdateItem>): List<Any> {
         return items.mapNotNull { item ->
-            item.path?.ifBlank { null }
+            val stored = item.path?.ifBlank { null }?.let { StoredImageResult(it, item.motionVideoPath) }
                 ?: item.uri?.let { uri -> storeImageToInternal(uri) }
-                ?: item.base64?.let { base64 -> storeBase64ImageToInternal(base64) }
+                ?: item.base64?.let { base64 -> storeBase64ImageToInternal(base64) }?.let { StoredImageResult(it) }
+            val imagePath = stored?.imagePath ?: return@mapNotNull null
+            val motionVideoPath = stored.motionVideoPath
+                ?: item.motionVideoPath?.ifBlank { null }
+                ?: item.motionVideoUri?.let { uri -> storeVideoToInternal(uri, deleteSource = false) }
+            if (motionVideoPath != null) {
+                org.json.JSONObject()
+                    .put("image", imagePath)
+                    .put("motionVideo", motionVideoPath)
+            } else {
+                imagePath
+            }
         }
     }
 
@@ -393,13 +422,14 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         return storeBitmapToInternal(bitmap)
     }
 
-    private fun storeImageToInternal(uri: Uri): String? {
+    private fun storeImageToInternal(uri: Uri): StoredImageResult? {
         val bitmap = ImageCompression.decodeToBitmap(getApplication(), uri) ?: return null
-        val stored = storeBitmapToInternal(bitmap)
-        if (stored != null) {
-            deleteSourceUri(uri)
+        val stored = storeBitmapToInternal(bitmap) ?: return null
+        val motionVideoPath = queryMotionVideoUri(uri)?.let { motionUri ->
+            storeVideoToInternal(motionUri, deleteSource = false)
         }
-        return stored
+        deleteSourceUri(uri)
+        return StoredImageResult(imagePath = stored, motionVideoPath = motionVideoPath)
     }
 
     private fun storeBitmapToInternal(bitmap: Bitmap): String? {
@@ -424,7 +454,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun storeVideoToInternal(uri: Uri): String? {
+    private fun storeVideoToInternal(uri: Uri, deleteSource: Boolean = true): String? {
         return runCatching {
             val dir = File(getApplication<Application>().filesDir, "videos").apply { mkdirs() }
             val target = File(dir, "media_${System.currentTimeMillis()}_${UUID.randomUUID()}.dat")
@@ -433,8 +463,27 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                     input.copyTo(output)
                 }
             } ?: return null
-            deleteSourceUri(uri)
+            if (deleteSource) {
+                deleteSourceUri(uri)
+            }
             Uri.fromFile(target).toString()
         }.getOrNull()
+    }
+
+    private fun queryMotionVideoUri(uri: Uri): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val resolver = getApplication<Application>().contentResolver
+        val projection = arrayOf(
+            MediaStore.Images.Media.IS_MOTION_PHOTO,
+            MediaStore.Images.Media.MOTION_PHOTO_ASSOCIATED_VIDEO
+        )
+        return resolver.query(uri, projection, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val isMotionIndex = cursor.getColumnIndex(MediaStore.Images.Media.IS_MOTION_PHOTO)
+            val videoIndex = cursor.getColumnIndex(MediaStore.Images.Media.MOTION_PHOTO_ASSOCIATED_VIDEO)
+            val isMotion = isMotionIndex >= 0 && cursor.getInt(isMotionIndex) == 1
+            val videoUri = if (videoIndex >= 0) cursor.getString(videoIndex) else null
+            if (isMotion && !videoUri.isNullOrBlank()) Uri.parse(videoUri) else null
+        }
     }
 }
