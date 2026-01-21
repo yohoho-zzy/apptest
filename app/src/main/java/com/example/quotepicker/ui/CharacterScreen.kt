@@ -555,7 +555,13 @@ private fun TagSelectionSection(
                                 if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
                                 onChange(newSet)
                             },
-                            label = { Text(tag.name) },
+                            label = {
+                                Text(
+                                    text = tag.name,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = tagColor.copy(alpha = 0.2f),
                                 selectedContainerColor = tagColor,
@@ -584,7 +590,13 @@ private fun TagSelectionSection(
                             if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
                             onChange(newSet)
                         },
-                        label = { Text(tag.name) },
+                        label = {
+                            Text(
+                                text = tag.name,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = tagColor.copy(alpha = 0.2f),
                             selectedContainerColor = tagColor,

@@ -1,14 +1,20 @@
 package com.example.quotepicker.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -28,12 +34,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.TagBadge
-import com.example.quotepicker.ui.components.rememberFormattedText
+import com.example.quotepicker.ui.components.PreviewTextBlock
+import com.example.quotepicker.ui.components.rememberEventSequenceRunner
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
@@ -47,6 +56,7 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
     var showPreview by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
     var showIntro by remember { mutableStateOf(false) }
+    val eventRunner = rememberEventSequenceRunner()
 
     if (showPreview && ui.selectedResource != null) {
         ResourcePreviewScreen(
@@ -57,80 +67,107 @@ fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(
         return
     }
 
-    Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                vm.randomCharacter()
-                showIntro = false
-            }) {
-                Icon(Icons.Default.Casino, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("随机角色")
-            }
-            Button(onClick = { showIntro = true }, enabled = ui.selectedCharacter != null) {
-                Text("显示介绍")
-            }
-        }
-        if (ui.selectedCharacter == null) {
-            Text("未选择角色")
-        } else {
-            CharacterBadge(name = ui.selectedCharacter!!.name)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { showTagDialog = true }) {
-                    Text("资源标签筛选(${ui.selectedTagIds.size})")
+                Button(onClick = {
+                    vm.randomCharacter()
+                    showIntro = false
+                }) {
+                    Icon(Icons.Default.Casino, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("随机角色")
+                }
+                Button(onClick = { showIntro = true }, enabled = ui.selectedCharacter != null) {
+                    Text("显示介绍")
                 }
             }
-            if (ui.selectedTagIds.isEmpty()) {
-                Text("未选择标签")
+            if (ui.selectedCharacter == null) {
+                Text("未选择角色")
             } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ui.tags.filter { ui.selectedTagIds.contains(it.id) }.forEach { tag ->
-                        TagBadge(tag = tag)
+                CharacterBadge(name = ui.selectedCharacter!!.name)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showTagDialog = true }) {
+                        Text("资源标签筛选(${ui.selectedTagIds.size})")
+                    }
+                }
+                if (ui.selectedTagIds.isEmpty()) {
+                    Text("未选择标签")
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ui.tags.filter { ui.selectedTagIds.contains(it.id) }.forEach { tag ->
+                            TagBadge(tag = tag)
+                        }
                     }
                 }
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { vm.randomResource() }, enabled = ui.selectedCharacter != null) {
-                Icon(Icons.Default.Casino, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("随机资源")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { vm.randomResource() }, enabled = ui.selectedCharacter != null) {
+                    Icon(Icons.Default.Casino, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("随机资源")
+                }
+                Button(onClick = { vm.nextResource() }, enabled = ui.selectedCharacter != null) {
+                    Icon(Icons.Default.SkipNext, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("下一个")
+                }
+                Button(onClick = { vm.reset() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("重置")
+                }
             }
-            Button(onClick = { vm.nextResource() }, enabled = ui.selectedCharacter != null) {
-                Icon(Icons.Default.SkipNext, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("下一个")
-            }
-            Button(onClick = { vm.reset() }) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("重置")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        val res = ui.selectedResource
-        if (res == null) {
-            Text("暂无资源")
-        } else {
-            Text("当前资源：${res.resource.title}")
-            Button(onClick = { showPreview = true }) {
-                Icon(Icons.Default.Visibility, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("预览")
-            }
-        }
-        if (showIntro && ui.selectedCharacter != null) {
-            val introCandidates = ui.characterResources.filter { res ->
-                res.resource.type == ResourceType.TEXT &&
-                    res.resource.title.take(2) == "要点"
-            }
-            if (introCandidates.size == 1) {
-                val introText = rememberFormattedText(introCandidates.first().resource.quoteText.orEmpty())
-                Text(introText)
+            Spacer(Modifier.height(8.dp))
+            val res = ui.selectedResource
+            if (res == null) {
+                Text("暂无资源")
             } else {
-                Text("资源错误")
+                Text("当前资源：${res.resource.title}")
+                Button(onClick = { showPreview = true }) {
+                    Icon(Icons.Default.Visibility, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("预览")
+                }
+            }
+            if (showIntro && ui.selectedCharacter != null) {
+                val introCandidates = ui.characterResources.filter { res ->
+                    res.resource.type == ResourceType.TEXT &&
+                        res.resource.title.take(2) == "要点"
+                }
+                if (introCandidates.size == 1) {
+                    val introText = introCandidates.first().resource.quoteText.orEmpty()
+                    PreviewTextBlock(
+                        text = introText,
+                        onEventSequence = { eventRunner.start(it) }
+                    )
+                } else {
+                    Text("资源错误")
+                }
+            }
+        }
+        if (eventRunner.overlayText != null) {
+            androidx.compose.material3.Card(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = eventRunner.overlayText.orEmpty(),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -159,12 +196,20 @@ private fun TagPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("资源标签筛选") },
         text = {
-            TagSelectionSection(
-                categories = categories,
-                tags = tags,
-                selected = selected,
-                onChange = { selected = it.toMutableSet() }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TagSelectionSection(
+                    categories = categories,
+                    tags = tags,
+                    selected = selected,
+                    onChange = { selected = it.toMutableSet() }
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selected); onDismiss() }) { Text("确定") }
@@ -235,7 +280,13 @@ private fun TagFilterChip(
             if (isSelected) updated.remove(tag.id) else updated.add(tag.id)
             onChange(updated)
         },
-        label = { Text(tag.name) },
+        label = {
+            Text(
+                text = tag.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         colors = FilterChipDefaults.filterChipColors()
     )
 }

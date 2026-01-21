@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ResourceType
@@ -80,7 +82,6 @@ import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
-import com.example.quotepicker.ui.components.rememberFormattedText
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.vm.FlowUpdateItem
 import com.example.quotepicker.vm.ImageUpdateItem
@@ -575,13 +576,21 @@ private fun FilterTagDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择标签筛选") },
         text = {
-            TagSelectionSection(
-                label = "标签",
-                categories = categories,
-                tags = tags,
-                selected = selected,
-                onChange = { selected = it.toMutableSet() }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selected,
+                    onChange = { selected = it.toMutableSet() }
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = {
@@ -606,7 +615,13 @@ private fun FilterCharacterDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择角色筛选") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text("角色")
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -615,7 +630,13 @@ private fun FilterCharacterDialog(
                     FilterChip(
                         selected = current == null,
                         onClick = { current = null },
-                        label = { Text("全部角色") },
+                        label = {
+                            Text(
+                                text = "全部角色",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = Color.White,
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -626,7 +647,13 @@ private fun FilterCharacterDialog(
                         FilterChip(
                             selected = current == character.id,
                             onClick = { current = character.id },
-                            label = { Text(character.name) },
+                            label = {
+                                Text(
+                                    text = character.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = Color.White,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -821,17 +848,40 @@ private fun ResourceCreateScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             val summary = when (item.type) {
-                                                ResourceType.TEXT -> rememberFormattedText(item.text.orEmpty())
+                                                ResourceType.TEXT -> item.text.orEmpty()
                                                 ResourceType.SCENE -> "对话 ${item.sceneMessages.size} 条"
                                                 ResourceType.IMAGE -> "图片 ${item.images.size} 张"
                                                 ResourceType.VIDEO -> "视频 ${item.videos.size} 个"
                                                 else -> ""
                                             }
                                             if (summary.isNotBlank()) {
-                                                Text(text = summary, style = MaterialTheme.typography.bodySmall)
+                                                Text(
+                                                    text = summary,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            IconButton(onClick = {
+                                                if (index > 0) {
+                                                    flowItems = flowItems.toMutableList().also {
+                                                        it.add(index - 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
+                                            }
+                                            IconButton(onClick = {
+                                                if (index < flowItems.lastIndex) {
+                                                    flowItems = flowItems.toMutableList().also {
+                                                        it.add(index + 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                            }
                                             IconButton(onClick = {
                                                 editFlowIndex = index
                                                 showFlowDialog = true
@@ -900,9 +950,31 @@ private fun ResourceCreateScreen(
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
-                                            Text(text = message.content)
+                                            Text(
+                                                text = message.content,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
                                         }
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            IconButton(onClick = {
+                                                if (index > 0) {
+                                                    sceneMessages = sceneMessages.toMutableList().also {
+                                                        it.add(index - 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
+                                            }
+                                            IconButton(onClick = {
+                                                if (index < sceneMessages.lastIndex) {
+                                                    sceneMessages = sceneMessages.toMutableList().also {
+                                                        it.add(index + 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                            }
                                             IconButton(onClick = {
                                                 editSceneIndex = index
                                                 showSceneDialog = true
@@ -1357,9 +1429,31 @@ private fun ResourceEditScreen(
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
-                                            Text(text = message.content)
+                                            Text(
+                                                text = message.content,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
                                         }
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            IconButton(onClick = {
+                                                if (index > 0) {
+                                                    sceneMessages = sceneMessages.toMutableList().also {
+                                                        it.add(index - 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
+                                            }
+                                            IconButton(onClick = {
+                                                if (index < sceneMessages.lastIndex) {
+                                                    sceneMessages = sceneMessages.toMutableList().also {
+                                                        it.add(index + 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                            }
                                             IconButton(onClick = {
                                                 editSceneIndex = index
                                                 showSceneDialog = true
@@ -1407,17 +1501,40 @@ private fun ResourceEditScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             val summary = when (item.type) {
-                                                ResourceType.TEXT -> rememberFormattedText(item.text.orEmpty())
+                                                ResourceType.TEXT -> item.text.orEmpty()
                                                 ResourceType.SCENE -> "对话 ${item.sceneMessages.size} 条"
                                                 ResourceType.IMAGE -> "图片 ${item.images.size} 张"
                                                 ResourceType.VIDEO -> "视频 ${item.videos.size} 个"
                                                 else -> ""
                                             }
                                             if (summary.isNotBlank()) {
-                                                Text(text = summary, style = MaterialTheme.typography.bodySmall)
+                                                Text(
+                                                    text = summary,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            IconButton(onClick = {
+                                                if (index > 0) {
+                                                    flowItems = flowItems.toMutableList().also {
+                                                        it.add(index - 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
+                                            }
+                                            IconButton(onClick = {
+                                                if (index < flowItems.lastIndex) {
+                                                    flowItems = flowItems.toMutableList().also {
+                                                        it.add(index + 1, it.removeAt(index))
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                            }
                                             IconButton(onClick = {
                                                 editFlowIndex = index
                                                 showFlowDialog = true
@@ -1596,13 +1713,21 @@ private fun TagPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择标签") },
         text = {
-            TagSelectionSection(
-                label = "标签",
-                categories = categories,
-                tags = tags,
-                selected = selected,
-                onChange = { selected = it.toMutableSet() }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TagSelectionSection(
+                    label = "标签",
+                    categories = categories,
+                    tags = tags,
+                    selected = selected,
+                    onChange = { selected = it.toMutableSet() }
+                )
+            }
         },
         confirmButton = { TextButton(onClick = { onConfirm(selected); onDismiss() }) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
@@ -1622,22 +1747,35 @@ private fun CharacterPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择角色") },
         text = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                characters.forEach { character ->
-                    val isSelected = selected.contains(character.id)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            if (isSelected) selected.remove(character.id) else selected.add(character.id)
-                            selected = selected.toMutableSet()
-                        },
-                        label = { Text(character.name) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    characters.forEach { character ->
+                        val isSelected = selected.contains(character.id)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (isSelected) selected.remove(character.id) else selected.add(character.id)
+                                selected = selected.toMutableSet()
+                            },
+                            label = {
+                                Text(
+                                    text = character.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         )
-                    )
+                    }
                 }
             }
         },
@@ -1712,7 +1850,13 @@ private fun TagFilterChip(
             if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
             onChange(newSet)
         },
-        label = { Text(tag.name) },
+        label = {
+            Text(
+                text = tag.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         colors = FilterChipDefaults.filterChipColors(
             containerColor = tagColor.copy(alpha = 0.2f),
             selectedContainerColor = tagColor,
@@ -1743,7 +1887,13 @@ private fun SceneMessageDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 if (allowedSpeakers.isEmpty()) {
                     Text("请先选择角色再添加对话", style = MaterialTheme.typography.labelMedium)
                 } else {
@@ -1821,7 +1971,13 @@ private fun FlowStepDialog(
         onDismissRequest = onDismiss,
         title = { Text("流程步骤") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text("步骤类型")
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1863,7 +2019,12 @@ private fun FlowStepDialog(
                                     )
                                     val summary = resourceSummary(res)
                                     if (summary.isNotBlank()) {
-                                        Text(summary, style = MaterialTheme.typography.bodySmall)
+                                        Text(
+                                            text = summary,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -2005,7 +2166,7 @@ private fun flowItemFromResource(resource: ResourceWithTagsCharacters): FlowUpda
 private fun resourceSummary(resource: ResourceWithTagsCharacters): String {
     val data = resource.resource
     return when (data.type) {
-        ResourceType.TEXT -> rememberFormattedText(data.quoteText.orEmpty())
+        ResourceType.TEXT -> data.quoteText.orEmpty()
         ResourceType.SCENE -> {
             val messages = parseSceneMessages(data.sceneJson)
             if (messages.isEmpty()) "" else "对话 ${messages.size} 条"

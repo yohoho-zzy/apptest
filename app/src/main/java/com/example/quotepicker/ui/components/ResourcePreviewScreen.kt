@@ -45,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,6 +94,11 @@ fun ResourcePreviewScreen(
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
     var flowItems by remember { mutableStateOf<List<FlowPreviewItem>>(emptyList()) }
     val scrollState = rememberScrollState()
+    val uiState by vm.uiState.collectAsState()
+    val highlightedSpeaker = uiState.filters.selectedCharacterId?.let { id ->
+        uiState.characters.firstOrNull { it.id == id }?.name
+    }
+    val eventRunner = rememberEventSequenceRunner()
 
     LaunchedEffect(resource.resource.id, mediaReloadKey) {
         val res = resource.resource
@@ -129,6 +135,10 @@ fun ResourcePreviewScreen(
         sceneMessages = if (res.type == ResourceType.SCENE) parseSceneMessages(res.sceneJson.orEmpty()) else emptyList()
     }
 
+    val handleEventSequence: (EventSequence) -> Unit = { sequence ->
+        eventRunner.start(sequence)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -141,138 +151,152 @@ fun ResourcePreviewScreen(
             )
         }
     ) { inner ->
-        Column(
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .padding(bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = resource.resource.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            if (resource.resource.type != ResourceType.FLOW) {
-                ResourceMetaRow(label = "标签") {
-                    if (resource.tags.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            resource.tags.forEach { tag ->
-                                TagBadge(tag = tag)
-                            }
-                        }
-                    } else {
-                        Text("无标签", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                ResourceMetaRow(label = "角色") {
-                    if (resource.characters.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            resource.characters.forEach { character ->
-                                CharacterBadge(name = character.name)
-                            }
-                        }
-                    } else {
-                        Text("未选择角色", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .padding(inner)
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Text(
+                    text = resource.resource.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                if (resource.resource.type != ResourceType.FLOW) {
+                    ResourceMetaRow(label = "标签") {
+                        if (resource.tags.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                resource.tags.forEach { tag ->
+                                    TagBadge(tag = tag)
+                                }
+                            }
+                        } else {
+                            Text("无标签", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    ResourceMetaRow(label = "角色") {
+                        if (resource.characters.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                resource.characters.forEach { character ->
+                                    CharacterBadge(name = character.name)
+                                }
+                            }
+                        } else {
+                            Text("未选择角色", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    when (resource.resource.type) {
-                        ResourceType.TEXT -> {
-                            val quoteText = resource.resource.quoteText.orEmpty()
-                            if (quoteText.isNotBlank()) {
-                                val displayText = rememberFormattedText(quoteText)
-                                Text(displayText)
-                            }
-                            QuoteImagePager(images = quoteImages)
-                        }
-                        ResourceType.IMAGE -> {
-                            if (quoteImages.isNotEmpty()) {
-                                QuoteImagePager(images = quoteImages)
-                            } else {
-                                Text("图片加载中…")
-                            }
-                        }
-                        ResourceType.VIDEO -> {
-                            if (mediaUris.isNotEmpty()) {
-                                MediaPreviewPager(uris = mediaUris)
-                            } else if (mediaLoadFailed) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("视频加载失败")
-                                    AssistChip(
-                                        onClick = { mediaReloadKey += 1 },
-                                        label = { Text("重试") }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        when (resource.resource.type) {
+                            ResourceType.TEXT -> {
+                                val quoteText = resource.resource.quoteText.orEmpty()
+                                if (quoteText.isNotBlank()) {
+                                    PreviewTextBlock(
+                                        text = quoteText,
+                                        onEventSequence = handleEventSequence
                                     )
                                 }
-                            } else {
-                                Text("视频加载中…")
+                                QuoteImagePager(images = quoteImages)
                             }
-                        }
-                        ResourceType.SCENE -> {
-                            if (sceneMessages.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    sceneMessages.forEach { message ->
-                                        SceneBubble(message = message)
-                                    }
+                            ResourceType.IMAGE -> {
+                                if (quoteImages.isNotEmpty()) {
+                                    QuoteImagePager(images = quoteImages)
+                                } else {
+                                    Text("图片加载中…")
                                 }
-                            } else {
-                                Text(resource.resource.sceneJson.orEmpty())
                             }
-                        }
-                        ResourceType.FLOW -> {
-                            if (flowItems.isEmpty()) {
-                                Text("流程内容为空")
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    flowItems.forEach { item ->
-                                        Card(modifier = Modifier.fillMaxWidth()) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(12.dp),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                val title = item.title?.ifBlank { null } ?: typeLabel(item.type)
-                                                Text(title, style = MaterialTheme.typography.titleMedium)
-                                                when (item.type) {
-                                                    ResourceType.TEXT -> {
-                                                        val displayText = rememberFormattedText(item.text)
-                                                        Text(displayText)
-                                                    }
-                                                    ResourceType.SCENE -> {
-                                                        item.sceneMessages.forEach { message ->
-                                                            SceneBubble(message = message)
+                            ResourceType.VIDEO -> {
+                                if (mediaUris.isNotEmpty()) {
+                                    MediaPreviewPager(uris = mediaUris)
+                                } else if (mediaLoadFailed) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("视频加载失败")
+                                        AssistChip(
+                                            onClick = { mediaReloadKey += 1 },
+                                            label = { Text("重试") }
+                                        )
+                                    }
+                                } else {
+                                    Text("视频加载中…")
+                                }
+                            }
+                            ResourceType.SCENE -> {
+                                if (sceneMessages.isNotEmpty()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        sceneMessages.forEach { message ->
+                                            SceneBubble(
+                                                message = message,
+                                                highlightedSpeaker = highlightedSpeaker,
+                                                onEventSequence = handleEventSequence
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Text(resource.resource.sceneJson.orEmpty())
+                                }
+                            }
+                            ResourceType.FLOW -> {
+                                if (flowItems.isEmpty()) {
+                                    Text("流程内容为空")
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        flowItems.forEach { item ->
+                                            Card(modifier = Modifier.fillMaxWidth()) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    val title = item.title?.ifBlank { null } ?: typeLabel(item.type)
+                                                    Text(title, style = MaterialTheme.typography.titleMedium)
+                                                    when (item.type) {
+                                                        ResourceType.TEXT -> {
+                                                            PreviewTextBlock(
+                                                                text = item.text,
+                                                                onEventSequence = handleEventSequence
+                                                            )
                                                         }
-                                                    }
-                                                    ResourceType.IMAGE -> QuoteImagePager(images = item.images)
-                                                    ResourceType.VIDEO -> {
-                                                        if (item.mediaUris.isNotEmpty()) {
-                                                            MediaPreviewPager(uris = item.mediaUris)
-                                                        } else if (item.mediaFailed) {
-                                                            Text("视频加载失败")
-                                                        } else {
-                                                            Text("视频加载中…")
+                                                        ResourceType.SCENE -> {
+                                                            item.sceneMessages.forEach { message ->
+                                                                SceneBubble(
+                                                                    message = message,
+                                                                    highlightedSpeaker = highlightedSpeaker,
+                                                                    onEventSequence = handleEventSequence
+                                                                )
+                                                            }
                                                         }
+                                                        ResourceType.IMAGE -> QuoteImagePager(images = item.images)
+                                                        ResourceType.VIDEO -> {
+                                                            if (item.mediaUris.isNotEmpty()) {
+                                                                MediaPreviewPager(uris = item.mediaUris)
+                                                            } else if (item.mediaFailed) {
+                                                                Text("视频加载失败")
+                                                            } else {
+                                                                Text("视频加载中…")
+                                                            }
+                                                        }
+                                                        else -> {}
                                                     }
-                                                    else -> {}
                                                 }
                                             }
                                         }
@@ -280,6 +304,26 @@ fun ResourcePreviewScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+            if (eventRunner.overlayText != null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    Card(
+                        modifier = Modifier.padding(top = 24.dp),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = eventRunner.overlayText.orEmpty(),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -433,27 +477,43 @@ private fun decodeImageSource(item: String, vm: ResourceViewModel): android.grap
 }
 
 @Composable
-private fun SceneBubble(message: SceneMessage) {
+private fun SceneBubble(
+    message: SceneMessage,
+    highlightedSpeaker: String?,
+    onEventSequence: (EventSequence) -> Unit
+) {
+    val isHighlighted = highlightedSpeaker != null && highlightedSpeaker == message.speaker
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start
+        horizontalArrangement = if (isHighlighted) Arrangement.End else Arrangement.Start
     ) {
         Column(
             modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium)
+                .background(
+                    if (isHighlighted) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.shapes.medium
+                )
                 .padding(12.dp)
         ) {
             Text(
                 text = message.speaker,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = if (isHighlighted) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                }
             )
             Spacer(Modifier.height(4.dp))
-            val content = rememberFormattedText(message.content)
-            Text(text = content)
+            PreviewTextBlock(
+                text = message.content,
+                onEventSequence = onEventSequence,
+                textStyle = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }
+
 
 private fun parseSceneMessages(raw: String): List<SceneMessage> {
     return runCatching {
