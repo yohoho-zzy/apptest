@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -313,7 +314,7 @@ fun ResourcePreviewScreen(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     Card(
-                        modifier = Modifier.padding(top = 24.dp),
+                        modifier = Modifier.padding(top = inner.calculateTopPadding() + 24.dp),
                         colors = androidx.compose.material3.CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
