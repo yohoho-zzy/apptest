@@ -58,6 +58,11 @@ data class VideoUpdateItem(
     val uri: Uri? = null
 )
 
+data class SoundUpdateItem(
+    val path: String? = null,
+    val uri: Uri? = null
+)
+
 data class StoredImageResult(
     val imagePath: String,
     val motionVideoPath: String? = null
@@ -198,6 +203,23 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
+    fun addSoundGroup(title: String, uris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
+        viewModelScope.launch(Dispatchers.IO) {
+            if (characterIds.isEmpty()) return@launch
+            val storedUris = uris.mapNotNull { uri -> storeAudioToInternal(uri) }
+            if (storedUris.isEmpty()) return@launch
+            val payload = org.json.JSONArray(storedUris).toString()
+            repo.addResource(
+                ResourceEntity(
+                    type = ResourceType.SOUND,
+                    title = title,
+                    contentUriOrPath = payload
+                ),
+                tagIds,
+                characterIds
+            )
+        }
+
     fun addFlow(
         title: String,
         items: List<FlowUpdateItem>,
@@ -281,6 +303,22 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         updateResourceCharacters(resource.id, characterIds)
     }
 
+    fun updateSoundGroup(
+        resource: ResourceEntity,
+        title: String,
+        items: List<SoundUpdateItem>,
+        tagIds: List<Long>,
+        characterIds: List<Long>
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (characterIds.isEmpty()) return@launch
+        val newUris = resolveSoundItems(items)
+        if (newUris.isEmpty()) return@launch
+        val payload = org.json.JSONArray(newUris).toString()
+        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload))
+        updateResourceTags(resource.id, tagIds)
+        updateResourceCharacters(resource.id, characterIds)
+    }
+
     fun updateFlow(
         resource: ResourceEntity,
         title: String,
@@ -308,6 +346,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun resolveVideoItems(items: List<VideoUpdateItem>): List<String> {
         return items.mapNotNull { item ->
             item.path?.ifBlank { null } ?: item.uri?.let { uri -> storeVideoToInternal(uri) }
+        }.filter { it.isNotBlank() }
+    }
+
+    private suspend fun resolveSoundItems(items: List<SoundUpdateItem>): List<String> {
+        return items.mapNotNull { item ->
+            item.path?.ifBlank { null } ?: item.uri?.let { uri -> storeAudioToInternal(uri) }
         }.filter { it.isNotBlank() }
     }
 
@@ -351,6 +395,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 ResourceType.IMAGE -> obj.put("images", org.json.JSONArray(resolveImageItems(item.images)))
                 ResourceType.VIDEO -> obj.put("videos", org.json.JSONArray(resolveVideoItems(item.videos)))
+                ResourceType.SOUND -> obj.put("text", item.text.orEmpty())
                 ResourceType.FLOW -> obj.put("text", item.text.orEmpty())
             }
             array.put(obj)
@@ -399,7 +444,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             ?.sortedByDescending { it.lastModified() }
             ?.map { StoredMediaItem(path = Uri.fromFile(it).toString(), type = ResourceType.VIDEO) }
             .orEmpty()
-        return images + videos
+        val sounds = File(app.filesDir, "audio")
+            .listFiles()
+            ?.sortedByDescending { it.lastModified() }
+            ?.map { StoredMediaItem(path = Uri.fromFile(it).toString(), type = ResourceType.SOUND) }
+            .orEmpty()
+        return images + videos + sounds
     }
 
     fun restoreMediaToDirectory(path: String, type: ResourceType, directoryUri: Uri): Boolean {
@@ -412,6 +462,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val mime = when (type) {
             ResourceType.IMAGE -> "image/*"
             ResourceType.VIDEO -> "video/*"
+            ResourceType.SOUND -> "audio/*"
             else -> "*/*"
         }
         val target = tree.createFile(mime, sourceFile.name) ?: return false
@@ -471,6 +522,22 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private fun storeVideoToInternal(uri: Uri, deleteSource: Boolean = true): String? {
         return runCatching {
             val dir = File(getApplication<Application>().filesDir, "videos").apply { mkdirs() }
+            val target = File(dir, "media_${System.currentTimeMillis()}_${UUID.randomUUID()}.dat")
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(target).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            if (deleteSource) {
+                deleteSourceUri(uri)
+            }
+            Uri.fromFile(target).toString()
+        }.getOrNull()
+    }
+
+    private fun storeAudioToInternal(uri: Uri, deleteSource: Boolean = true): String? {
+        return runCatching {
+            val dir = File(getApplication<Application>().filesDir, "audio").apply { mkdirs() }
             val target = File(dir, "media_${System.currentTimeMillis()}_${UUID.randomUUID()}.dat")
             getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(target).use { output ->

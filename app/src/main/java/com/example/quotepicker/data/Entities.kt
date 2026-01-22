@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-enum class ResourceType { FLOW, TEXT, IMAGE, VIDEO, SCENE }
+enum class ResourceType { FLOW, TEXT, IMAGE, VIDEO, SOUND, SCENE }
 
 enum class TagCategoryType { CHARACTER, RESOURCE }
 
@@ -43,6 +43,30 @@ data class CharacterEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val description: String? = null,
+    val points: Int = 30,
+    val probability: Int = 1,
+    val probabilityDate: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "response_records",
+    primaryKeys = ["characterId", "tagId"]
+)
+data class ResponseRecordEntity(
+    val characterId: Long,
+    val tagId: Long,
+    val count: Int = 1,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "execution_settings")
+data class ExecutionSettingsEntity(
+    @PrimaryKey val id: Long = 1,
+    val buttonLabel: String = "祈求",
+    val successToast: String = "[]赐予了你[]",
+    val failureToast: String = "[]无视了你",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
@@ -91,6 +92,7 @@ import com.example.quotepicker.vm.ResourceViewModel
 import com.example.quotepicker.vm.SceneMessageDraft
 import com.example.quotepicker.vm.StoredMediaItem
 import com.example.quotepicker.vm.VideoUpdateItem
+import com.example.quotepicker.vm.SoundUpdateItem
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -261,6 +263,11 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     Spacer(Modifier.width(8.dp))
                     Text("上传视频组")
                 }
+                TextButton(onClick = { createMode = CreateMode.SoundGroup; showAddMenu = false }) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("上传声音组")
+                }
             }
         }
     }
@@ -339,11 +346,13 @@ private fun ManageStorageScreen(
     val context = LocalContext.current
     val imagesDir = remember { File(context.filesDir, "images").absolutePath }
     val videosDir = remember { File(context.filesDir, "videos").absolutePath }
+    val audioDir = remember { File(context.filesDir, "audio").absolutePath }
     var displayType by remember { mutableStateOf(ResourceType.IMAGE) }
     var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val filteredItems = remember(items, displayType) { items.filter { it.type == displayType } }
+    val displayTypes = listOf(ResourceType.IMAGE, ResourceType.VIDEO, ResourceType.SOUND)
 
     Scaffold(
         topBar = {
@@ -356,13 +365,16 @@ private fun ManageStorageScreen(
                 },
                 actions = {
                     TextButton(onClick = {
-                        displayType = if (displayType == ResourceType.IMAGE) {
-                            ResourceType.VIDEO
-                        } else {
-                            ResourceType.IMAGE
-                        }
+                        val index = displayTypes.indexOf(displayType).takeIf { it >= 0 } ?: 0
+                        displayType = displayTypes[(index + 1) % displayTypes.size]
                     }) {
-                        Text(if (displayType == ResourceType.IMAGE) "显示视频" else "显示图片")
+                        Text(
+                            when (displayType) {
+                                ResourceType.IMAGE -> "显示视频"
+                                ResourceType.VIDEO -> "显示音频"
+                                else -> "显示图片"
+                            }
+                        )
                     }
                     TextButton(onClick = onRefresh) { Text("刷新") }
                 }
@@ -380,6 +392,7 @@ private fun ManageStorageScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("图片目录：$imagesDir", style = MaterialTheme.typography.labelSmall)
                 Text("视频目录：$videosDir", style = MaterialTheme.typography.labelSmall)
+                Text("音频目录：$audioDir", style = MaterialTheme.typography.labelSmall)
             }
             Text("长按文件可选择恢复或删除", style = MaterialTheme.typography.labelSmall)
             if (filteredItems.isEmpty()) {
@@ -460,6 +473,7 @@ private fun StorageMediaRow(
             when (item.type) {
                 ResourceType.IMAGE -> vm.decodeUriToBitmap(Uri.parse(item.path))
                 ResourceType.VIDEO -> vm.decodeVideoFrame(Uri.parse(item.path))
+                ResourceType.SOUND -> null
                 else -> null
             }
         }
@@ -491,14 +505,24 @@ private fun StorageMediaRow(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (item.type == ResourceType.IMAGE) Icons.Default.Image else Icons.Default.Videocam,
+                    imageVector = when (item.type) {
+                        ResourceType.IMAGE -> Icons.Default.Image
+                        ResourceType.VIDEO -> Icons.Default.Videocam
+                        ResourceType.SOUND -> Icons.Default.MusicNote
+                        else -> Icons.Default.Videocam
+                    },
                     contentDescription = null
                 )
             }
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (item.type == ResourceType.IMAGE) "图片" else "视频",
+                text = when (item.type) {
+                    ResourceType.IMAGE -> "图片"
+                    ResourceType.VIDEO -> "视频"
+                    ResourceType.SOUND -> "音频"
+                    else -> "资源"
+                },
                 style = MaterialTheme.typography.labelMedium
             )
             Text(
@@ -516,6 +540,7 @@ private sealed class CreateMode {
     data object ImageGroup : CreateMode()
     data object Scene : CreateMode()
     data object VideoGroup : CreateMode()
+    data object SoundGroup : CreateMode()
 }
 
 @Composable
@@ -535,6 +560,7 @@ private fun FilterBar(
                 ResourceType.TEXT,
                 ResourceType.IMAGE,
                 ResourceType.VIDEO,
+                ResourceType.SOUND,
                 ResourceType.SCENE
             )
             orderedTypes.forEach { type ->
@@ -561,6 +587,7 @@ private fun typeLabel(type: ResourceType): String = when (type) {
     ResourceType.FLOW -> "流程"
     ResourceType.IMAGE -> "图片"
     ResourceType.VIDEO -> "视频"
+    ResourceType.SOUND -> "声音"
     ResourceType.TEXT -> "文本"
     ResourceType.SCENE -> "情景"
 }
@@ -696,6 +723,7 @@ private fun ResourceCreateScreen(
     var selectedCharacters by remember { mutableStateOf(setOf<Long>()) }
     var imageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var videoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var soundUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var showTagPicker by remember { mutableStateOf(false) }
     var showCharacterPicker by remember { mutableStateOf(false) }
     var showSceneDialog by remember { mutableStateOf(false) }
@@ -723,6 +751,15 @@ private fun ResourceCreateScreen(
             )
         }
     }
+    val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        soundUris = uris
+        uris.forEach { uri ->
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+    }
 
     val screenTitle = when (mode) {
         CreateMode.Flow -> "创建流程"
@@ -730,6 +767,7 @@ private fun ResourceCreateScreen(
         CreateMode.ImageGroup -> "上传图片组"
         CreateMode.Scene -> "创建情景"
         CreateMode.VideoGroup -> "上传视频组"
+        CreateMode.SoundGroup -> "上传声音组"
     }
 
     val titleLabel = when (mode) {
@@ -738,6 +776,7 @@ private fun ResourceCreateScreen(
         CreateMode.Scene -> "情景名"
         CreateMode.ImageGroup -> "名称"
         CreateMode.VideoGroup -> "名称"
+        CreateMode.SoundGroup -> "名称"
     }
 
     val canSubmit = title.isNotBlank() && selectedCharacters.isNotEmpty() && when (mode) {
@@ -746,6 +785,7 @@ private fun ResourceCreateScreen(
         CreateMode.ImageGroup -> imageUris.isNotEmpty()
         CreateMode.Scene -> sceneMessages.isNotEmpty()
         CreateMode.VideoGroup -> videoUris.isNotEmpty()
+        CreateMode.SoundGroup -> soundUris.isNotEmpty()
     }
 
     val selectedSpeakerNames = remember(selectedCharacters, characters) {
@@ -801,6 +841,12 @@ private fun ResourceCreateScreen(
                             CreateMode.VideoGroup -> vm.addVideoGroup(
                                 title.trim(),
                                 videoUris,
+                                selectedTags.toList(),
+                                selectedCharacters.toList()
+                            )
+                            CreateMode.SoundGroup -> vm.addSoundGroup(
+                                title.trim(),
+                                soundUris,
                                 selectedTags.toList(),
                                 selectedCharacters.toList()
                             )
@@ -1009,6 +1055,14 @@ private fun ResourceCreateScreen(
                     }
                     Text(if (videoUris.isEmpty()) "未选择视频" else "已选择 ${videoUris.size} 个视频")
                 }
+                CreateMode.SoundGroup -> {
+                    TextButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("选择音频")
+                    }
+                    Text(if (soundUris.isEmpty()) "未选择音频" else "已选择 ${soundUris.size} 个音频")
+                }
             }
             ResourceTagPickerRow(
                 label = "标签",
@@ -1127,6 +1181,7 @@ private fun ResourceEditScreen(
         mutableStateOf(parseImageItems(resource.resource.contentUriOrPath, resource.resource.quoteImageBase64))
     }
     var videoItems by remember { mutableStateOf(parseVideoItems(resource.resource.contentUriOrPath)) }
+    var soundItems by remember { mutableStateOf(parseSoundItems(resource.resource.contentUriOrPath)) }
     var flowItems by remember { mutableStateOf(parseFlowItems(resource.resource.sceneJson)) }
     var showSceneDialog by remember { mutableStateOf(false) }
     var editSceneIndex by remember { mutableStateOf<Int?>(null) }
@@ -1157,6 +1212,17 @@ private fun ResourceEditScreen(
         }
         videoItems = updated
     }
+    val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val updated = soundItems.toMutableList()
+        uris.forEach { uri ->
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            updated.add(SoundUpdateItem(uri = uri))
+        }
+        soundItems = updated
+    }
 
     val selectedSpeakerNames = remember(selectedCharacters, characters) {
         characters.filter { selectedCharacters.contains(it.id) }.map { it.name }
@@ -1176,6 +1242,7 @@ private fun ResourceEditScreen(
         ResourceType.TEXT -> textContent.isNotBlank()
         ResourceType.IMAGE -> imageItems.isNotEmpty()
         ResourceType.VIDEO -> videoItems.isNotEmpty()
+        ResourceType.SOUND -> soundItems.isNotEmpty()
         ResourceType.SCENE -> sceneMessages.isNotEmpty()
     }
 
@@ -1216,6 +1283,13 @@ private fun ResourceEditScreen(
                                 resource.resource,
                                 title.trim(),
                                 videoItems,
+                                selectedTags.toList(),
+                                selectedCharacters.toList()
+                            )
+                            ResourceType.SOUND -> vm.updateSoundGroup(
+                                resource.resource,
+                                title.trim(),
+                                soundItems,
                                 selectedTags.toList(),
                                 selectedCharacters.toList()
                             )
@@ -1400,6 +1474,55 @@ private fun ResourceEditScreen(
                                         }
                                         IconButton(onClick = {
                                             videoItems = videoItems.toMutableList().also { it.removeAt(index) }
+                                        }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "删除")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ResourceType.SOUND -> {
+                    TextButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("追加音频")
+                    }
+                    if (soundItems.isEmpty()) {
+                        Text("暂无音频", style = MaterialTheme.typography.labelSmall)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            soundItems.forEachIndexed { index, item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.MusicNote, contentDescription = null)
+                                    Spacer(Modifier.width(12.dp))
+                                    val label = item.path?.let { "音频 ${index + 1}" } ?: "新音频 ${index + 1}"
+                                    Text(text = label, modifier = Modifier.weight(1f))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        IconButton(onClick = {
+                                            if (index > 0) {
+                                                soundItems = soundItems.toMutableList().also {
+                                                    it.add(index - 1, it.removeAt(index))
+                                                }
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移")
+                                        }
+                                        IconButton(onClick = {
+                                            if (index < soundItems.lastIndex) {
+                                                soundItems = soundItems.toMutableList().also {
+                                                    it.add(index + 1, it.removeAt(index))
+                                                }
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                        }
+                                        IconButton(onClick = {
+                                            soundItems = soundItems.toMutableList().also { it.removeAt(index) }
                                         }) {
                                             Icon(Icons.Default.Delete, contentDescription = "删除")
                                         }
@@ -2188,6 +2311,12 @@ private fun parseVideoItems(raw: String?): List<VideoUpdateItem> {
     return list.map { VideoUpdateItem(path = it) }
 }
 
+private fun parseSoundItems(raw: String?): List<SoundUpdateItem> {
+    if (raw.isNullOrBlank()) return emptyList()
+    val list = parsePathList(raw)
+    return list.map { SoundUpdateItem(path = it) }
+}
+
 private fun parsePathList(raw: String): List<String> {
     return if (raw.trim().startsWith("[")) {
         runCatching {
@@ -2259,6 +2388,10 @@ private fun resourceSummary(resource: ResourceWithTagsCharacters): String {
         ResourceType.VIDEO -> {
             val videos = parseVideoItems(data.contentUriOrPath)
             if (videos.isEmpty()) "" else "视频 ${videos.size} 个"
+        }
+        ResourceType.SOUND -> {
+            val sounds = parseSoundItems(data.contentUriOrPath)
+            if (sounds.isEmpty()) "" else "音频 ${sounds.size} 个"
         }
         else -> ""
     }

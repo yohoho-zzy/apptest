@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import java.io.File
+import java.time.LocalDate
 import org.json.JSONArray
 import kotlinx.coroutines.flow.Flow
 
@@ -15,6 +16,8 @@ class Repository private constructor(context: Context) {
     private val characterDao = db.characterDao()
     private val resourceDao = db.resourceDao()
     private val crossRefDao = db.crossRefDao()
+    private val responseRecordDao = db.responseRecordDao()
+    private val executionSettingsDao = db.executionSettingsDao()
 
     fun observeCategories(): Flow<List<TagCategoryEntity>> = categoryDao.observeCategories()
     fun observeTagsByCategory(categoryId: Long): Flow<List<TagEntity>> = tagDao.observeTagsByCategory(categoryId)
@@ -25,6 +28,8 @@ class Repository private constructor(context: Context) {
     fun observeCharactersWithTags(): Flow<List<CharacterWithTags>> = characterDao.observeCharactersWithTags()
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
+    fun observeResponseRecords(): Flow<List<ResponseRecordEntity>> = responseRecordDao.observeRecords()
+    fun observeExecutionSettings(): Flow<ExecutionSettingsEntity?> = executionSettingsDao.observeSettings()
 
     data class ExportPackage(
         val snapshot: BackupSnapshot,
@@ -54,6 +59,8 @@ class Repository private constructor(context: Context) {
             resourceTagRefs = crossRefDao.listResourceTags(),
             characterTagRefs = crossRefDao.listCharacterTags(),
             resourceCharacterRefs = crossRefDao.listResourceCharacters(),
+            responseRecords = responseRecordDao.listAll(),
+            executionSettings = executionSettingsDao.getSettings(),
             media = mediaItems
         )
         return ExportPackage(snapshot = snapshot, mediaPayloads = mediaPayloads)
@@ -64,7 +71,8 @@ class Repository private constructor(context: Context) {
         val restoredResources = snapshot.resources.map { resource ->
             when (resource.type) {
                 ResourceType.IMAGE,
-                ResourceType.VIDEO -> resource.copy(
+                ResourceType.VIDEO,
+                ResourceType.SOUND -> resource.copy(
                     contentUriOrPath = replacePathsInPayload(resource.contentUriOrPath, mediaMapping)
                 )
                 ResourceType.FLOW -> resource.copy(
@@ -73,6 +81,8 @@ class Repository private constructor(context: Context) {
                 else -> resource
             }
         }
+        responseRecordDao.deleteAll()
+        executionSettingsDao.deleteAll()
         crossRefDao.deleteAllResourceTags()
         crossRefDao.deleteAllCharacterTags()
         crossRefDao.deleteAllResourceCharacters()
@@ -87,6 +97,10 @@ class Repository private constructor(context: Context) {
         if (snapshot.resourceTagRefs.isNotEmpty()) crossRefDao.insertResourceTags(snapshot.resourceTagRefs)
         if (snapshot.characterTagRefs.isNotEmpty()) crossRefDao.insertCharacterTags(snapshot.characterTagRefs)
         if (snapshot.resourceCharacterRefs.isNotEmpty()) crossRefDao.insertResourceCharacters(snapshot.resourceCharacterRefs)
+        if (snapshot.responseRecords.isNotEmpty()) {
+            snapshot.responseRecords.forEach { responseRecordDao.upsert(it) }
+        }
+        snapshot.executionSettings?.let { executionSettingsDao.upsert(it) }
     }
 
     suspend fun addCategory(name: String, type: TagCategoryType) =
@@ -114,7 +128,14 @@ class Repository private constructor(context: Context) {
     suspend fun updateTag(tag: TagEntity) = tagDao.update(tag.copy(updatedAt = System.currentTimeMillis()))
     suspend fun deleteTag(tag: TagEntity) = tagDao.delete(tag)
 
-    suspend fun addCharacter(name: String) = characterDao.insert(CharacterEntity(name = name))
+    suspend fun addCharacter(name: String) = characterDao.insert(
+        CharacterEntity(
+            name = name,
+            points = 30,
+            probability = (1..10).random(),
+            probabilityDate = currentDateString()
+        )
+    )
     suspend fun updateCharacter(character: CharacterEntity) =
         characterDao.update(character.copy(updatedAt = System.currentTimeMillis()))
 
@@ -156,6 +177,75 @@ class Repository private constructor(context: Context) {
     suspend fun resourceIdsForCharacter(characterId: Long) = crossRefDao.resourceIdsForCharacter(characterId)
     suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
 
+    suspend fun updateCharacterPoints(characterId: Long, points: Int) {
+        val characters = characterDao.listAll()
+        val target = characters.firstOrNull { it.id == characterId } ?: return
+        characterDao.update(target.copy(points = points.coerceIn(0, 30), updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun updateCharacterProbability(characterId: Long, probability: Int, date: String) {
+        val characters = characterDao.listAll()
+        val target = characters.firstOrNull { it.id == characterId } ?: return
+        characterDao.update(
+            target.copy(
+                probability = probability.coerceIn(1, 10),
+                probabilityDate = date,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun refreshDailyProbabilities() {
+        val today = currentDateString()
+        val characters = characterDao.listAll()
+        characters.forEach { character ->
+            if (character.probabilityDate != today) {
+                characterDao.update(
+                    character.copy(
+                        probability = (1..10).random(),
+                        probabilityDate = today,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun ensureExecutionSettings(): ExecutionSettingsEntity {
+        val existing = executionSettingsDao.getSettings()
+        if (existing != null) return existing
+        val settings = ExecutionSettingsEntity()
+        executionSettingsDao.upsert(settings)
+        return settings
+    }
+
+    suspend fun updateExecutionSettings(settings: ExecutionSettingsEntity) {
+        executionSettingsDao.upsert(settings.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun addResponseRecord(characterId: Long, tagId: Long, count: Int = 1) {
+        val existing = responseRecordDao.findRecord(characterId, tagId)
+        val nextCount = (existing?.count ?: 0) + count
+        responseRecordDao.upsert(
+            ResponseRecordEntity(
+                characterId = characterId,
+                tagId = tagId,
+                count = nextCount,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun consumeResponseRecord(characterId: Long, tagId: Long) {
+        val existing = responseRecordDao.findRecord(characterId, tagId) ?: return
+        val nextCount = existing.count - 1
+        if (nextCount <= 0) {
+            responseRecordDao.deleteRecord(characterId, tagId)
+        } else {
+            responseRecordDao.upsert(existing.copy(count = nextCount))
+        }
+    }
+
     private fun collectMediaPaths(resources: List<ResourceEntity>): List<Pair<String, ResourceType>> {
         val unique = linkedSetOf<Pair<String, ResourceType>>()
         resources.forEach { resource ->
@@ -166,6 +256,11 @@ class Repository private constructor(context: Context) {
                     }
                 }
                 ResourceType.VIDEO -> {
+                    parseMediaPaths(resource.contentUriOrPath).forEach { path ->
+                        unique.add(path to resource.type)
+                    }
+                }
+                ResourceType.SOUND -> {
                     parseMediaPaths(resource.contentUriOrPath).forEach { path ->
                         unique.add(path to resource.type)
                     }
@@ -299,6 +394,7 @@ class Repository private constructor(context: Context) {
             val folder = when (item.type) {
                 ResourceType.IMAGE -> "images"
                 ResourceType.VIDEO -> "videos"
+                ResourceType.SOUND -> "audio"
                 else -> "media"
             }
             val dir = File(appContext.filesDir, folder).apply { mkdirs() }
@@ -387,6 +483,8 @@ class Repository private constructor(context: Context) {
             array.toString()
         }.getOrDefault(payload)
     }
+
+    private fun currentDateString(): String = LocalDate.now().toString()
 
     companion object {
         const val ORPHAN_CATEGORY_NAME = "未分类"
