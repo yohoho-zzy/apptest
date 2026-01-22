@@ -2,6 +2,7 @@ package com.example.quotepicker.ui.components
 
 import android.net.Uri
 import android.util.Log
+import android.media.MediaPlayer
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -90,6 +91,7 @@ fun ResourcePreviewScreen(
 ) {
     var quoteImages by remember { mutableStateOf<List<ImagePreviewItem>>(emptyList()) }
     var mediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var soundUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var mediaLoadFailed by remember { mutableStateOf(false) }
     var mediaReloadKey by remember { mutableStateOf(0) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
@@ -134,6 +136,19 @@ fun ResourcePreviewScreen(
                     mediaLoadFailed = true
                 }
                 uriList
+            }
+            else -> emptyList()
+        }
+        soundUris = when (res.type) {
+            ResourceType.SOUND -> {
+                val raw = res.contentUriOrPath
+                if (raw.isNullOrBlank()) {
+                    Log.e("ResourcePreview", "Missing media uri for type=${res.type} id=${res.id}")
+                    mediaLoadFailed = true
+                    return@LaunchedEffect
+                }
+                val paths = parseMediaPaths(raw)
+                paths.mapNotNull { path -> path.takeIf { it.isNotBlank() }?.let(Uri::parse) }
             }
             else -> emptyList()
         }
@@ -242,6 +257,15 @@ fun ResourcePreviewScreen(
                                     }
                                 } else {
                                     Text("视频加载中…")
+                                }
+                            }
+                            ResourceType.SOUND -> {
+                                if (soundUris.isNotEmpty()) {
+                                    AudioPreviewList(uris = soundUris)
+                                } else if (mediaLoadFailed) {
+                                    Text("音频加载失败")
+                                } else {
+                                    Text("音频加载中…")
                                 }
                             }
                             ResourceType.SCENE -> {
@@ -420,6 +444,39 @@ private fun parseMediaPaths(raw: String): List<String> {
         }.getOrDefault(listOf(raw))
     }
     return listOf(raw)
+}
+
+@Composable
+private fun AudioPreviewList(uris: List<Uri>) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val playerState = remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            playerState.value?.release()
+            playerState.value = null
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        uris.forEachIndexed { index, uri ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = "音频 ${index + 1}", style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = {
+                    playerState.value?.release()
+                    playerState.value = MediaPlayer().apply {
+                        setDataSource(context, uri)
+                        setOnPreparedListener { it.start() }
+                        prepareAsync()
+                    }
+                }) {
+                    Text("播放")
+                }
+            }
+        }
+    }
 }
 
 private fun parseImagePayloadEntries(payload: String): List<ImagePayloadEntry> {
@@ -659,6 +716,7 @@ private fun typeLabel(type: ResourceType): String = when (type) {
     ResourceType.TEXT -> "文本"
     ResourceType.IMAGE -> "图片"
     ResourceType.VIDEO -> "视频"
+    ResourceType.SOUND -> "声音"
     ResourceType.SCENE -> "情景"
 }
 

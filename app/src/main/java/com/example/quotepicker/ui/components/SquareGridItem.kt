@@ -28,6 +28,7 @@ fun SquareGridItem(
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    bottomContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -65,6 +66,7 @@ fun SquareGridItem(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                bottomContent?.invoke()
             }
         }
     }

@@ -3,6 +3,7 @@ package com.example.quotepicker.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -167,4 +168,40 @@ interface CrossRefDao {
 
     @Query("DELETE FROM resource_character_cross_ref")
     suspend fun deleteAllResourceCharacters()
+}
+
+@Dao
+interface ResponseRecordDao {
+    @Query("SELECT * FROM response_records")
+    fun observeRecords(): Flow<List<ResponseRecordEntity>>
+
+    @Query("SELECT * FROM response_records")
+    suspend fun listAll(): List<ResponseRecordEntity>
+
+    @Query("SELECT * FROM response_records WHERE characterId = :characterId AND tagId = :tagId LIMIT 1")
+    suspend fun findRecord(characterId: Long, tagId: Long): ResponseRecordEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(record: ResponseRecordEntity)
+
+    @Query("DELETE FROM response_records WHERE characterId = :characterId AND tagId = :tagId")
+    suspend fun deleteRecord(characterId: Long, tagId: Long)
+
+    @Query("DELETE FROM response_records")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface ExecutionSettingsDao {
+    @Query("SELECT * FROM execution_settings WHERE id = 1 LIMIT 1")
+    fun observeSettings(): Flow<ExecutionSettingsEntity?>
+
+    @Query("SELECT * FROM execution_settings WHERE id = 1 LIMIT 1")
+    suspend fun getSettings(): ExecutionSettingsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(settings: ExecutionSettingsEntity)
+
+    @Query("DELETE FROM execution_settings")
+    suspend fun deleteAll()
 }

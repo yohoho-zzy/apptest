@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,12 +61,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.CharacterWithTags
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
+import com.example.quotepicker.ui.components.PreviewTextBlock
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.tagTextColor
@@ -76,6 +79,7 @@ import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.CharacterViewModel
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
+import android.widget.Toast
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -98,8 +102,9 @@ fun CharacterScreen(
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
     var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val pagerScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             vm.importSnapshot(uri)
@@ -175,6 +180,20 @@ fun CharacterScreen(
                         items(ui.characters, key = { it.character.id }) { character ->
                             SquareGridItem(
                                 title = character.character.name,
+                                bottomContent = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            text = character.character.points.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                        Text(
+                                            text = "${character.character.probability}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF1565C0)
+                                        )
+                                    }
+                                },
                                 onClick = { selectedId = character.character.id },
                                 onLongClick = { bottomSheetTarget = character }
                             )
@@ -190,8 +209,18 @@ fun CharacterScreen(
                     val tagMatch = if (selectedTagIds.isEmpty()) true else res.tags.any { selectedTagIds.contains(it.id) }
                     typeMatch && tagMatch
                 }
+                val narrativeCategory = resourceUi.categories.firstOrNull { it.name == "叙事类别" }
+                val narrativeTags = narrativeCategory?.let { category ->
+                    resourceUi.tags.filter { it.categoryId == category.id }
+                }.orEmpty()
+                val introCandidates = resources.filter { res ->
+                    res.characters.any { c -> c.id == char.id } &&
+                        res.resource.type == ResourceType.TEXT &&
+                        res.resource.title.take(2) == "要点"
+                }
+                val introText = introCandidates.firstOrNull()?.resource?.quoteText.orEmpty()
                 TabRow(selectedTabIndex = pagerState.currentPage) {
-                    listOf("标签", "资源").forEachIndexed { index, title ->
+                    listOf("标签", "要点", "资源").forEachIndexed { index, title ->
                         Tab(
                             selected = pagerState.currentPage == index,
                             onClick = { pagerScope.launch { pagerState.animateScrollToPage(index) } },
@@ -218,6 +247,83 @@ fun CharacterScreen(
                             }
                         }
                         1 -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(onClick = {
+                                        val current = char
+                                        if (current.points <= 0) {
+                                            vm.updateCharacterPoints(current.id, 30)
+                                            val fallbackTag = narrativeTags.firstOrNull()
+                                            if (fallbackTag != null) {
+                                                vm.addResponseRecord(current.id, fallbackTag.id, count = 3)
+                                                Toast.makeText(
+                                                    context,
+                                                    fillTemplate(
+                                                        ui.executionSettings.successToast,
+                                                        listOf(current.name, fallbackTag.name)
+                                                    ),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } else {
+                                                Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            vm.updateCharacterPoints(current.id, current.points - 1)
+                                            val hit = (1..100).random() <= current.probability
+                                            if (hit) {
+                                                val pick = narrativeTags.randomOrNull()
+                                                if (pick != null) {
+                                                    vm.addResponseRecord(current.id, pick.id)
+                                                    Toast.makeText(
+                                                        context,
+                                                        fillTemplate(
+                                                            ui.executionSettings.successToast,
+                                                            listOf(current.name, pick.name)
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } else {
+                                                    Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    fillTemplate(ui.executionSettings.failureToast, listOf(current.name)),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }) {
+                                        Text(ui.executionSettings.buttonLabel)
+                                    }
+                                    Text(
+                                        text = char.points.toString(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                    Text(
+                                        text = "${char.probability}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF1565C0)
+                                    )
+                                }
+                                if (introText.isBlank()) {
+                                    Text("暂无要点", style = MaterialTheme.typography.labelMedium)
+                                } else {
+                                    PreviewTextBlock(text = introText, onEventSequence = {})
+                                }
+                            }
+                        }
+                        2 -> {
                             Column(Modifier.fillMaxSize()) {
                                 Spacer(Modifier.height(12.dp))
                                 CharacterResourceFilterBar(
@@ -439,6 +545,7 @@ private fun CharacterResourceFilterBar(
                 ResourceType.TEXT,
                 ResourceType.IMAGE,
                 ResourceType.VIDEO,
+                ResourceType.SOUND,
                 ResourceType.SCENE
             )
             orderedTypes.forEach { type ->
@@ -489,8 +596,17 @@ private fun typeLabel(type: ResourceType): String = when (type) {
     ResourceType.FLOW -> "流程"
     ResourceType.IMAGE -> "图片"
     ResourceType.VIDEO -> "视频"
+    ResourceType.SOUND -> "声音"
     ResourceType.TEXT -> "文本"
     ResourceType.SCENE -> "情景"
+}
+
+private fun fillTemplate(template: String, values: List<String>): String {
+    var result = template
+    values.forEach { value ->
+        result = result.replaceFirst("[]", value)
+    }
+    return result
 }
 
 @Composable

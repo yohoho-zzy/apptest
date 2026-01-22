@@ -29,9 +29,11 @@ class Converters {
         ResourceEntity::class,
         ResourceTagCrossRef::class,
         CharacterTagCrossRef::class,
-        ResourceCharacterCrossRef::class
+        ResourceCharacterCrossRef::class,
+        ResponseRecordEntity::class,
+        ExecutionSettingsEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +43,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun characterDao(): CharacterDao
     abstract fun resourceDao(): ResourceDao
     abstract fun crossRefDao(): CrossRefDao
+    abstract fun responseRecordDao(): ResponseRecordDao
+    abstract fun executionSettingsDao(): ExecutionSettingsDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null

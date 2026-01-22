@@ -11,13 +11,15 @@ data class BackupSnapshot(
     val resourceTagRefs: List<ResourceTagCrossRef>,
     val characterTagRefs: List<CharacterTagCrossRef>,
     val resourceCharacterRefs: List<ResourceCharacterCrossRef>,
+    val responseRecords: List<ResponseRecordEntity> = emptyList(),
+    val executionSettings: ExecutionSettingsEntity? = null,
     val media: List<MediaBackupItem> = emptyList()
 ) {
     fun toJsonString(): String = toJson().toString()
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
-            put("version", 3)
+            put("version", 4)
             put("categories", JSONArray(categories.map(::categoryToJson)))
             put("tags", JSONArray(tags.map(::tagToJson)))
             put("characters", JSONArray(characters.map(::characterToJson)))
@@ -25,6 +27,8 @@ data class BackupSnapshot(
             put("resourceTagRefs", JSONArray(resourceTagRefs.map(::resourceTagToJson)))
             put("characterTagRefs", JSONArray(characterTagRefs.map(::characterTagToJson)))
             put("resourceCharacterRefs", JSONArray(resourceCharacterRefs.map(::resourceCharacterToJson)))
+            put("responseRecords", JSONArray(responseRecords.map(::responseRecordToJson)))
+            executionSettings?.let { put("executionSettings", executionSettingsToJson(it)) }
             put("media", JSONArray(media.map(::mediaToJson)))
         }
     }
@@ -40,6 +44,8 @@ data class BackupSnapshot(
                 resourceTagRefs = parseArray(obj, "resourceTagRefs", ::resourceTagFromJson),
                 characterTagRefs = parseArray(obj, "characterTagRefs", ::characterTagFromJson),
                 resourceCharacterRefs = parseArray(obj, "resourceCharacterRefs", ::resourceCharacterFromJson),
+                responseRecords = parseArray(obj, "responseRecords", ::responseRecordFromJson),
+                executionSettings = obj.optJSONObject("executionSettings")?.let(::executionSettingsFromJson),
                 media = parseArray(obj, "media", ::mediaFromJson)
             )
         }
@@ -75,6 +81,9 @@ private fun characterToJson(character: CharacterEntity): JSONObject =
         .put("id", character.id)
         .put("name", character.name)
         .put("description", character.description)
+        .put("points", character.points)
+        .put("probability", character.probability)
+        .put("probabilityDate", character.probabilityDate)
         .put("createdAt", character.createdAt)
         .put("updatedAt", character.updatedAt)
 
@@ -104,6 +113,22 @@ private fun resourceCharacterToJson(ref: ResourceCharacterCrossRef): JSONObject 
     JSONObject()
         .put("resourceId", ref.resourceId)
         .put("characterId", ref.characterId)
+
+private fun responseRecordToJson(record: ResponseRecordEntity): JSONObject =
+    JSONObject()
+        .put("characterId", record.characterId)
+        .put("tagId", record.tagId)
+        .put("count", record.count)
+        .put("createdAt", record.createdAt)
+
+private fun executionSettingsToJson(settings: ExecutionSettingsEntity): JSONObject =
+    JSONObject()
+        .put("id", settings.id)
+        .put("buttonLabel", settings.buttonLabel)
+        .put("successToast", settings.successToast)
+        .put("failureToast", settings.failureToast)
+        .put("createdAt", settings.createdAt)
+        .put("updatedAt", settings.updatedAt)
 
 private fun mediaToJson(item: MediaBackupItem): JSONObject =
     JSONObject().apply {
@@ -137,6 +162,9 @@ private fun characterFromJson(obj: JSONObject): CharacterEntity =
         id = obj.getLong("id"),
         name = obj.getString("name"),
         description = readNullableString(obj, "description"),
+        points = obj.optInt("points", 30),
+        probability = obj.optInt("probability", 1),
+        probabilityDate = readNullableString(obj, "probabilityDate"),
         createdAt = obj.getLong("createdAt"),
         updatedAt = obj.getLong("updatedAt")
     )
@@ -170,6 +198,24 @@ private fun resourceCharacterFromJson(obj: JSONObject): ResourceCharacterCrossRe
     ResourceCharacterCrossRef(
         resourceId = obj.getLong("resourceId"),
         characterId = obj.getLong("characterId")
+    )
+
+private fun responseRecordFromJson(obj: JSONObject): ResponseRecordEntity =
+    ResponseRecordEntity(
+        characterId = obj.getLong("characterId"),
+        tagId = obj.getLong("tagId"),
+        count = obj.optInt("count", 1),
+        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+    )
+
+private fun executionSettingsFromJson(obj: JSONObject): ExecutionSettingsEntity =
+    ExecutionSettingsEntity(
+        id = obj.optLong("id", 1),
+        buttonLabel = obj.optString("buttonLabel", "祈求"),
+        successToast = obj.optString("successToast", "[]赐予了你[]"),
+        failureToast = obj.optString("failureToast", "[]无视了你"),
+        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
     )
 
 private fun mediaFromJson(obj: JSONObject): MediaBackupItem =

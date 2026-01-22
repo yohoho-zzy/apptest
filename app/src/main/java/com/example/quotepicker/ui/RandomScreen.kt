@@ -1,332 +1,303 @@
 package com.example.quotepicker.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.quotepicker.data.ExecutionSettingsEntity
+import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
-import com.example.quotepicker.ui.components.CharacterBadge
-import com.example.quotepicker.ui.components.TagBadge
-import com.example.quotepicker.ui.components.PreviewTextBlock
-import com.example.quotepicker.ui.components.sortTagsForDisplay
-import com.example.quotepicker.ui.components.rememberEventSequenceRunner
-import com.example.quotepicker.data.ResourceType
-import com.example.quotepicker.data.TagCategoryEntity
-import com.example.quotepicker.data.TagEntity
-import com.example.quotepicker.vm.RandomViewModel
+import com.example.quotepicker.vm.ExecutionViewModel
 import com.example.quotepicker.vm.ResourceViewModel
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
+private data class ExecutionResourceItem(
+    val resource: ResourceWithTagsCharacters,
+    val characterId: Long,
+    val characterName: String,
+    val tagName: String
+)
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun RandomScreen(modifier: Modifier = Modifier, vm: RandomViewModel = viewModel(), resourceVm: ResourceViewModel = viewModel()) {
+fun ExecutionScreen(
+    modifier: Modifier = Modifier,
+    vm: ExecutionViewModel = viewModel(),
+    resourceVm: ResourceViewModel = viewModel()
+) {
     val ui by vm.uiState.collectAsState()
+    var showSettings by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
-    var showTagDialog by remember { mutableStateOf(false) }
-    var showIntro by remember { mutableStateOf(false) }
-    val eventRunner = rememberEventSequenceRunner()
+    var previewTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
+    var executionItems by remember { mutableStateOf<List<ExecutionResourceItem>>(emptyList()) }
+    var completionTarget by remember { mutableStateOf<ExecutionResourceItem?>(null) }
+    val context = LocalContext.current
 
-    if (showPreview && ui.selectedResource != null) {
+    if (showPreview && previewTarget != null) {
         ResourcePreviewScreen(
-            resource = ui.selectedResource!!,
+            resource = previewTarget!!,
             vm = resourceVm,
-            onBack = { showPreview = false }
+            onBack = {
+                showPreview = false
+                previewTarget = null
+            }
         )
         return
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            Modifier
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    vm.randomCharacter()
-                    showIntro = false
-                }) {
-                    Icon(Icons.Default.Casino, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("随机角色")
-                }
-                Button(onClick = { showIntro = true }, enabled = ui.selectedCharacter != null) {
-                    Text("显示介绍")
-                }
-            }
-            if (ui.selectedCharacter == null) {
-                Text("未选择角色")
-            } else {
-                CharacterBadge(name = ui.selectedCharacter!!.name)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showTagDialog = true }) {
-                        Text("资源标签筛选(${ui.selectedTagIds.size})")
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text("执行") },
+                actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
                 }
-                if (ui.selectedTagIds.isEmpty()) {
-                    Text("未选择标签")
+            )
+        }
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .padding(inner)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("响应记录", style = MaterialTheme.typography.titleMedium)
+                if (ui.records.isEmpty()) {
+                    Text("暂无响应记录", style = MaterialTheme.typography.labelMedium)
                 } else {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        sortTagsForDisplay(
-                            ui.tags.filter { ui.selectedTagIds.contains(it.id) },
-                            ui.categories
-                        ).forEach { tag ->
-                            TagBadge(tag = tag)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ui.records.forEach { record ->
+                            val label = buildString {
+                                append(record.characterName)
+                                append("的")
+                                append(record.tagName)
+                                if (record.count > 1) {
+                                    append("×")
+                                    append(record.count)
+                                }
+                            }
+                            Button(onClick = {
+                                vm.consumeRecord(record.characterId, record.tagId)
+                                val candidates = ui.resources.filter { res ->
+                                    res.characters.any { it.id == record.characterId } &&
+                                        res.tags.any { it.id == record.tagId }
+                                }
+                                val picked = candidates.randomOrNull()
+                                if (picked == null) {
+                                    Toast.makeText(context, "未找到匹配资源", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                executionItems = executionItems + ExecutionResourceItem(
+                                    resource = picked,
+                                    characterId = record.characterId,
+                                    characterName = record.characterName,
+                                    tagName = record.tagName
+                                )
+                            }) {
+                                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { vm.randomResource() }, enabled = ui.selectedCharacter != null) {
-                    Icon(Icons.Default.Casino, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("随机资源")
-                }
-                Button(onClick = { vm.nextResource() }, enabled = ui.selectedCharacter != null) {
-                    Icon(Icons.Default.SkipNext, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("下一个")
-                }
-                Button(onClick = { vm.reset() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("重置")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            val res = ui.selectedResource
-            if (res == null) {
-                Text("暂无资源")
-            } else {
-                Text("当前资源：${res.resource.title}")
-                Button(onClick = { showPreview = true }) {
-                    Icon(Icons.Default.Visibility, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("预览")
-                }
-            }
-            if (showIntro && ui.selectedCharacter != null) {
-                val introCandidates = ui.characterResources.filter { res ->
-                    res.resource.type == ResourceType.TEXT &&
-                        res.resource.title.take(2) == "要点"
-                }
-                if (introCandidates.size == 1) {
-                    val introText = introCandidates.first().resource.quoteText.orEmpty()
-                    PreviewTextBlock(
-                        text = introText,
-                        onEventSequence = { eventRunner.start(it) }
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f, fill = false)) {
+                Text("执行资源", style = MaterialTheme.typography.titleMedium)
+                if (executionItems.isEmpty()) {
+                    Text("暂无执行资源", style = MaterialTheme.typography.labelMedium)
                 } else {
-                    Text("资源错误")
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(executionItems) { item ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {
+                                            previewTarget = item.resource
+                                            showPreview = true
+                                        },
+                                        onLongClick = { completionTarget = item }
+                                    )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(item.resource.resource.title, style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        text = "${item.characterName} ${item.tagName}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
-        if (eventRunner.overlayText != null) {
-            Text(
-                text = eventRunner.overlayText.orEmpty(),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 24.dp),
-                style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(
-                    fontSize = androidx.compose.material3.MaterialTheme.typography.titleMedium.fontSize * 2
-                ),
-                color = androidx.compose.ui.graphics.Color.Red
-            )
         }
     }
 
-    if (showTagDialog) {
-        TagPickerDialog(
-            categories = ui.categories,
-            tags = ui.tags,
-            selectedIds = ui.selectedTagIds,
-            onConfirm = vm::updateTagFilter,
-            onDismiss = { showTagDialog = false }
+    if (showSettings) {
+        SettingsDialog(
+            settings = ui.settings,
+            onConfirm = { vm.updateSettings(it); showSettings = false },
+            onDismiss = { showSettings = false }
+        )
+    }
+
+    completionTarget?.let { target ->
+        CompletionDialog(
+            characterName = target.characterName,
+            onConfirm = { completion, belonging, emotion ->
+                val sum = completion + belonging + emotion
+                val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
+                val newPoints = ((sum + currentPoints) / 2.0).roundToInt()
+                vm.updateCharacterPoints(target.characterId, newPoints)
+                executionItems = executionItems.filterNot { it == target }
+                completionTarget = null
+            },
+            onDismiss = { completionTarget = null }
         )
     }
 }
 
 @Composable
-private fun TagPickerDialog(
-    categories: List<TagCategoryEntity>,
-    tags: List<TagEntity>,
-    selectedIds: Set<Long>,
-    onConfirm: (Set<Long>) -> Unit,
+private fun SettingsDialog(
+    settings: ExecutionSettingsEntity,
+    onConfirm: (ExecutionSettingsEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selected by remember { mutableStateOf(selectedIds.toMutableSet()) }
+    var buttonLabel by remember { mutableStateOf(settings.buttonLabel) }
+    var successToast by remember { mutableStateOf(settings.successToast) }
+    var failureToast by remember { mutableStateOf(settings.failureToast) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("资源标签筛选") },
+        title = { Text("设置") },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                TagSelectionSection(
-                    categories = categories,
-                    tags = tags,
-                    selected = selected,
-                    onChange = { selected = it.toMutableSet() }
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = buttonLabel,
+                    onValueChange = { buttonLabel = it },
+                    label = { Text("按钮名") },
+                    modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = successToast,
+                    onValueChange = { successToast = it },
+                    label = { Text("响应 toast") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = failureToast,
+                    onValueChange = { failureToast = it },
+                    label = { Text("非响应 toast") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("提示：用 [] 代表角色或标签占位", style = MaterialTheme.typography.labelSmall)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selected); onDismiss() }) { Text("确定") }
+            TextButton(onClick = {
+                onConfirm(
+                    settings.copy(
+                        buttonLabel = buttonLabel.trim().ifBlank { settings.buttonLabel },
+                        successToast = successToast.trim().ifBlank { settings.successToast },
+                        failureToast = failureToast.trim().ifBlank { settings.failureToast }
+                    )
+                )
+            }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagSelectionSection(
-    categories: List<TagCategoryEntity>,
-    tags: List<TagEntity>,
-    selected: Set<Long>,
-    onChange: (Set<Long>) -> Unit
+private fun CompletionDialog(
+    characterName: String,
+    onConfirm: (Int, Int, Int) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val sortedTags = sortTagsForDisplay(tags, categories)
-    val grouped = sortedTags.groupBy { it.categoryId }
-    val knownCategoryIds = categories.map { it.id }.toSet()
-    val uncategorized = sortedTags.filter { it.categoryId !in knownCategoryIds }
-    val expandedState = remember(categories) {
-        mutableStateOf(categories.associate { it.id to true }.toMutableMap())
-    }
-    var uncategorizedExpanded by remember { mutableStateOf(true) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        categories.forEach { category ->
-            val items = grouped[category.id].orEmpty()
-            if (items.isNotEmpty()) {
-                val isExpanded = expandedState.value[category.id] ?: true
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            expandedState.value = expandedState.value.toMutableMap().apply {
-                                put(category.id, !isExpanded)
-                            }
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(category.name)
-                    Spacer(Modifier.width(6.dp))
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null
-                    )
-                }
-                if (isExpanded) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items.forEach { tag ->
-                            TagFilterChip(
-                                tag = tag,
-                                selected = selected,
-                                onChange = onChange
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        if (uncategorized.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { uncategorizedExpanded = !uncategorizedExpanded },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("未分类")
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    imageVector = if (uncategorizedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null
+    var completionText by remember { mutableStateOf("") }
+    var belongingText by remember { mutableStateOf("") }
+    var emotionText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("完成记录") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("$characterName 的完成情况")
+                OutlinedTextField(
+                    value = completionText,
+                    onValueChange = { completionText = it },
+                    label = { Text("完成度(0-10)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = belongingText,
+                    onValueChange = { belongingText = it },
+                    label = { Text("归属感(0-10)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = emotionText,
+                    onValueChange = { emotionText = it },
+                    label = { Text("情绪值(0-10)") },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-            if (uncategorizedExpanded) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    uncategorized.forEach { tag ->
-                        TagFilterChip(
-                            tag = tag,
-                            selected = selected,
-                            onChange = onChange
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagFilterChip(
-    tag: TagEntity,
-    selected: Set<Long>,
-    onChange: (Set<Long>) -> Unit
-) {
-    val isSelected = selected.contains(tag.id)
-    FilterChip(
-        selected = isSelected,
-        onClick = {
-            val updated = selected.toMutableSet()
-            if (isSelected) updated.remove(tag.id) else updated.add(tag.id)
-            onChange(updated)
         },
-        label = {
-            Text(
-                text = tag.name,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        confirmButton = {
+            TextButton(onClick = {
+                val completion = completionText.toIntOrNull()?.coerceIn(0, 10) ?: 0
+                val belonging = belongingText.toIntOrNull()?.coerceIn(0, 10) ?: 0
+                val emotion = emotionText.toIntOrNull()?.coerceIn(0, 10) ?: 0
+                onConfirm(completion, belonging, emotion)
+            }) { Text("完成") }
         },
-        colors = FilterChipDefaults.filterChipColors()
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }

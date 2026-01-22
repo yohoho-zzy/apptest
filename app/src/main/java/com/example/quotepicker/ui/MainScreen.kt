@@ -49,7 +49,7 @@ fun MainScreen() {
                     selected = currentTab == 3,
                     onClick = { currentTab = 3 },
                     icon = { Icon(Icons.Default.Casino, contentDescription = null) },
-                    label = { Text("随机") }
+                    label = { Text("执行") }
                 )
             }
         }
@@ -59,7 +59,7 @@ fun MainScreen() {
                 0 -> TagScreen(modifier = Modifier.padding(inner))
                 1 -> CharacterScreen(modifier = Modifier.padding(inner))
                 2 -> ResourceScreen(modifier = Modifier.padding(inner))
-                else -> RandomScreen(modifier = Modifier.padding(inner))
+                else -> ExecutionScreen(modifier = Modifier.padding(inner))
             }
         }
     }
