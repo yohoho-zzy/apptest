@@ -82,6 +82,7 @@ import com.example.quotepicker.vm.TransferMode
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
 import android.widget.Toast
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -139,12 +140,28 @@ fun CharacterScreen(
             TransferMode.IMPORT -> "正在导入..."
             null -> "处理中..."
         }
+        val processedBytes = transferState.processedBytes
+        val totalBytes = transferState.totalBytes
+        val outputBytes = transferState.outputBytes
+        val percent = if (processedBytes != null && totalBytes != null && totalBytes > 0) {
+            ((processedBytes.toDouble() / totalBytes.toDouble()) * 100).coerceIn(0.0, 100.0)
+        } else {
+            null
+        }
         AlertDialog(
             onDismissRequest = {},
             title = { Text(label) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("请保持应用在前台以完成任务")
+                    if (percent != null && processedBytes != null && totalBytes != null) {
+                        Text(
+                            "进度：${percent.toInt()}% (${formatBytes(processedBytes)} / ${formatBytes(totalBytes)})"
+                        )
+                    }
+                    if (transferState.mode == TransferMode.EXPORT && outputBytes != null) {
+                        Text("文件大小：${formatBytes(outputBytes)}")
+                    }
                     transferState.progress?.let { progress ->
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                     } ?: LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -468,6 +485,22 @@ fun CharacterScreen(
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
         )
     }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val units = listOf("B", "KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024 && unitIndex < units.lastIndex) {
+        value /= 1024
+        unitIndex += 1
+    }
+    val format = when {
+        value >= 100 || unitIndex == 0 -> "%.0f"
+        value >= 10 -> "%.1f"
+        else -> "%.2f"
+    }
+    return "${String.format(Locale.getDefault(), format, value)} ${units[unitIndex]}"
 }
 
 @Composable
