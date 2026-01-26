@@ -11,10 +11,10 @@ import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.PushbackInputStream
 import java.nio.charset.Charset
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -180,8 +180,8 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         }
         try {
             val resolver = getApplication<Application>().contentResolver
-            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
-            val totalBytes = bytes.size.toLong()
+            val totalBytes = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }?.takeIf { it > 0 }
+                ?: 0L
             val safeTotalBytes = totalBytes.coerceAtLeast(1L)
             var processedBytes = 0L
             var lastProgressBytes = 0L
@@ -201,39 +201,48 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             _transferState.update { it.copy(totalBytes = totalBytes) }
             var snapshot: BackupSnapshot? = null
             val mediaPayloads = mutableMapOf<String, ByteArray>()
-            if (bytes.size >= 2 && bytes[0] == ZIP_MAGIC_P && bytes[1] == ZIP_MAGIC_K) {
-                val countingInput = CountingInputStream(ByteArrayInputStream(bytes)) { bytesRead ->
+            resolver.openInputStream(uri)?.use { input ->
+                val pushbackInput = PushbackInputStream(input, 2)
+                val header = ByteArray(2)
+                val headerSize = pushbackInput.read(header)
+                if (headerSize > 0) {
+                    pushbackInput.unread(header, 0, headerSize)
+                }
+                val countingInput = CountingInputStream(pushbackInput) { bytesRead ->
                     processedBytes = bytesRead
                     updateProgress()
                 }
-                ZipInputStream(countingInput).use { zip ->
-                    var entry = zip.nextEntry
-                    var payload: String? = null
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (entry != null) {
-                        when {
-                            entry.name == BACKUP_JSON_NAME -> {
-                                payload = readEntryString(zip, buffer)
+                val isZip = headerSize == 2 && header[0] == ZIP_MAGIC_P && header[1] == ZIP_MAGIC_K
+                if (isZip) {
+                    ZipInputStream(countingInput).use { zip ->
+                        var entry = zip.nextEntry
+                        var payload: String? = null
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (entry != null) {
+                            when {
+                                entry.name == BACKUP_JSON_NAME -> {
+                                    payload = readEntryString(zip, buffer)
+                                }
+                                entry.name.startsWith("media/") -> {
+                                    val fileName = entry.name.removePrefix("media/")
+                                    mediaPayloads[fileName] = readEntryBytes(zip, buffer)
+                                }
                             }
-                            entry.name.startsWith("media/") -> {
-                                val fileName = entry.name.removePrefix("media/")
-                                mediaPayloads[fileName] = readEntryBytes(zip, buffer)
-                            }
+                            zip.closeEntry()
+                            entry = zip.nextEntry
                         }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
+                        if (!payload.isNullOrBlank()) {
+                            snapshot = BackupSnapshot.fromJson(payload)
+                        }
+                        processedBytes = countingInput.bytesRead
+                        updateProgress(force = true)
                     }
-                    if (!payload.isNullOrBlank()) {
-                        snapshot = BackupSnapshot.fromJson(payload)
-                    }
+                } else {
+                    val payload = readStreamString(countingInput)
+                    snapshot = BackupSnapshot.fromJson(payload)
                     processedBytes = countingInput.bytesRead
                     updateProgress(force = true)
                 }
-            } else {
-                val payload = bytes.toString(Charset.forName("UTF-8"))
-                snapshot = BackupSnapshot.fromJson(payload)
-                processedBytes = totalBytes
-                updateProgress(force = true)
             }
             snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
         } finally {
@@ -337,6 +346,17 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun readEntryString(zip: ZipInputStream, buffer: ByteArray): String {
         val output = readEntryBytes(zip, buffer)
+        return output.toString(Charset.forName("UTF-8"))
+    }
+
+    private fun readStreamString(input: InputStream): String {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var read = input.read(buffer)
+        while (read > 0) {
+            output.write(buffer, 0, read)
+            read = input.read(buffer)
+        }
         return output.toString(Charset.forName("UTF-8"))
     }
 }
