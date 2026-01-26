@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
@@ -77,6 +78,7 @@ import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.CharacterViewModel
+import com.example.quotepicker.vm.TransferMode
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
 import android.widget.Toast
@@ -89,6 +91,7 @@ fun CharacterScreen(
     resourceVm: ResourceViewModel = viewModel()
 ) {
     val ui by vm.uiState.collectAsState()
+    val transferState by vm.transferState.collectAsState()
     val resources by resourceVm.allResources.collectAsState()
     val resourceUi by resourceVm.uiState.collectAsState()
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -128,6 +131,27 @@ fun CharacterScreen(
             onBack = { previewTarget = null }
         )
         return
+    }
+
+    if (transferState.inProgress) {
+        val label = when (transferState.mode) {
+            TransferMode.EXPORT -> "正在导出..."
+            TransferMode.IMPORT -> "正在导入..."
+            null -> "处理中..."
+        }
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(label) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("请保持应用在前台以完成任务")
+                    transferState.progress?.let { progress ->
+                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                    } ?: LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {}
+        )
     }
 
     Scaffold(
