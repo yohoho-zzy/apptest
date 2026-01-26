@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -28,16 +29,19 @@ fun SquareGridItem(
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    borderColor: Color? = null,
     bottomContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val border = borderColor?.let { BorderStroke(1.dp, it) } ?: CardDefaults.outlinedCardBorder()
     OutlinedCard(
         modifier = modifier
             .aspectRatio(1f)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ,
-        colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor)
+        colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
+        border = border
     ) {
         Box(
             modifier = Modifier

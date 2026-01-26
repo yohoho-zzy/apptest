@@ -84,7 +84,7 @@ import kotlinx.coroutines.launch
 import android.widget.Toast
 import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CharacterScreen(
     modifier: Modifier = Modifier,
@@ -212,32 +212,68 @@ fun CharacterScreen(
                         Text("暂无角色，点击右下角添加")
                     }
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(5),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    val teamCategoryId = ui.categories.firstOrNull { it.name == "队伍体系" }?.id
+                    val teamEntries = ui.characters.map { character ->
+                        val teamTag = teamCategoryId?.let { categoryId ->
+                            character.tags.firstOrNull { it.categoryId == categoryId }
+                        }
+                        val info = parseTeamInfo(teamTag)
+                        CharacterTeamEntry(
+                            character = character,
+                            teamName = info.teamName,
+                            levelLabel = info.levelLabel,
+                            levelOrder = info.levelOrder,
+                            borderColor = info.borderColor
+                        )
+                    }
+                    val groupedTeams = teamEntries.groupBy { it.teamName }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(ui.characters, key = { it.character.id }) { character ->
-                            SquareGridItem(
-                                title = character.character.name,
-                                bottomContent = {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(
-                                            text = character.character.points.toString(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF2E7D32)
-                                        )
-                                        Text(
-                                            text = "${character.character.probability}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF1565C0)
-                                        )
+                        groupedTeams.forEach { (teamName, members) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(text = teamName, style = MaterialTheme.typography.titleMedium)
+                                val groupedLevels = members
+                                    .groupBy { it.levelLabel }
+                                    .toList()
+                                    .sortedWith(compareBy({ it.second.first().levelOrder }, { it.first }))
+                                groupedLevels.forEach { (_, levelMembers) ->
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        levelMembers.forEach { entry ->
+                                            SquareGridItem(
+                                                title = entry.character.character.name,
+                                                subtitle = entry.levelLabel,
+                                                borderColor = entry.borderColor,
+                                                modifier = Modifier.width(96.dp),
+                                                bottomContent = {
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Text(
+                                                            text = entry.character.character.points.toString(),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color(0xFF2E7D32)
+                                                        )
+                                                        Text(
+                                                            text = "${entry.character.character.probability}%",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color(0xFF1565C0)
+                                                        )
+                                                    }
+                                                },
+                                                onClick = { selectedId = entry.character.character.id },
+                                                onLongClick = { bottomSheetTarget = entry.character }
+                                            )
+                                        }
                                     }
-                                },
-                                onClick = { selectedId = character.character.id },
-                                onLongClick = { bottomSheetTarget = character }
-                            )
+                                }
+                            }
                         }
                     }
                 }
@@ -485,6 +521,34 @@ fun CharacterScreen(
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
         )
     }
+}
+
+private data class CharacterTeamEntry(
+    val character: CharacterWithTags,
+    val teamName: String,
+    val levelLabel: String,
+    val levelOrder: Int,
+    val borderColor: Color?
+)
+
+private data class TeamTagInfo(
+    val teamName: String,
+    val levelLabel: String,
+    val levelOrder: Int,
+    val borderColor: Color?
+)
+
+private fun parseTeamInfo(tag: TagEntity?): TeamTagInfo {
+    val defaultTeam = "未分队"
+    val defaultLevel = "未设等级"
+    if (tag == null) {
+        return TeamTagInfo(defaultTeam, defaultLevel, Int.MAX_VALUE, null)
+    }
+    val parts = tag.name.split("|", limit = 2)
+    val teamName = parts.firstOrNull()?.ifBlank { defaultTeam } ?: defaultTeam
+    val levelLabel = parts.getOrNull(1)?.ifBlank { defaultLevel } ?: defaultLevel
+    val levelOrder = Regex("\\d+").find(levelLabel)?.value?.toIntOrNull() ?: Int.MAX_VALUE
+    return TeamTagInfo(teamName, levelLabel, levelOrder, Color(tag.colorArgb))
 }
 
 private fun formatBytes(bytes: Long): String {
