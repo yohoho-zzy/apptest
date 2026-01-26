@@ -166,7 +166,10 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         Text("暂无标签，点击右下角添加")
                     }
                 } else {
-                    val tags = ui.tags.sortedBy { it.name.lowercase() }
+                    val tags = ui.tags.sortedWith(
+                        compareBy<TagEntity> { it.colorArgb }
+                            .thenBy { it.name.lowercase() }
+                    )
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(5),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
