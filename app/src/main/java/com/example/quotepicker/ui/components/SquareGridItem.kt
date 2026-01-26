@@ -30,11 +30,16 @@ fun SquareGridItem(
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     borderColor: Color? = null,
+    subtitleOnTop: Boolean = false,
+    subtitleColor: Color? = null,
+    subtitleFontWeight: FontWeight? = null,
     bottomContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val border = borderColor?.let { BorderStroke(1.dp, it) } ?: CardDefaults.outlinedCardBorder()
+    val border = borderColor?.let { BorderStroke(2.dp, it) } ?: CardDefaults.outlinedCardBorder()
+    val resolvedSubtitleColor = subtitleColor ?: contentColor.copy(alpha = 0.8f)
+    val resolvedSubtitleWeight = subtitleFontWeight ?: FontWeight.Normal
     OutlinedCard(
         modifier = modifier
             .aspectRatio(1f)
@@ -46,13 +51,25 @@ fun SquareGridItem(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(6.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                if (subtitleOnTop) {
+                    subtitle?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = resolvedSubtitleColor,
+                            fontWeight = resolvedSubtitleWeight,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
@@ -61,14 +78,17 @@ fun SquareGridItem(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                subtitle?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = contentColor.copy(alpha = 0.8f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                if (!subtitleOnTop) {
+                    subtitle?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = resolvedSubtitleColor,
+                            fontWeight = resolvedSubtitleWeight,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 bottomContent?.invoke()
             }

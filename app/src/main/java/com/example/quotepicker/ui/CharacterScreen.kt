@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -244,15 +245,18 @@ fun CharacterScreen(
                                 groupedLevels.forEach { (_, levelMembers) ->
                                     FlowRow(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         levelMembers.forEach { entry ->
                                             SquareGridItem(
                                                 title = entry.character.character.name,
                                                 subtitle = entry.levelLabel,
                                                 borderColor = entry.borderColor,
-                                                modifier = Modifier.width(96.dp),
+                                                subtitleOnTop = true,
+                                                subtitleColor = entry.borderColor,
+                                                subtitleFontWeight = FontWeight.Bold,
+                                                modifier = Modifier.width(60.dp),
                                                 bottomContent = {
                                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                         Text(
