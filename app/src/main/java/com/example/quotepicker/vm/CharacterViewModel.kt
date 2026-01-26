@@ -12,6 +12,9 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.charset.Charset
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -19,8 +22,10 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CharacterUiState(
@@ -30,8 +35,24 @@ data class CharacterUiState(
     val executionSettings: com.example.quotepicker.data.ExecutionSettingsEntity = com.example.quotepicker.data.ExecutionSettingsEntity()
 )
 
+data class TransferState(
+    val inProgress: Boolean = false,
+    val mode: TransferMode? = null,
+    val progress: Float? = null,
+    val processedBytes: Long? = null,
+    val totalBytes: Long? = null,
+    val outputBytes: Long? = null
+)
+
+enum class TransferMode {
+    IMPORT,
+    EXPORT
+}
+
 class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
+    private val _transferState = MutableStateFlow(TransferState())
+    val transferState: StateFlow<TransferState> = _transferState
 
     init {
         viewModelScope.launch {
@@ -73,58 +94,249 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.addResponseRecord(characterId, tagId, count) }
 
     fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-        val resolver = getApplication<Application>().contentResolver
-        val exportPackage = repo.exportSnapshotPackage()
-        resolver.openOutputStream(uri)?.use { output ->
-            ZipOutputStream(output).use { zip ->
-                zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
-                zip.write(exportPackage.snapshot.toJsonString().toByteArray(Charset.forName("UTF-8")))
-                zip.closeEntry()
-                exportPackage.mediaPayloads.forEach { (fileName, bytes) ->
-                    zip.putNextEntry(ZipEntry("media/$fileName"))
-                    zip.write(bytes)
-                    zip.closeEntry()
+        _transferState.update {
+            it.copy(
+                inProgress = true,
+                mode = TransferMode.EXPORT,
+                progress = 0f,
+                processedBytes = 0L,
+                totalBytes = 0L,
+                outputBytes = 0L
+            )
+        }
+        try {
+            val resolver = getApplication<Application>().contentResolver
+            val exportPackage = repo.exportSnapshotPackage()
+            val snapshotBytes = exportPackage.snapshot.toJsonString().toByteArray(Charset.forName("UTF-8"))
+            val totalBytes = exportPackage.mediaPayloads.values.sumOf { it.size.toLong() } + snapshotBytes.size.toLong()
+            var processedBytes = 0L
+            var outputBytes = 0L
+            var lastProgressBytes = 0L
+            var lastOutputBytes = 0L
+            val safeTotalBytes = totalBytes.coerceAtLeast(1L)
+            fun updateProgress(force: Boolean = false) {
+                val progress = (processedBytes.toFloat() / safeTotalBytes).coerceIn(0f, 1f)
+                if (force || processedBytes - lastProgressBytes >= PROGRESS_UPDATE_BYTES || outputBytes - lastOutputBytes >= PROGRESS_UPDATE_BYTES) {
+                    lastProgressBytes = processedBytes
+                    lastOutputBytes = outputBytes
+                    _transferState.update { current ->
+                        current.copy(
+                            progress = progress,
+                            processedBytes = processedBytes,
+                            totalBytes = totalBytes,
+                            outputBytes = outputBytes
+                        )
+                    }
                 }
+            }
+            _transferState.update { it.copy(totalBytes = totalBytes) }
+            resolver.openOutputStream(uri)?.use { output ->
+                val countingOutput = CountingOutputStream(output) { bytesWritten ->
+                    outputBytes = bytesWritten
+                    updateProgress()
+                }
+                ZipOutputStream(countingOutput).use { zip ->
+                    zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+                    writeChunked(zip, snapshotBytes) { written ->
+                        processedBytes += written
+                        updateProgress()
+                    }
+                    zip.closeEntry()
+                    exportPackage.mediaPayloads.forEach { (fileName, bytes) ->
+                        zip.putNextEntry(ZipEntry("media/$fileName"))
+                        writeChunked(zip, bytes) { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                        zip.closeEntry()
+                    }
+                }
+            }
+            updateProgress(force = true)
+        } finally {
+            _transferState.update {
+                it.copy(
+                    inProgress = false,
+                    mode = null,
+                    progress = null,
+                    processedBytes = null,
+                    totalBytes = null,
+                    outputBytes = null
+                )
             }
         }
     }
 
     fun importSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-        val resolver = getApplication<Application>().contentResolver
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
-        var snapshot: BackupSnapshot? = null
-        val mediaPayloads = mutableMapOf<String, ByteArray>()
-        if (bytes.size >= 2 && bytes[0] == ZIP_MAGIC_P && bytes[1] == ZIP_MAGIC_K) {
-            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-                var entry = zip.nextEntry
-                var payload: String? = null
-                while (entry != null) {
-                    when {
-                        entry.name == BACKUP_JSON_NAME -> {
-                            payload = zip.readBytes().toString(Charset.forName("UTF-8"))
-                        }
-                        entry.name.startsWith("media/") -> {
-                            val fileName = entry.name.removePrefix("media/")
-                            mediaPayloads[fileName] = zip.readBytes()
-                        }
+        _transferState.update {
+            it.copy(
+                inProgress = true,
+                mode = TransferMode.IMPORT,
+                progress = 0f,
+                processedBytes = 0L,
+                totalBytes = 0L,
+                outputBytes = null
+            )
+        }
+        try {
+            val resolver = getApplication<Application>().contentResolver
+            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+            val totalBytes = bytes.size.toLong()
+            val safeTotalBytes = totalBytes.coerceAtLeast(1L)
+            var processedBytes = 0L
+            var lastProgressBytes = 0L
+            fun updateProgress(force: Boolean = false) {
+                val progress = (processedBytes.toFloat() / safeTotalBytes).coerceIn(0f, 1f)
+                if (force || processedBytes - lastProgressBytes >= PROGRESS_UPDATE_BYTES) {
+                    lastProgressBytes = processedBytes
+                    _transferState.update { current ->
+                        current.copy(
+                            progress = progress,
+                            processedBytes = processedBytes,
+                            totalBytes = totalBytes
+                        )
                     }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
-                }
-                if (!payload.isNullOrBlank()) {
-                    snapshot = BackupSnapshot.fromJson(payload)
                 }
             }
-        } else {
-            val payload = bytes.toString(Charset.forName("UTF-8"))
-            snapshot = BackupSnapshot.fromJson(payload)
+            _transferState.update { it.copy(totalBytes = totalBytes) }
+            var snapshot: BackupSnapshot? = null
+            val mediaPayloads = mutableMapOf<String, ByteArray>()
+            if (bytes.size >= 2 && bytes[0] == ZIP_MAGIC_P && bytes[1] == ZIP_MAGIC_K) {
+                val countingInput = CountingInputStream(ByteArrayInputStream(bytes)) { bytesRead ->
+                    processedBytes = bytesRead
+                    updateProgress()
+                }
+                ZipInputStream(countingInput).use { zip ->
+                    var entry = zip.nextEntry
+                    var payload: String? = null
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (entry != null) {
+                        when {
+                            entry.name == BACKUP_JSON_NAME -> {
+                                payload = readEntryString(zip, buffer)
+                            }
+                            entry.name.startsWith("media/") -> {
+                                val fileName = entry.name.removePrefix("media/")
+                                mediaPayloads[fileName] = readEntryBytes(zip, buffer)
+                            }
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                    if (!payload.isNullOrBlank()) {
+                        snapshot = BackupSnapshot.fromJson(payload)
+                    }
+                    processedBytes = countingInput.bytesRead
+                    updateProgress(force = true)
+                }
+            } else {
+                val payload = bytes.toString(Charset.forName("UTF-8"))
+                snapshot = BackupSnapshot.fromJson(payload)
+                processedBytes = totalBytes
+                updateProgress(force = true)
+            }
+            snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
+        } finally {
+            _transferState.update {
+                it.copy(
+                    inProgress = false,
+                    mode = null,
+                    progress = null,
+                    processedBytes = null,
+                    totalBytes = null,
+                    outputBytes = null
+                )
+            }
         }
-        snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
     }
 
     private companion object {
         const val BACKUP_JSON_NAME = "backup.json"
         const val ZIP_MAGIC_P: Byte = 0x50
         const val ZIP_MAGIC_K: Byte = 0x4B
+        const val PROGRESS_UPDATE_BYTES = 32 * 1024
+    }
+
+    private class CountingOutputStream(
+        private val delegate: OutputStream,
+        private val onBytesWritten: (Long) -> Unit
+    ) : OutputStream() {
+        var bytesWritten: Long = 0
+            private set
+
+        override fun write(b: Int) {
+            delegate.write(b)
+            bytesWritten += 1
+            onBytesWritten(bytesWritten)
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            delegate.write(b, off, len)
+            bytesWritten += len
+            onBytesWritten(bytesWritten)
+        }
+
+        override fun flush() {
+            delegate.flush()
+        }
+
+        override fun close() {
+            delegate.close()
+        }
+    }
+
+    private class CountingInputStream(
+        private val delegate: InputStream,
+        private val onBytesRead: (Long) -> Unit
+    ) : InputStream() {
+        var bytesRead: Long = 0
+            private set
+
+        override fun read(): Int {
+            val value = delegate.read()
+            if (value >= 0) {
+                bytesRead += 1
+                onBytesRead(bytesRead)
+            }
+            return value
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val read = delegate.read(b, off, len)
+            if (read > 0) {
+                bytesRead += read
+                onBytesRead(bytesRead)
+            }
+            return read
+        }
+
+        override fun close() {
+            delegate.close()
+        }
+    }
+
+    private fun writeChunked(output: OutputStream, data: ByteArray, onChunk: (Int) -> Unit) {
+        var offset = 0
+        while (offset < data.size) {
+            val size = minOf(PROGRESS_UPDATE_BYTES, data.size - offset)
+            output.write(data, offset, size)
+            onChunk(size)
+            offset += size
+        }
+    }
+
+    private fun readEntryBytes(zip: ZipInputStream, buffer: ByteArray): ByteArray {
+        val output = ByteArrayOutputStream()
+        var read = zip.read(buffer)
+        while (read > 0) {
+            output.write(buffer, 0, read)
+            read = zip.read(buffer)
+        }
+        return output.toByteArray()
+    }
+
+    private fun readEntryString(zip: ZipInputStream, buffer: ByteArray): String {
+        val output = readEntryBytes(zip, buffer)
+        return output.toString(Charset.forName("UTF-8"))
     }
 }
