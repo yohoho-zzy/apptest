@@ -2,6 +2,7 @@ package com.example.quotepicker.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -232,7 +233,7 @@ fun CharacterScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(12.dp),
+                            .padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         groupedTeams.forEach { (teamName, members) ->
@@ -243,37 +244,42 @@ fun CharacterScreen(
                                     .toList()
                                     .sortedWith(compareBy({ it.second.first().levelOrder }, { it.first }))
                                 groupedLevels.forEach { (_, levelMembers) ->
-                                    FlowRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        levelMembers.forEach { entry ->
-                                            SquareGridItem(
-                                                title = entry.character.character.name,
-                                                subtitle = entry.levelLabel,
-                                                borderColor = entry.borderColor,
-                                                subtitleOnTop = true,
-                                                subtitleColor = entry.borderColor,
-                                                subtitleFontWeight = FontWeight.Bold,
-                                                modifier = Modifier.width(60.dp),
-                                                bottomContent = {
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Text(
-                                                            text = entry.character.character.points.toString(),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = Color(0xFF2E7D32)
-                                                        )
-                                                        Text(
-                                                            text = "${entry.character.character.probability}%",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = Color(0xFF1565C0)
-                                                        )
-                                                    }
-                                                },
-                                                onClick = { selectedId = entry.character.character.id },
-                                                onLongClick = { bottomSheetTarget = entry.character }
-                                            )
+                                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                        val itemSpacing = 8.dp
+                                        val itemSize = (maxWidth - itemSpacing * 4) / 5
+                                        FlowRow(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            maxItemsInEachRow = 5,
+                                            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                                            verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                                        ) {
+                                            levelMembers.forEach { entry ->
+                                                SquareGridItem(
+                                                    title = entry.character.character.name,
+                                                    subtitle = entry.levelLabel,
+                                                    borderColor = entry.borderColor,
+                                                    subtitleOnTop = true,
+                                                    subtitleColor = entry.borderColor,
+                                                    subtitleFontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.width(itemSize),
+                                                    bottomContent = {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                            Text(
+                                                                text = entry.character.character.points.toString(),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color(0xFF2E7D32)
+                                                            )
+                                                            Text(
+                                                                text = "${entry.character.character.probability}%",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color(0xFF1565C0)
+                                                            )
+                                                        }
+                                                    },
+                                                    onClick = { selectedId = entry.character.character.id },
+                                                    onLongClick = { bottomSheetTarget = entry.character }
+                                                )
+                                            }
                                         }
                                     }
                                 }
