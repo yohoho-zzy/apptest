@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.vm.ExecutionViewModel
 import com.example.quotepicker.vm.ResourceViewModel
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 private data class ExecutionResourceItem(
@@ -69,6 +72,9 @@ fun ExecutionScreen(
     var executionItems by remember { mutableStateOf<List<ExecutionResourceItem>>(emptyList()) }
     var completionTarget by remember { mutableStateOf<ExecutionResourceItem?>(null) }
     val context = LocalContext.current
+    val today = LocalDate.now().toString()
+    val shouldPromptDailyInput = ui.settings.lastExecutionDate != today
+    val isExecutionAvailable = ui.settings.remainingValue > 0
 
     if (showPreview && previewTarget != null) {
         ResourcePreviewScreen(
@@ -103,6 +109,36 @@ fun ExecutionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = ui.settings.pastAverage.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF1976D2)
+                    )
+                    Text(
+                        text = ui.settings.lastInputValue.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFFD32F2F)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = ui.settings.dailyAverage.toString(),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF2E7D32)
+                        )
+                        Text(
+                            text = "(${ui.settings.remainingValue})",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF7B4DFF)
+                        )
+                    }
+                }
+                if (!isExecutionAvailable) {
+                    Text("祈求不可用", color = MaterialTheme.colorScheme.error)
+                }
                 Text("响应记录", style = MaterialTheme.typography.titleMedium)
                 if (ui.records.isEmpty()) {
                     Text("暂无响应记录", style = MaterialTheme.typography.labelMedium)
@@ -122,7 +158,16 @@ fun ExecutionScreen(
                                 }
                             }
                             Button(onClick = {
+                                if (shouldPromptDailyInput) {
+                                    Toast.makeText(context, "请先输入前日数值", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                if (!isExecutionAvailable) {
+                                    Toast.makeText(context, "祈求不可用", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
                                 vm.consumeRecord(record.characterId, record.tagId)
+                                vm.consumeExecutionRemaining()
                                 val candidates = ui.resources.filter { res ->
                                     res.characters.any { it.id == record.characterId } &&
                                         res.tags.any { it.id == record.tagId }
@@ -138,7 +183,7 @@ fun ExecutionScreen(
                                     characterName = record.characterName,
                                     tagName = record.tagName
                                 )
-                            }) {
+                            }, enabled = isExecutionAvailable && !shouldPromptDailyInput) {
                                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
@@ -189,6 +234,12 @@ fun ExecutionScreen(
             settings = ui.settings,
             onConfirm = { vm.updateSettings(it); showSettings = false },
             onDismiss = { showSettings = false }
+        )
+    }
+
+    if (shouldPromptDailyInput) {
+        DailyInputDialog(
+            onConfirm = { vm.applyDailyInput(it) }
         )
     }
 
@@ -304,5 +355,34 @@ private fun CompletionDialog(
             }) { Text("完成") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun DailyInputDialog(
+    onConfirm: (Int) -> Unit
+) {
+    var inputText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("前日数值") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    label = { Text("输入范围：-100 到 100") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("每日首次打开执行页面需要输入前日数值。", style = MaterialTheme.typography.labelSmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val input = inputText.toIntOrNull()?.coerceIn(-100, 100) ?: 0
+                onConfirm(input)
+            }) { Text("确定") }
+        }
     )
 }

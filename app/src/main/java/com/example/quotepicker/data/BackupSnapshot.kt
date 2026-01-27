@@ -127,6 +127,11 @@ private fun executionSettingsToJson(settings: ExecutionSettingsEntity): JSONObje
         .put("buttonLabel", settings.buttonLabel)
         .put("successToast", settings.successToast)
         .put("failureToast", settings.failureToast)
+        .put("pastAverage", settings.pastAverage)
+        .put("lastInputValue", settings.lastInputValue)
+        .put("dailyAverage", settings.dailyAverage)
+        .put("remainingValue", settings.remainingValue)
+        .put("lastExecutionDate", settings.lastExecutionDate)
         .put("createdAt", settings.createdAt)
         .put("updatedAt", settings.updatedAt)
 
@@ -214,6 +219,11 @@ private fun executionSettingsFromJson(obj: JSONObject): ExecutionSettingsEntity 
         buttonLabel = obj.optString("buttonLabel", "祈求"),
         successToast = obj.optString("successToast", "[]赐予了你[]"),
         failureToast = obj.optString("failureToast", "[]无视了你"),
+        pastAverage = obj.optInt("pastAverage", 100),
+        lastInputValue = obj.optInt("lastInputValue", 0),
+        dailyAverage = obj.optInt("dailyAverage", 100),
+        remainingValue = obj.optInt("remainingValue", 0),
+        lastExecutionDate = readNullableString(obj, "lastExecutionDate"),
         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
         updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
     )

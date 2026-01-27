@@ -8,6 +8,9 @@ import com.example.quotepicker.data.ExecutionSettingsEntity
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagEntity
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -77,5 +80,44 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateCharacterPoints(characterId: Long, points: Int) = viewModelScope.launch {
         repo.updateCharacterPoints(characterId, points)
+    }
+
+    fun applyDailyInput(input: Int) = viewModelScope.launch {
+        val current = uiState.value.settings
+        val today = LocalDate.now()
+        val lastDate = current.lastExecutionDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        var pastAverage = current.dailyAverage
+        var remaining = current.remainingValue
+        if (lastDate != null) {
+            val daysBetween = ChronoUnit.DAYS.between(lastDate, today).toInt()
+            if (daysBetween > 1) {
+                repeat(daysBetween - 1) {
+                    val dailyAverage = ((pastAverage + 0) / 2.0).roundToInt()
+                    remaining += dailyAverage
+                    pastAverage = dailyAverage
+                }
+            } else if (daysBetween <= 0) {
+                pastAverage = current.dailyAverage
+            }
+        } else {
+            pastAverage = current.dailyAverage
+        }
+        val newDailyAverage = ((pastAverage + input) / 2.0).roundToInt()
+        remaining += newDailyAverage
+        repo.updateExecutionSettings(
+            current.copy(
+                pastAverage = pastAverage,
+                lastInputValue = input,
+                dailyAverage = newDailyAverage,
+                remainingValue = remaining,
+                lastExecutionDate = today.toString()
+            )
+        )
+    }
+
+    fun consumeExecutionRemaining() = viewModelScope.launch {
+        val current = uiState.value.settings
+        if (current.remainingValue <= 0) return@launch
+        repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
     }
 }
