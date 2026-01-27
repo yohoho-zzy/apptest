@@ -67,6 +67,11 @@ data class ExecutionSettingsEntity(
     val buttonLabel: String = "祈求",
     val successToast: String = "[]赐予了你[]",
     val failureToast: String = "[]无视了你",
+    val pastAverage: Int = 100,
+    val lastInputValue: Int = 0,
+    val dailyAverage: Int = 100,
+    val remainingValue: Int = 0,
+    val lastExecutionDate: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

@@ -55,6 +55,7 @@ import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.SquareGridItem
+import com.example.quotepicker.ui.components.tagColorSortIndex
 import com.example.quotepicker.ui.components.formatTagLabel
 import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
@@ -167,7 +168,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                     }
                 } else {
                     val tags = ui.tags.sortedWith(
-                        compareBy<TagEntity> { it.colorArgb }
+                        compareBy<TagEntity> { tagColorSortIndex(it.colorArgb) }
                             .thenBy { it.name.lowercase() }
                     )
                     LazyVerticalGrid(
