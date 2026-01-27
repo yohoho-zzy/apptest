@@ -28,11 +28,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -71,10 +73,15 @@ fun ExecutionScreen(
     var previewTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var executionItems by remember { mutableStateOf<List<ExecutionResourceItem>>(emptyList()) }
     var completionTarget by remember { mutableStateOf<ExecutionResourceItem?>(null) }
+    var showDailyInputDialog by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val today = LocalDate.now().toString()
     val shouldPromptDailyInput = ui.settings.lastExecutionDate != today
     val isExecutionAvailable = ui.settings.remainingValue > 0
+
+    LaunchedEffect(shouldPromptDailyInput) {
+        showDailyInputDialog = shouldPromptDailyInput
+    }
 
     if (showPreview && previewTarget != null) {
         ResourcePreviewScreen(
@@ -237,7 +244,7 @@ fun ExecutionScreen(
         )
     }
 
-    if (shouldPromptDailyInput) {
+    if (showDailyInputDialog) {
         DailyInputDialog(
             onConfirm = { vm.applyDailyInput(it) }
         )
