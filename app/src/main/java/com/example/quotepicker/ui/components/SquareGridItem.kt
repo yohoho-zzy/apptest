@@ -33,6 +33,7 @@ fun SquareGridItem(
     subtitleOnTop: Boolean = false,
     subtitleColor: Color? = null,
     subtitleFontWeight: FontWeight? = null,
+    subtitleContent: (@Composable () -> Unit)? = null,
     bottomContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -59,15 +60,18 @@ fun SquareGridItem(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (subtitleOnTop) {
-                    subtitle?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = resolvedSubtitleColor,
-                            fontWeight = resolvedSubtitleWeight,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    when {
+                        subtitleContent != null -> subtitleContent()
+                        subtitle != null -> {
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = resolvedSubtitleColor,
+                                fontWeight = resolvedSubtitleWeight,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 Text(
@@ -79,15 +83,18 @@ fun SquareGridItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!subtitleOnTop) {
-                    subtitle?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = resolvedSubtitleColor,
-                            fontWeight = resolvedSubtitleWeight,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    when {
+                        subtitleContent != null -> subtitleContent()
+                        subtitle != null -> {
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = resolvedSubtitleColor,
+                                fontWeight = resolvedSubtitleWeight,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 bottomContent?.invoke()

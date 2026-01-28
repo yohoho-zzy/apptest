@@ -12,6 +12,7 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
@@ -93,6 +94,12 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     fun addResponseRecord(characterId: Long, tagId: Long, count: Int = 1) =
         viewModelScope.launch { repo.addResponseRecord(characterId, tagId, count) }
 
+    fun consumeExecutionRemaining() = viewModelScope.launch {
+        val current = uiState.value.executionSettings
+        if (current.remainingValue <= 0) return@launch
+        repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
+    }
+
     fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
         _transferState.update {
             it.copy(
@@ -108,7 +115,9 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             val resolver = getApplication<Application>().contentResolver
             val exportPackage = repo.exportSnapshotPackage()
             val snapshotBytes = exportPackage.snapshot.toJsonString().toByteArray(Charset.forName("UTF-8"))
-            val totalBytes = exportPackage.mediaPayloads.values.sumOf { it.size.toLong() } + snapshotBytes.size.toLong()
+            val totalBytes = exportPackage.mediaSources.sumOf { source ->
+                repo.mediaSize(source.originalPath) ?: 0L
+            } + snapshotBytes.size.toLong()
             var processedBytes = 0L
             var outputBytes = 0L
             var lastProgressBytes = 0L
@@ -142,13 +151,16 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                         updateProgress()
                     }
                     zip.closeEntry()
-                    exportPackage.mediaPayloads.forEach { (fileName, bytes) ->
-                        zip.putNextEntry(ZipEntry("media/$fileName"))
-                        writeChunked(zip, bytes) { written ->
-                            processedBytes += written
-                            updateProgress()
+                    exportPackage.mediaSources.forEach { source ->
+                        val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
+                        stream.use { input ->
+                            zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                            writeStreamChunked(input, zip) { written ->
+                                processedBytes += written
+                                updateProgress()
+                            }
+                            zip.closeEntry()
                         }
-                        zip.closeEntry()
                     }
                 }
             }
@@ -178,6 +190,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                 outputBytes = null
             )
         }
+        val tempFiles = mutableListOf<File>()
         try {
             val resolver = getApplication<Application>().contentResolver
             val totalBytes = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }?.takeIf { it > 0 }
@@ -200,7 +213,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             }
             _transferState.update { it.copy(totalBytes = totalBytes) }
             var snapshot: BackupSnapshot? = null
-            val mediaPayloads = mutableMapOf<String, ByteArray>()
+            val mediaPayloads = mutableMapOf<String, com.example.quotepicker.data.MediaPayload>()
             resolver.openInputStream(uri)?.use { input ->
                 val pushbackInput = PushbackInputStream(input, 2)
                 val header = ByteArray(2)
@@ -217,7 +230,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     ZipInputStream(countingInput).use { zip ->
                         var entry = zip.nextEntry
                         var payload: String? = null
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
                         while (entry != null) {
                             when {
                                 entry.name == BACKUP_JSON_NAME -> {
@@ -225,7 +238,10 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                                 }
                                 entry.name.startsWith("media/") -> {
                                     val fileName = entry.name.removePrefix("media/")
-                                    mediaPayloads[fileName] = readEntryBytes(zip, buffer)
+                                    val temp = File.createTempFile("media_import_", ".dat", getApplication<Application>().cacheDir)
+                                    tempFiles.add(temp)
+                                    readEntryToFile(zip, temp, buffer)
+                                    mediaPayloads[fileName] = com.example.quotepicker.data.MediaPayload(file = temp)
                                 }
                             }
                             zip.closeEntry()
@@ -246,6 +262,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             }
             snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
         } finally {
+            tempFiles.forEach { file -> file.delete() }
             _transferState.update {
                 it.copy(
                     inProgress = false,
@@ -263,7 +280,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         const val BACKUP_JSON_NAME = "backup.json"
         const val ZIP_MAGIC_P: Byte = 0x50
         const val ZIP_MAGIC_K: Byte = 0x4B
-        const val PROGRESS_UPDATE_BYTES = 32 * 1024
+        const val PROGRESS_UPDATE_BYTES = 256 * 1024
     }
 
     private class CountingOutputStream(
@@ -344,6 +361,16 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         return output.toByteArray()
     }
 
+    private fun readEntryToFile(zip: ZipInputStream, target: File, buffer: ByteArray) {
+        target.outputStream().use { output ->
+            var read = zip.read(buffer)
+            while (read > 0) {
+                output.write(buffer, 0, read)
+                read = zip.read(buffer)
+            }
+        }
+    }
+
     private fun readEntryString(zip: ZipInputStream, buffer: ByteArray): String {
         val output = readEntryBytes(zip, buffer)
         return output.toString(Charset.forName("UTF-8"))
@@ -358,5 +385,15 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             read = input.read(buffer)
         }
         return output.toString(Charset.forName("UTF-8"))
+    }
+
+    private fun writeStreamChunked(input: InputStream, output: OutputStream, onChunk: (Int) -> Unit) {
+        val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
+        var read = input.read(buffer)
+        while (read > 0) {
+            output.write(buffer, 0, read)
+            onChunk(read)
+            read = input.read(buffer)
+        }
     }
 }

@@ -44,6 +44,7 @@ data class CharacterEntity(
     val name: String,
     val description: String? = null,
     val points: Int = 30,
+    val familiarity: Int = 0,
     val probability: Int = 1,
     val probabilityDate: String? = null,
     val createdAt: Long = System.currentTimeMillis(),

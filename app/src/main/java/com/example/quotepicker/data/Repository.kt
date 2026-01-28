@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import java.io.File
+import java.io.InputStream
 import java.time.LocalDate
 import org.json.JSONArray
 import kotlinx.coroutines.flow.Flow
@@ -33,23 +34,20 @@ class Repository private constructor(context: Context) {
 
     data class ExportPackage(
         val snapshot: BackupSnapshot,
-        val mediaPayloads: Map<String, ByteArray>
+        val mediaSources: List<MediaExportSource>
     )
 
     suspend fun exportSnapshot(): BackupSnapshot = exportSnapshotPackage().snapshot
 
     suspend fun exportSnapshotPackage(): ExportPackage {
         val resources = resourceDao.listAll()
-        val mediaPayloads = linkedMapOf<String, ByteArray>()
+        val mediaSources = mutableListOf<MediaExportSource>()
         val mediaItems = collectMediaPaths(resources).mapNotNull { (path, type) ->
-            val bytes = readMedia(path) ?: return@mapNotNull null
-            val fileName = "media_${mediaPayloads.size}_${path.hashCode()}.dat"
-            mediaPayloads[fileName] = bytes
-            MediaBackupItem(
-                originalPath = path,
-                type = type,
-                fileName = fileName
-            )
+            val stream = openMediaStream(path) ?: return@mapNotNull null
+            stream.close()
+            val fileName = "media_${mediaSources.size}_${path.hashCode()}.dat"
+            mediaSources.add(MediaExportSource(fileName = fileName, originalPath = path, type = type))
+            MediaBackupItem(originalPath = path, type = type, fileName = fileName)
         }
         val snapshot = BackupSnapshot(
             categories = categoryDao.listAll(),
@@ -63,10 +61,10 @@ class Repository private constructor(context: Context) {
             executionSettings = executionSettingsDao.getSettings(),
             media = mediaItems
         )
-        return ExportPackage(snapshot = snapshot, mediaPayloads = mediaPayloads)
+        return ExportPackage(snapshot = snapshot, mediaSources = mediaSources)
     }
 
-    suspend fun replaceSnapshot(snapshot: BackupSnapshot, mediaPayloads: Map<String, ByteArray> = emptyMap()) {
+    suspend fun replaceSnapshot(snapshot: BackupSnapshot, mediaPayloads: Map<String, MediaPayload> = emptyMap()) {
         val mediaMapping = restoreMedia(snapshot.media, mediaPayloads)
         val restoredResources = snapshot.resources.map { resource ->
             when (resource.type) {
@@ -367,27 +365,15 @@ class Repository private constructor(context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    private fun readMedia(path: String): ByteArray? {
-        val uri = Uri.parse(path)
-        return runCatching {
-            if (uri.scheme == "file") {
-                val filePath = uri.path ?: return@runCatching null
-                File(filePath).takeIf { it.exists() }?.readBytes()
-            } else {
-                appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            }
-        }.getOrNull()
-    }
-
     private fun restoreMedia(
         items: List<MediaBackupItem>,
-        mediaPayloads: Map<String, ByteArray>
+        mediaPayloads: Map<String, MediaPayload>
     ): Map<String, String> {
         if (items.isEmpty()) return emptyMap()
         val mapping = mutableMapOf<String, String>()
         items.forEach { item ->
-            val bytes = when {
-                item.base64 != null -> runCatching { Base64.decode(item.base64, Base64.DEFAULT) }.getOrNull()
+            val payload = when {
+                item.base64 != null -> MediaPayload(bytes = runCatching { Base64.decode(item.base64, Base64.DEFAULT) }.getOrNull())
                 item.fileName != null -> mediaPayloads[item.fileName]
                 else -> null
             } ?: return@forEach
@@ -400,7 +386,14 @@ class Repository private constructor(context: Context) {
             val dir = File(appContext.filesDir, folder).apply { mkdirs() }
             val target = File(dir, "media_import_${System.currentTimeMillis()}_${item.originalPath.hashCode()}.dat")
             runCatching {
-                target.writeBytes(bytes)
+                when {
+                    payload.bytes != null -> target.writeBytes(payload.bytes)
+                    payload.file != null -> payload.file.inputStream().use { input ->
+                        target.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
                 mapping[item.originalPath] = Uri.fromFile(target).toString()
             }
         }
@@ -485,6 +478,37 @@ class Repository private constructor(context: Context) {
     }
 
     private fun currentDateString(): String = LocalDate.now().toString()
+
+    fun openMediaStream(path: String): InputStream? {
+        val uri = Uri.parse(path)
+        return runCatching {
+            if (uri.scheme == "file") {
+                val filePath = uri.path ?: return@runCatching null
+                File(filePath).takeIf { it.exists() }?.inputStream()
+            } else {
+                appContext.contentResolver.openInputStream(uri)
+            }
+        }.getOrNull()
+    }
+
+    fun mediaSize(path: String): Long? {
+        val uri = Uri.parse(path)
+        return runCatching {
+            if (uri.scheme == "file") {
+                val filePath = uri.path ?: return@runCatching null
+                File(filePath).takeIf { it.exists() }?.length()?.takeIf { it > 0 }
+            } else {
+                appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                    ?.takeIf { it > 0 }
+            }
+        }.getOrNull()
+    }
+
+    data class MediaExportSource(
+        val fileName: String,
+        val originalPath: String,
+        val type: ResourceType
+    )
 
     companion object {
         const val ORPHAN_CATEGORY_NAME = "未分类"
