@@ -70,10 +70,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import android.widget.Toast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ResourceType
@@ -81,6 +84,7 @@ import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.CharacterBadge
+import com.example.quotepicker.ui.components.encodeResourceFileInfo
 import com.example.quotepicker.ui.components.ResourceGridCard
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
@@ -128,6 +132,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     if (manageScreen) {
         ManageStorageScreen(
             items = manageItems,
+            resources = allResources,
             vm = vm,
             onBack = { manageScreen = false },
             onRestore = { item ->
@@ -338,21 +343,24 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 @Composable
 private fun ManageStorageScreen(
     items: List<StoredMediaItem>,
+    resources: List<ResourceWithTagsCharacters>,
     vm: ResourceViewModel,
     onBack: () -> Unit,
     onRestore: (StoredMediaItem) -> Unit,
     onRefresh: () -> Unit
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val imagesDir = remember { File(context.filesDir, "images").absolutePath }
     val videosDir = remember { File(context.filesDir, "videos").absolutePath }
     val audioDir = remember { File(context.filesDir, "audio").absolutePath }
-    var displayType by remember { mutableStateOf(ResourceType.IMAGE) }
     var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    var imageExpanded by remember { mutableStateOf(true) }
+    var videoExpanded by remember { mutableStateOf(true) }
+    var soundExpanded by remember { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    val filteredItems = remember(items, displayType) { items.filter { it.type == displayType } }
-    val displayTypes = listOf(ResourceType.IMAGE, ResourceType.VIDEO, ResourceType.SOUND)
+    val groupedItems = remember(items, resources) { buildStoredMediaGroups(items, resources) }
 
     Scaffold(
         topBar = {
@@ -364,18 +372,6 @@ private fun ManageStorageScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        val index = displayTypes.indexOf(displayType).takeIf { it >= 0 } ?: 0
-                        displayType = displayTypes[(index + 1) % displayTypes.size]
-                    }) {
-                        Text(
-                            when (displayType) {
-                                ResourceType.IMAGE -> "显示视频"
-                                ResourceType.VIDEO -> "显示音频"
-                                else -> "显示图片"
-                            }
-                        )
-                    }
                     TextButton(onClick = onRefresh) { Text("刷新") }
                 }
             )
@@ -394,17 +390,87 @@ private fun ManageStorageScreen(
                 Text("视频目录：$videosDir", style = MaterialTheme.typography.labelSmall)
                 Text("音频目录：$audioDir", style = MaterialTheme.typography.labelSmall)
             }
-            Text("长按文件可选择恢复或删除", style = MaterialTheme.typography.labelSmall)
-            if (filteredItems.isEmpty()) {
-                Text("暂无文件", style = MaterialTheme.typography.labelMedium)
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(filteredItems, key = { it.path }) { item ->
-                        StorageMediaRow(
-                            item = item,
-                            vm = vm,
-                            onLongPress = { actionTarget = item }
-                        )
+            Text("长按文件可复制文件信息并管理", style = MaterialTheme.typography.labelSmall)
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    StorageSectionHeader(
+                        title = "图片组",
+                        expanded = imageExpanded,
+                        onToggle = { imageExpanded = !imageExpanded }
+                    )
+                }
+                if (imageExpanded) {
+                    val imageGroups = groupedItems[ResourceType.IMAGE].orEmpty()
+                    if (imageGroups.isEmpty()) {
+                        item { Text("暂无图片文件", style = MaterialTheme.typography.labelMedium) }
+                    } else {
+                        imageGroups.forEach { group ->
+                            item { StorageGroupHeader(title = group.title) }
+                            items(group.items, key = { it.path }) { item ->
+                                StorageMediaRow(
+                                    item = item,
+                                    vm = vm,
+                                    onLongPress = {
+                                        copyFileInfo(item, clipboard, context)
+                                        actionTarget = item
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    StorageSectionHeader(
+                        title = "视频组",
+                        expanded = videoExpanded,
+                        onToggle = { videoExpanded = !videoExpanded }
+                    )
+                }
+                if (videoExpanded) {
+                    val videoGroups = groupedItems[ResourceType.VIDEO].orEmpty()
+                    if (videoGroups.isEmpty()) {
+                        item { Text("暂无视频文件", style = MaterialTheme.typography.labelMedium) }
+                    } else {
+                        videoGroups.forEach { group ->
+                            item { StorageGroupHeader(title = group.title) }
+                            items(group.items, key = { it.path }) { item ->
+                                StorageMediaRow(
+                                    item = item,
+                                    vm = vm,
+                                    onLongPress = {
+                                        copyFileInfo(item, clipboard, context)
+                                        actionTarget = item
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    StorageSectionHeader(
+                        title = "声音组",
+                        expanded = soundExpanded,
+                        onToggle = { soundExpanded = !soundExpanded }
+                    )
+                }
+                if (soundExpanded) {
+                    val soundGroups = groupedItems[ResourceType.SOUND].orEmpty()
+                    if (soundGroups.isEmpty()) {
+                        item { Text("暂无声音文件", style = MaterialTheme.typography.labelMedium) }
+                    } else {
+                        soundGroups.forEach { group ->
+                            item { StorageGroupHeader(title = group.title) }
+                            items(group.items, key = { it.path }) { item ->
+                                StorageMediaRow(
+                                    item = item,
+                                    vm = vm,
+                                    onLongPress = {
+                                        copyFileInfo(item, clipboard, context)
+                                        actionTarget = item
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -532,6 +598,100 @@ private fun StorageMediaRow(
             )
         }
     }
+}
+
+private data class StoredMediaGroup(
+    val title: String,
+    val items: List<StoredMediaItem>
+)
+
+@Composable
+private fun StorageSectionHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Icon(
+            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = if (expanded) "折叠" else "展开"
+        )
+    }
+}
+
+@Composable
+private fun StorageGroupHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+}
+
+private fun buildStoredMediaGroups(
+    items: List<StoredMediaItem>,
+    resources: List<ResourceWithTagsCharacters>
+): Map<ResourceType, List<StoredMediaGroup>> {
+    val imageTitleMap = mutableMapOf<String, String>()
+    val videoTitleMap = mutableMapOf<String, String>()
+    val soundTitleMap = mutableMapOf<String, String>()
+
+    resources.forEach { resource ->
+        when (resource.resource.type) {
+            ResourceType.IMAGE -> {
+                parseImageItems(resource.resource.contentUriOrPath, resource.resource.quoteImageBase64)
+                    .forEach { item ->
+                        item.path?.let { imageTitleMap[it] = resource.resource.title }
+                    }
+            }
+            ResourceType.VIDEO -> {
+                parseVideoItems(resource.resource.contentUriOrPath)
+                    .forEach { item ->
+                        item.path?.let { videoTitleMap[it] = resource.resource.title }
+                    }
+            }
+            ResourceType.SOUND -> {
+                parseSoundItems(resource.resource.contentUriOrPath)
+                    .forEach { item ->
+                        item.path?.let { soundTitleMap[it] = resource.resource.title }
+                    }
+            }
+            else -> Unit
+        }
+    }
+
+    fun groupItems(type: ResourceType, titleMap: Map<String, String>): List<StoredMediaGroup> {
+        val groups = items.filter { it.type == type }
+            .groupBy { titleMap[it.path] ?: "未归档" }
+        return groups.entries.sortedBy { it.key }.map { (title, groupItems) ->
+            StoredMediaGroup(title = title, items = groupItems.sortedBy { it.path })
+        }
+    }
+
+    return mapOf(
+        ResourceType.IMAGE to groupItems(ResourceType.IMAGE, imageTitleMap),
+        ResourceType.VIDEO to groupItems(ResourceType.VIDEO, videoTitleMap),
+        ResourceType.SOUND to groupItems(ResourceType.SOUND, soundTitleMap)
+    )
+}
+
+private fun copyFileInfo(
+    item: StoredMediaItem,
+    clipboard: androidx.compose.ui.platform.ClipboardManager,
+    context: android.content.Context
+) {
+    val info = encodeResourceFileInfo(item.type, Uri.parse(item.path))
+    clipboard.setText(AnnotatedString(info))
+    Toast.makeText(context, "文件信息已复制", Toast.LENGTH_SHORT).show()
 }
 
 private sealed class CreateMode {

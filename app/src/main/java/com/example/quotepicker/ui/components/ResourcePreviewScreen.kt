@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import android.media.MediaPlayer
 import android.widget.MediaController
+import android.widget.Toast
 import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,6 +58,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.ResourceType
@@ -99,6 +102,8 @@ fun ResourcePreviewScreen(
     val scrollState = rememberScrollState()
     val uiState by vm.uiState.collectAsState()
     val allResources by vm.allResources.collectAsState()
+    val context = LocalContext.current
+    var filePreviewInfo by remember { mutableStateOf<ResourceFileInfo?>(null) }
     val sortedTags = remember(resource.tags, uiState.categories) {
         sortTagsForDisplay(resource.tags, uiState.categories)
     }
@@ -106,6 +111,14 @@ fun ResourcePreviewScreen(
         uiState.characters.firstOrNull { it.id == id }?.name
     }
     val eventRunner = rememberEventSequenceRunner()
+    val handleFilePreview: (String) -> Unit = { info ->
+        val decoded = decodeResourceFileInfo(info)
+        if (decoded == null) {
+            Toast.makeText(context, "文件信息无效", Toast.LENGTH_SHORT).show()
+        } else {
+            filePreviewInfo = decoded
+        }
+    }
 
     LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
         val res = resource.resource
@@ -232,7 +245,8 @@ fun ResourcePreviewScreen(
                                 if (quoteText.isNotBlank()) {
                                     PreviewTextBlock(
                                         text = quoteText,
-                                        onEventSequence = handleEventSequence
+                                        onEventSequence = handleEventSequence,
+                                        onFilePreview = handleFilePreview
                                     )
                                 }
                                 QuoteImagePager(images = quoteImages)
@@ -275,7 +289,8 @@ fun ResourcePreviewScreen(
                                             SceneBubble(
                                                 message = message,
                                                 highlightedSpeaker = highlightedSpeaker,
-                                                onEventSequence = handleEventSequence
+                                                onEventSequence = handleEventSequence,
+                                                onFilePreview = handleFilePreview
                                             )
                                         }
                                     }
@@ -302,7 +317,8 @@ fun ResourcePreviewScreen(
                                                         ResourceType.TEXT -> {
                                                             PreviewTextBlock(
                                                                 text = item.text,
-                                                                onEventSequence = handleEventSequence
+                                                                onEventSequence = handleEventSequence,
+                                                                onFilePreview = handleFilePreview
                                                             )
                                                         }
                                                         ResourceType.SCENE -> {
@@ -310,7 +326,8 @@ fun ResourcePreviewScreen(
                                                                 SceneBubble(
                                                                     message = message,
                                                                     highlightedSpeaker = highlightedSpeaker,
-                                                                    onEventSequence = handleEventSequence
+                                                                    onEventSequence = handleEventSequence,
+                                                                    onFilePreview = handleFilePreview
                                                                 )
                                                             }
                                                         }
@@ -353,16 +370,27 @@ fun ResourcePreviewScreen(
             }
         }
     }
+    filePreviewInfo?.let { info ->
+        FilePreviewDialog(
+            info = info,
+            vm = vm,
+            onDismiss = { filePreviewInfo = null }
+        )
+    }
 }
 
 @Composable
-private fun MediaPreview(uri: Uri) {
+private fun MediaPreview(uri: Uri, modifier: Modifier = Modifier) {
     val viewHolder = remember { mutableStateOf<VideoView?>(null) }
     DisposableEffect(Unit) {
         onDispose {
             viewHolder.value?.stopPlayback()
         }
     }
+    val baseModifier = Modifier
+        .fillMaxWidth()
+        .height(420.dp)
+        .background(MaterialTheme.colorScheme.surfaceVariant)
     AndroidView(
         factory = { context ->
             VideoView(context).apply {
@@ -391,10 +419,7 @@ private fun MediaPreview(uri: Uri) {
                 view.setVideoURI(uri)
             }
         },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(420.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+        modifier = baseModifier.then(modifier)
     )
 }
 
@@ -537,7 +562,8 @@ private fun decodeImageSource(item: String, vm: ResourceViewModel): android.grap
 private fun SceneBubble(
     message: SceneMessage,
     highlightedSpeaker: String?,
-    onEventSequence: (EventSequence) -> Unit
+    onEventSequence: (EventSequence) -> Unit,
+    onFilePreview: (String) -> Unit
 ) {
     val isHighlighted = highlightedSpeaker != null && highlightedSpeaker == message.speaker
     Row(
@@ -565,8 +591,84 @@ private fun SceneBubble(
             PreviewTextBlock(
                 text = message.content,
                 onEventSequence = onEventSequence,
+                onFilePreview = onFilePreview,
                 textStyle = MaterialTheme.typography.bodyMedium
             )
+        }
+    }
+}
+
+@Composable
+private fun FilePreviewDialog(
+    info: ResourceFileInfo,
+    vm: ResourceViewModel,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("文件预览") },
+        text = {
+            when (info.type) {
+                ResourceType.IMAGE -> {
+                    val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
+                        value = vm.decodeUriToBitmap(info.uri)
+                    }
+                    if (preview != null) {
+                        Image(
+                            bitmap = preview!!.asImageBitmap(),
+                            contentDescription = "图片预览",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1.3f),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text("图片加载中…")
+                    }
+                }
+                ResourceType.VIDEO -> {
+                    MediaPreview(
+                        uri = info.uri,
+                        modifier = Modifier.height(220.dp)
+                    )
+                }
+                ResourceType.SOUND -> {
+                    AudioPreviewSingle(uri = info.uri)
+                }
+                else -> Text("暂不支持的文件类型")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun AudioPreviewSingle(uri: Uri) {
+    val context = LocalContext.current
+    val playerState = remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            playerState.value?.release()
+            playerState.value = null
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = "音频文件", style = MaterialTheme.typography.labelMedium)
+        TextButton(onClick = {
+            playerState.value?.release()
+            playerState.value = MediaPlayer().apply {
+                setDataSource(context, uri)
+                setOnPreparedListener { it.start() }
+                prepareAsync()
+            }
+        }) {
+            Text("播放")
         }
     }
 }
