@@ -1,22 +1,19 @@
 package com.example.quotepicker.ui.components
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.buildAnnotatedString
 import kotlin.random.Random
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
 sealed interface PreviewSegment {
     data class TextSegment(val text: String) : PreviewSegment
@@ -97,7 +94,6 @@ fun parseEventSequence(raw: String): EventSequence? {
     return EventSequence(label = label, steps = steps, toneIndex = toneIndex)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PreviewTextBlock(
     text: String,
@@ -106,47 +102,96 @@ fun PreviewTextBlock(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.bodyMedium
 ) {
-    val segments = remember(text) { parsePreviewSegments(text) }
+    val eventColor = MaterialTheme.colorScheme.primary
+    val preview = remember(text, eventColor) {
+        buildPreviewAnnotatedText(text, eventColor, Color(0xFF2E7D32))
+    }
     SelectionContainer {
-        FlowRow(
+        ClickableText(
+            text = preview.annotatedString,
             modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            segments.forEach { segment ->
-                when (segment) {
-                    is PreviewSegment.TextSegment -> {
-                        if (segment.text.isNotBlank()) {
-                            Text(text = segment.text, style = textStyle)
-                        }
-                    }
-                    is PreviewSegment.EventSegment -> {
-                        val label = "【${segment.sequence.label}】"
-                        Text(
-                            text = label,
-                            modifier = Modifier
-                                .clickable { onEventSequence(segment.sequence) },
-                            color = MaterialTheme.colorScheme.primary,
+            style = textStyle,
+            onClick = { offset ->
+                preview.annotatedString
+                    .getStringAnnotations("event", offset, offset)
+                    .firstOrNull()
+                    ?.item
+                    ?.toIntOrNull()
+                    ?.let { index -> preview.eventSequences.getOrNull(index) }
+                    ?.let(onEventSequence)
+                    ?: preview.annotatedString
+                        .getStringAnnotations("file", offset, offset)
+                        .firstOrNull()
+                        ?.item
+                        ?.toIntOrNull()
+                        ?.let { index -> preview.fileInfos.getOrNull(index) }
+                        ?.let(onFilePreview)
+            }
+        )
+    }
+}
+
+private data class PreviewAnnotatedText(
+    val annotatedString: AnnotatedString,
+    val eventSequences: List<EventSequence>,
+    val fileInfos: List<String>
+)
+
+private fun buildPreviewAnnotatedText(
+    text: String,
+    eventColor: Color,
+    fileColor: Color
+): PreviewAnnotatedText {
+    val random = Random.Default
+    val segments = parsePreviewSegments(text, random)
+    val events = mutableListOf<EventSequence>()
+    val files = mutableListOf<String>()
+    val annotatedString = buildAnnotatedString {
+        segments.forEach { segment ->
+            when (segment) {
+                is PreviewSegment.TextSegment -> append(segment.text)
+                is PreviewSegment.EventSegment -> {
+                    val display = "#${formatDisplayText(segment.sequence.label, random)}"
+                    val start = length
+                    append(display)
+                    val end = length
+                    addStyle(
+                        SpanStyle(
+                            color = eventColor,
                             fontWeight = FontWeight.SemiBold,
-                            textDecoration = TextDecoration.Underline,
-                            style = textStyle
-                        )
-                    }
-                    is PreviewSegment.FileSegment -> {
-                        Text(
-                            text = segment.label,
-                            modifier = Modifier
-                                .clickable { onFilePreview(segment.fileInfo) },
-                            color = Color(0xFF2E7D32),
+                            textDecoration = TextDecoration.Underline
+                        ),
+                        start,
+                        end
+                    )
+                    addStringAnnotation("event", events.size.toString(), start, end)
+                    events.add(segment.sequence)
+                }
+                is PreviewSegment.FileSegment -> {
+                    val display = "@${formatDisplayText(segment.label, random)}"
+                    val start = length
+                    append(display)
+                    val end = length
+                    addStyle(
+                        SpanStyle(
+                            color = fileColor,
                             fontWeight = FontWeight.SemiBold,
-                            textDecoration = TextDecoration.Underline,
-                            style = textStyle
-                        )
-                    }
+                            textDecoration = TextDecoration.Underline
+                        ),
+                        start,
+                        end
+                    )
+                    addStringAnnotation("file", files.size.toString(), start, end)
+                    files.add(segment.fileInfo)
                 }
             }
         }
     }
+    return PreviewAnnotatedText(
+        annotatedString = annotatedString,
+        eventSequences = events,
+        fileInfos = files
+    )
 }
 
 private fun parseFileSegments(text: String, random: Random): List<PreviewSegment> {
@@ -163,7 +208,7 @@ private fun parseFileSegments(text: String, random: Random): List<PreviewSegment
         val label = match.groupValues.getOrNull(1).orEmpty().trim()
         val info = match.groupValues.getOrNull(2).orEmpty()
         if (label.isNotBlank() && info.isNotBlank()) {
-            segments.add(PreviewSegment.FileSegment(label = "@$label", fileInfo = info))
+            segments.add(PreviewSegment.FileSegment(label = label, fileInfo = info))
         } else if (match.value.isNotBlank()) {
             segments.add(PreviewSegment.TextSegment(formatDisplayText(match.value, random)))
         }
