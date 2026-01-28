@@ -424,7 +424,11 @@ fun CharacterScreen(
                                 if (introText.isBlank()) {
                                     Text("暂无要点", style = MaterialTheme.typography.labelMedium)
                                 } else {
-                                    PreviewTextBlock(text = introText, onEventSequence = {})
+                                    PreviewTextBlock(
+                                        text = introText,
+                                        onEventSequence = {},
+                                        onFilePreview = {}
+                                    )
                                 }
                             }
                         }

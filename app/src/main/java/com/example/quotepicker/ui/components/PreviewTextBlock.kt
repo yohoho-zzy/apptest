@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 sealed interface PreviewSegment {
     data class TextSegment(val text: String) : PreviewSegment
     data class EventSegment(val sequence: EventSequence) : PreviewSegment
+    data class FileSegment(val label: String, val fileInfo: String) : PreviewSegment
 }
 
 data class EventSequence(
@@ -39,6 +40,7 @@ sealed interface EventStep {
 
 private val eventTokenRegex = Regex("\\+\\+(.*?)\\+\\+")
 private val eventStepRegex = Regex("\\[(.*?)]")
+private val fileTokenRegex = Regex("@([^@]+)@\\(([^)]*)\\)")
 
 fun parsePreviewSegments(text: String, random: Random = Random.Default): List<PreviewSegment> {
     if (text.isBlank()) return listOf(PreviewSegment.TextSegment(text))
@@ -47,26 +49,22 @@ fun parsePreviewSegments(text: String, random: Random = Random.Default): List<Pr
     eventTokenRegex.findAll(text).forEach { match ->
         if (match.range.first > lastIndex) {
             val raw = text.substring(lastIndex, match.range.first)
-            if (raw.isNotBlank()) {
-                segments.add(PreviewSegment.TextSegment(formatDisplayText(raw, random)))
-            }
+            segments.addAll(parseFileSegments(raw, random))
         }
         val token = match.groupValues.getOrNull(1).orEmpty()
         val sequence = parseEventSequence(token)
         if (sequence != null) {
             segments.add(PreviewSegment.EventSegment(sequence))
         } else if (token.isNotBlank()) {
-            segments.add(PreviewSegment.TextSegment(formatDisplayText(token, random)))
+            segments.addAll(parseFileSegments(token, random))
         }
         lastIndex = match.range.last + 1
     }
     if (lastIndex < text.length) {
         val tail = text.substring(lastIndex)
-        if (tail.isNotBlank()) {
-            segments.add(PreviewSegment.TextSegment(formatDisplayText(tail, random)))
-        }
+        segments.addAll(parseFileSegments(tail, random))
     }
-    return if (segments.isEmpty()) listOf(PreviewSegment.TextSegment(formatDisplayText(text, random))) else segments
+    return if (segments.isEmpty()) parseFileSegments(text, random) else segments
 }
 
 fun parseEventSequence(raw: String): EventSequence? {
@@ -103,6 +101,7 @@ fun parseEventSequence(raw: String): EventSequence? {
 fun PreviewTextBlock(
     text: String,
     onEventSequence: (EventSequence) -> Unit,
+    onFilePreview: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.bodyMedium
 ) {
@@ -133,8 +132,49 @@ fun PreviewTextBlock(
                             style = textStyle
                         )
                     }
+                    is PreviewSegment.FileSegment -> {
+                        Text(
+                            text = segment.label,
+                            modifier = Modifier
+                                .clickable { onFilePreview(segment.fileInfo) }
+                                .padding(vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.SemiBold,
+                            textDecoration = TextDecoration.Underline,
+                            style = textStyle
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private fun parseFileSegments(text: String, random: Random): List<PreviewSegment> {
+    if (text.isBlank()) return emptyList()
+    val segments = mutableListOf<PreviewSegment>()
+    var lastIndex = 0
+    fileTokenRegex.findAll(text).forEach { match ->
+        if (match.range.first > lastIndex) {
+            val raw = text.substring(lastIndex, match.range.first)
+            if (raw.isNotBlank()) {
+                segments.add(PreviewSegment.TextSegment(formatDisplayText(raw, random)))
+            }
+        }
+        val label = match.groupValues.getOrNull(1).orEmpty().trim()
+        val info = match.groupValues.getOrNull(2).orEmpty()
+        if (label.isNotBlank() && info.isNotBlank()) {
+            segments.add(PreviewSegment.FileSegment(label = "@$label", fileInfo = info))
+        } else if (match.value.isNotBlank()) {
+            segments.add(PreviewSegment.TextSegment(formatDisplayText(match.value, random)))
+        }
+        lastIndex = match.range.last + 1
+    }
+    if (lastIndex < text.length) {
+        val tail = text.substring(lastIndex)
+        if (tail.isNotBlank()) {
+            segments.add(PreviewSegment.TextSegment(formatDisplayText(tail, random)))
+        }
+    }
+    return if (segments.isEmpty()) listOf(PreviewSegment.TextSegment(formatDisplayText(text, random))) else segments
 }
