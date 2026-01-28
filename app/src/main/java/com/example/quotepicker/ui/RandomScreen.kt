@@ -174,7 +174,6 @@ fun ExecutionScreen(
                                     return@Button
                                 }
                                 vm.consumeRecord(record.characterId, record.tagId)
-                                vm.consumeExecutionRemaining()
                                 val candidates = ui.resources.filter { res ->
                                     res.characters.any { it.id == record.characterId } &&
                                         res.tags.any { it.id == record.tagId }

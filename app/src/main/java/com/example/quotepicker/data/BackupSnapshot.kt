@@ -19,7 +19,7 @@ data class BackupSnapshot(
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
-            put("version", 4)
+            put("version", 5)
             put("categories", JSONArray(categories.map(::categoryToJson)))
             put("tags", JSONArray(tags.map(::tagToJson)))
             put("characters", JSONArray(characters.map(::characterToJson)))
@@ -82,6 +82,7 @@ private fun characterToJson(character: CharacterEntity): JSONObject =
         .put("name", character.name)
         .put("description", character.description)
         .put("points", character.points)
+        .put("familiarity", character.familiarity)
         .put("probability", character.probability)
         .put("probabilityDate", character.probabilityDate)
         .put("createdAt", character.createdAt)
@@ -168,6 +169,7 @@ private fun characterFromJson(obj: JSONObject): CharacterEntity =
         name = obj.getString("name"),
         description = readNullableString(obj, "description"),
         points = obj.optInt("points", 30),
+        familiarity = obj.optInt("familiarity", 0),
         probability = obj.optInt("probability", 1),
         probabilityDate = readNullableString(obj, "probabilityDate"),
         createdAt = obj.getLong("createdAt"),

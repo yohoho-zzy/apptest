@@ -215,19 +215,20 @@ fun CharacterScreen(
                     }
                 } else {
                     val teamCategoryId = ui.categories.firstOrNull { it.name == "队伍体系" }?.id
-                    val teamEntries = ui.characters.map { character ->
-                        val teamTag = teamCategoryId?.let { categoryId ->
-                            character.tags.firstOrNull { it.categoryId == categoryId }
+                        val teamEntries = ui.characters.map { character ->
+                            val teamTag = teamCategoryId?.let { categoryId ->
+                                character.tags.firstOrNull { it.categoryId == categoryId }
+                            }
+                            val info = parseTeamInfo(teamTag)
+                            CharacterTeamEntry(
+                                character = character,
+                                teamName = info.teamName,
+                                levelLabel = info.levelLabel,
+                                levelOrder = info.levelOrder,
+                                borderColor = info.borderColor,
+                                familiarity = character.character.familiarity
+                            )
                         }
-                        val info = parseTeamInfo(teamTag)
-                        CharacterTeamEntry(
-                            character = character,
-                            teamName = info.teamName,
-                            levelLabel = info.levelLabel,
-                            levelOrder = info.levelOrder,
-                            borderColor = info.borderColor
-                        )
-                    }
                     val groupedTeams = teamEntries.groupBy { it.teamName }
                     Column(
                         modifier = Modifier
@@ -256,11 +257,27 @@ fun CharacterScreen(
                                             levelMembers.forEach { entry ->
                                                 SquareGridItem(
                                                     title = entry.character.character.name,
-                                                    subtitle = entry.levelLabel,
                                                     borderColor = entry.borderColor,
                                                     subtitleOnTop = true,
-                                                    subtitleColor = entry.borderColor,
-                                                    subtitleFontWeight = FontWeight.Bold,
+                                                    subtitleContent = {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                            Text(
+                                                                text = entry.familiarity.toString(),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color(0xFFFF5DA2),
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                            Text(
+                                                                text = entry.levelLabel,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = entry.borderColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    },
                                                     modifier = Modifier.width(itemSize),
                                                     bottomContent = {
                                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -348,7 +365,7 @@ fun CharacterScreen(
                                     Button(onClick = {
                                         val current = char
                                         if (current.points <= 0) {
-                                            vm.updateCharacterPoints(current.id, 30)
+                                            vm.updateCharacter(current.copy(points = 30, familiarity = current.familiarity + 1))
                                             val fallbackTag = narrativeTags.firstOrNull()
                                             if (fallbackTag != null) {
                                                 vm.addResponseRecord(current.id, fallbackTag.id, count = 3)
@@ -389,6 +406,7 @@ fun CharacterScreen(
                                                 ).show()
                                             }
                                         }
+                                        vm.consumeExecutionRemaining()
                                     }) {
                                         Text(ui.executionSettings.buttonLabel)
                                     }
@@ -538,7 +556,8 @@ private data class CharacterTeamEntry(
     val teamName: String,
     val levelLabel: String,
     val levelOrder: Int,
-    val borderColor: Color?
+    val borderColor: Color?,
+    val familiarity: Int
 )
 
 private data class TeamTagInfo(
