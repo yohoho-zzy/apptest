@@ -33,7 +33,7 @@ class Converters {
         ResponseRecordEntity::class,
         ExecutionSettingsEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
