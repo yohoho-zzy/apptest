@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -124,8 +125,7 @@ fun PreviewTextBlock(
                         Text(
                             text = label,
                             modifier = Modifier
-                                .clickable { onEventSequence(segment.sequence) }
-                                .padding(vertical = 2.dp),
+                                .clickable { onEventSequence(segment.sequence) },
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
                             textDecoration = TextDecoration.Underline,
@@ -136,9 +136,8 @@ fun PreviewTextBlock(
                         Text(
                             text = segment.label,
                             modifier = Modifier
-                                .clickable { onFilePreview(segment.fileInfo) }
-                                .padding(vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.secondary,
+                                .clickable { onFilePreview(segment.fileInfo) },
+                            color = Color(0xFF2E7D32),
                             fontWeight = FontWeight.SemiBold,
                             textDecoration = TextDecoration.Underline,
                             style = textStyle

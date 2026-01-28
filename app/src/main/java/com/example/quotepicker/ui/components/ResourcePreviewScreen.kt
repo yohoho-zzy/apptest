@@ -606,36 +606,41 @@ private fun FilePreviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(),
         title = { Text("文件预览") },
         text = {
-            when (info.type) {
-                ResourceType.IMAGE -> {
-                    val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
-                        value = vm.decodeUriToBitmap(info.uri)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 260.dp, max = 420.dp)
+            ) {
+                when (info.type) {
+                    ResourceType.IMAGE -> {
+                        val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
+                            value = vm.decodeUriToBitmap(info.uri)
+                        }
+                        if (preview != null) {
+                            Image(
+                                bitmap = preview!!.asImageBitmap(),
+                                contentDescription = "图片预览",
+                                modifier = Modifier.fillMaxWidth(),
+                                contentScale = ContentScale.Fit
+                            )
+                        } else {
+                            Text("图片加载中…")
+                        }
                     }
-                    if (preview != null) {
-                        Image(
-                            bitmap = preview!!.asImageBitmap(),
-                            contentDescription = "图片预览",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1.3f),
-                            contentScale = ContentScale.Crop
+                    ResourceType.VIDEO -> {
+                        MediaPreview(
+                            uri = info.uri,
+                            modifier = Modifier.height(300.dp)
                         )
-                    } else {
-                        Text("图片加载中…")
                     }
+                    ResourceType.SOUND -> {
+                        AudioPreviewSingle(uri = info.uri)
+                    }
+                    else -> Text("暂不支持的文件类型")
                 }
-                ResourceType.VIDEO -> {
-                    MediaPreview(
-                        uri = info.uri,
-                        modifier = Modifier.height(220.dp)
-                    )
-                }
-                ResourceType.SOUND -> {
-                    AudioPreviewSingle(uri = info.uri)
-                }
-                else -> Text("暂不支持的文件类型")
             }
         },
         confirmButton = {

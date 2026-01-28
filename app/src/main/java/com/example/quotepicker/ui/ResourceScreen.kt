@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -61,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -351,14 +353,10 @@ private fun ManageStorageScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val imagesDir = remember { File(context.filesDir, "images").absolutePath }
-    val videosDir = remember { File(context.filesDir, "videos").absolutePath }
-    val audioDir = remember { File(context.filesDir, "audio").absolutePath }
     var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
-    var imageExpanded by remember { mutableStateOf(true) }
-    var videoExpanded by remember { mutableStateOf(true) }
-    var soundExpanded by remember { mutableStateOf(true) }
+    var selectedType by remember { mutableStateOf(ResourceType.IMAGE) }
+    val groupExpandedState = remember { mutableStateMapOf<String, Boolean>() }
     val coroutineScope = rememberCoroutineScope()
     val groupedItems = remember(items, resources) { buildStoredMediaGroups(items, resources) }
 
@@ -384,90 +382,43 @@ private fun ManageStorageScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("App 资源存储路径", style = MaterialTheme.typography.titleMedium)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("图片目录：$imagesDir", style = MaterialTheme.typography.labelSmall)
-                Text("视频目录：$videosDir", style = MaterialTheme.typography.labelSmall)
-                Text("音频目录：$audioDir", style = MaterialTheme.typography.labelSmall)
+            Text("长按文件进行管理", style = MaterialTheme.typography.labelSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(ResourceType.IMAGE, ResourceType.VIDEO, ResourceType.SOUND).forEach { type ->
+                    FilterChip(
+                        selected = selectedType == type,
+                        onClick = { selectedType = type },
+                        label = { Text(typeLabel(type)) }
+                    )
+                }
             }
-            Text("长按文件可复制文件信息并管理", style = MaterialTheme.typography.labelSmall)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    StorageSectionHeader(
-                        title = "图片组",
-                        expanded = imageExpanded,
-                        onToggle = { imageExpanded = !imageExpanded }
-                    )
-                }
-                if (imageExpanded) {
-                    val imageGroups = groupedItems[ResourceType.IMAGE].orEmpty()
-                    if (imageGroups.isEmpty()) {
-                        item { Text("暂无图片文件", style = MaterialTheme.typography.labelMedium) }
-                    } else {
-                        imageGroups.forEach { group ->
-                            item { StorageGroupHeader(title = group.title) }
-                            items(group.items, key = { it.path }) { item ->
-                                StorageMediaRow(
-                                    item = item,
-                                    vm = vm,
-                                    onLongPress = {
-                                        copyFileInfo(item, clipboard, context)
-                                        actionTarget = item
-                                    }
-                                )
-                            }
-                        }
+                val groups = groupedItems[selectedType].orEmpty()
+                if (groups.isEmpty()) {
+                    item {
+                        Text(
+                            "暂无${typeLabel(selectedType)}文件",
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
-                }
-                item {
-                    StorageSectionHeader(
-                        title = "视频组",
-                        expanded = videoExpanded,
-                        onToggle = { videoExpanded = !videoExpanded }
-                    )
-                }
-                if (videoExpanded) {
-                    val videoGroups = groupedItems[ResourceType.VIDEO].orEmpty()
-                    if (videoGroups.isEmpty()) {
-                        item { Text("暂无视频文件", style = MaterialTheme.typography.labelMedium) }
-                    } else {
-                        videoGroups.forEach { group ->
-                            item { StorageGroupHeader(title = group.title) }
-                            items(group.items, key = { it.path }) { item ->
-                                StorageMediaRow(
-                                    item = item,
-                                    vm = vm,
-                                    onLongPress = {
-                                        copyFileInfo(item, clipboard, context)
-                                        actionTarget = item
-                                    }
-                                )
-                            }
+                } else {
+                    groups.forEach { group ->
+                        val expanded = groupExpandedState.getOrPut("${selectedType.name}-${group.title}") { true }
+                        item {
+                            StorageSectionHeader(
+                                title = group.title,
+                                expanded = expanded,
+                                onToggle = {
+                                    groupExpandedState["${selectedType.name}-${group.title}"] = !expanded
+                                }
+                            )
                         }
-                    }
-                }
-                item {
-                    StorageSectionHeader(
-                        title = "声音组",
-                        expanded = soundExpanded,
-                        onToggle = { soundExpanded = !soundExpanded }
-                    )
-                }
-                if (soundExpanded) {
-                    val soundGroups = groupedItems[ResourceType.SOUND].orEmpty()
-                    if (soundGroups.isEmpty()) {
-                        item { Text("暂无声音文件", style = MaterialTheme.typography.labelMedium) }
-                    } else {
-                        soundGroups.forEach { group ->
-                            item { StorageGroupHeader(title = group.title) }
+                        if (expanded) {
                             items(group.items, key = { it.path }) { item ->
                                 StorageMediaRow(
                                     item = item,
                                     vm = vm,
-                                    onLongPress = {
-                                        copyFileInfo(item, clipboard, context)
-                                        actionTarget = item
-                                    }
+                                    onLongPress = { actionTarget = item }
                                 )
                             }
                         }
@@ -483,6 +434,14 @@ private fun ManageStorageScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                TextButton(onClick = {
+                    copyFileInfo(target, clipboard, context)
+                    actionTarget = null
+                }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("复制文件信息")
+                }
                 TextButton(onClick = {
                     actionTarget = null
                     onRestore(target)
@@ -625,16 +584,6 @@ private fun StorageSectionHeader(
             contentDescription = if (expanded) "折叠" else "展开"
         )
     }
-}
-
-@Composable
-private fun StorageGroupHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp)
-    )
 }
 
 private fun buildStoredMediaGroups(
