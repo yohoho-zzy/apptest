@@ -230,6 +230,8 @@ fun CharacterScreen(
                             )
                         }
                     val groupedTeams = teamEntries.groupBy { it.teamName }
+                        .toList()
+                        .sortedBy { it.first }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
