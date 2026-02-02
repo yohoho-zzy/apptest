@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
@@ -63,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -1387,6 +1387,8 @@ private fun ResourceEditScreen(
     var editSceneIndex by remember { mutableStateOf<Int?>(null) }
     var showFlowDialog by remember { mutableStateOf(false) }
     var editFlowIndex by remember { mutableStateOf<Int?>(null) }
+    var transferTarget by remember { mutableStateOf<MediaTransferTarget?>(null) }
+    val pendingTransfers = remember { mutableStateListOf<PendingMediaTransfer>() }
     val scrollState = rememberScrollState()
 
     val context = LocalContext.current
@@ -1457,6 +1459,11 @@ private fun ResourceEditScreen(
                 },
                 actions = {
                     TextButton(onClick = {
+                        applyPendingTransfers(
+                            pendingTransfers = pendingTransfers,
+                            availableResources = availableResources,
+                            vm = vm
+                        )
                         when (resource.resource.type) {
                             ResourceType.FLOW -> vm.updateFlow(
                                 resource.resource,
@@ -1601,6 +1608,15 @@ private fun ResourceEditScreen(
                                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
                                         }
                                         IconButton(onClick = {
+                                            transferTarget = MediaTransferTarget(
+                                                type = ResourceType.IMAGE,
+                                                index = index,
+                                                item = MediaTransferItem.Image(item)
+                                            )
+                                        }) {
+                                            Icon(Icons.Default.DriveFileMove, contentDescription = "移动或复制")
+                                        }
+                                        IconButton(onClick = {
                                             imageItems = imageItems.toMutableList().also { it.removeAt(index) }
                                         }) {
                                             Icon(Icons.Default.Delete, contentDescription = "删除")
@@ -1673,6 +1689,15 @@ private fun ResourceEditScreen(
                                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
                                         }
                                         IconButton(onClick = {
+                                            transferTarget = MediaTransferTarget(
+                                                type = ResourceType.VIDEO,
+                                                index = index,
+                                                item = MediaTransferItem.Video(item)
+                                            )
+                                        }) {
+                                            Icon(Icons.Default.DriveFileMove, contentDescription = "移动或复制")
+                                        }
+                                        IconButton(onClick = {
                                             videoItems = videoItems.toMutableList().also { it.removeAt(index) }
                                         }) {
                                             Icon(Icons.Default.Delete, contentDescription = "删除")
@@ -1720,6 +1745,15 @@ private fun ResourceEditScreen(
                                             }
                                         }) {
                                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移")
+                                        }
+                                        IconButton(onClick = {
+                                            transferTarget = MediaTransferTarget(
+                                                type = ResourceType.SOUND,
+                                                index = index,
+                                                item = MediaTransferItem.Sound(item)
+                                            )
+                                        }) {
+                                            Icon(Icons.Default.DriveFileMove, contentDescription = "移动或复制")
                                         }
                                         IconButton(onClick = {
                                             soundItems = soundItems.toMutableList().also { it.removeAt(index) }
@@ -1997,6 +2031,196 @@ private fun ResourceEditScreen(
             }
         )
     }
+
+    transferTarget?.let { target ->
+        val targetCharacterIds = remember(resource) { resource.characters.map { it.id }.toSet() }
+        val candidateGroups = remember(availableResources, targetCharacterIds, resource) {
+            availableResources.filter {
+                it.resource.type == resource.resource.type &&
+                    it.resource.id != resource.resource.id &&
+                    it.characters.map { character -> character.id }.toSet() == targetCharacterIds
+            }
+        }
+        var selectedGroupId by remember(target) { mutableStateOf(candidateGroups.firstOrNull()?.resource?.id) }
+        val canConfirm = selectedGroupId != null
+
+        AlertDialog(
+            onDismissRequest = { transferTarget = null },
+            title = { Text("移动或复制") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (candidateGroups.isEmpty()) {
+                        Text("暂无可用的同角色资源组", style = MaterialTheme.typography.labelMedium)
+                    } else {
+                        Text("选择目标组", style = MaterialTheme.typography.labelMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            candidateGroups.forEach { candidate ->
+                                FilterChip(
+                                    selected = selectedGroupId == candidate.resource.id,
+                                    onClick = { selectedGroupId = candidate.resource.id },
+                                    label = { Text(candidate.resource.title) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            val destinationId = selectedGroupId
+                            if (destinationId != null) {
+                                pendingTransfers.add(
+                                    PendingMediaTransfer(
+                                        destinationId = destinationId,
+                                        item = target.item,
+                                        mode = TransferMode.Copy
+                                    )
+                                )
+                            }
+                            transferTarget = null
+                        },
+                        enabled = canConfirm
+                    ) { Text("复制") }
+                    TextButton(
+                        onClick = {
+                            val destinationId = selectedGroupId
+                            if (destinationId != null) {
+                                pendingTransfers.add(
+                                    PendingMediaTransfer(
+                                        destinationId = destinationId,
+                                        item = target.item,
+                                        mode = TransferMode.Move
+                                    )
+                                )
+                                when (target.type) {
+                                    ResourceType.IMAGE -> {
+                                        imageItems = imageItems.toMutableList().also { list ->
+                                            if (target.index in list.indices) {
+                                                list.removeAt(target.index)
+                                            }
+                                        }
+                                    }
+                                    ResourceType.VIDEO -> {
+                                        videoItems = videoItems.toMutableList().also { list ->
+                                            if (target.index in list.indices) {
+                                                list.removeAt(target.index)
+                                            }
+                                        }
+                                    }
+                                    ResourceType.SOUND -> {
+                                        soundItems = soundItems.toMutableList().also { list ->
+                                            if (target.index in list.indices) {
+                                                list.removeAt(target.index)
+                                            }
+                                        }
+                                    }
+                                    else -> Unit
+                                }
+                            }
+                            transferTarget = null
+                        },
+                        enabled = canConfirm
+                    ) { Text("移动") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { transferTarget = null }) { Text("取消") } }
+        )
+    }
+}
+
+private enum class TransferMode {
+    Move,
+    Copy
+}
+
+private sealed class MediaTransferItem {
+    data class Image(val item: ImageUpdateItem) : MediaTransferItem()
+    data class Video(val item: VideoUpdateItem) : MediaTransferItem()
+    data class Sound(val item: SoundUpdateItem) : MediaTransferItem()
+}
+
+private data class MediaTransferTarget(
+    val type: ResourceType,
+    val index: Int,
+    val item: MediaTransferItem
+)
+
+private data class PendingMediaTransfer(
+    val destinationId: Long,
+    val item: MediaTransferItem,
+    val mode: TransferMode
+)
+
+private fun applyPendingTransfers(
+    pendingTransfers: MutableList<PendingMediaTransfer>,
+    availableResources: List<ResourceWithTagsCharacters>,
+    vm: ResourceViewModel
+) {
+    if (pendingTransfers.isEmpty()) return
+    val grouped = pendingTransfers.groupBy { it.destinationId }
+    grouped.forEach { (destinationId, transfers) ->
+        val destination = availableResources.firstOrNull { it.resource.id == destinationId } ?: return@forEach
+        when (destination.resource.type) {
+            ResourceType.IMAGE -> {
+                val items = parseImageItems(
+                    destination.resource.contentUriOrPath,
+                    destination.resource.quoteImageBase64
+                ).toMutableList()
+                transfers.forEach { transfer ->
+                    val item = (transfer.item as? MediaTransferItem.Image)?.item ?: return@forEach
+                    items.add(item)
+                }
+                vm.updateImageGroup(
+                    destination.resource,
+                    destination.resource.title,
+                    items,
+                    destination.tags.map { it.id },
+                    destination.characters.map { it.id }
+                )
+            }
+            ResourceType.VIDEO -> {
+                val items = parseVideoItems(destination.resource.contentUriOrPath).toMutableList()
+                transfers.forEach { transfer ->
+                    val item = (transfer.item as? MediaTransferItem.Video)?.item ?: return@forEach
+                    items.add(item)
+                }
+                vm.updateVideoGroup(
+                    destination.resource,
+                    destination.resource.title,
+                    items,
+                    destination.tags.map { it.id },
+                    destination.characters.map { it.id }
+                )
+            }
+            ResourceType.SOUND -> {
+                val items = parseSoundItems(destination.resource.contentUriOrPath).toMutableList()
+                transfers.forEach { transfer ->
+                    val item = (transfer.item as? MediaTransferItem.Sound)?.item ?: return@forEach
+                    items.add(item)
+                }
+                vm.updateSoundGroup(
+                    destination.resource,
+                    destination.resource.title,
+                    items,
+                    destination.tags.map { it.id },
+                    destination.characters.map { it.id }
+                )
+            }
+            else -> Unit
+        }
+    }
+    pendingTransfers.clear()
 }
 
 @OptIn(ExperimentalLayoutApi::class)
