@@ -39,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
@@ -106,8 +106,6 @@ fun ResourcePreviewScreen(
     val scrollState = rememberScrollState()
     val uiState by vm.uiState.collectAsState()
     val allResources by vm.allResources.collectAsState()
-    val context = LocalContext.current
-    var filePreviewInfo by remember { mutableStateOf<ResourceFileInfo?>(null) }
     val sortedTags = remember(resource.tags, uiState.categories) {
         sortTagsForDisplay(resource.tags, uiState.categories)
     }
@@ -115,14 +113,6 @@ fun ResourcePreviewScreen(
         uiState.characters.firstOrNull { it.id == id }?.name
     }
     val eventRunner = rememberEventSequenceRunner()
-    val handleFilePreview: (String) -> Unit = { info ->
-        val decoded = decodeResourceFileInfo(info)
-        if (decoded == null) {
-            Toast.makeText(context, "文件信息无效", Toast.LENGTH_SHORT).show()
-        } else {
-            filePreviewInfo = decoded
-        }
-    }
 
     LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
         val res = resource.resource
@@ -247,10 +237,10 @@ fun ResourcePreviewScreen(
                             ResourceType.TEXT -> {
                                 val quoteText = resource.resource.quoteText.orEmpty()
                                 if (quoteText.isNotBlank()) {
-                                    PreviewTextBlock(
+                                    PreviewTextWithInlineFile(
                                         text = quoteText,
-                                        onEventSequence = handleEventSequence,
-                                        onFilePreview = handleFilePreview
+                                        vm = vm,
+                                        onEventSequence = handleEventSequence
                                     )
                                 }
                                 QuoteImagePager(images = quoteImages)
@@ -294,7 +284,7 @@ fun ResourcePreviewScreen(
                                                 message = message,
                                                 highlightedSpeaker = highlightedSpeaker,
                                                 onEventSequence = handleEventSequence,
-                                                onFilePreview = handleFilePreview
+                                                vm = vm
                                             )
                                         }
                                     }
@@ -319,10 +309,10 @@ fun ResourcePreviewScreen(
                                                     Text(title, style = MaterialTheme.typography.titleMedium)
                                                     when (item.type) {
                                                         ResourceType.TEXT -> {
-                                                            PreviewTextBlock(
+                                                            PreviewTextWithInlineFile(
                                                                 text = item.text,
-                                                                onEventSequence = handleEventSequence,
-                                                                onFilePreview = handleFilePreview
+                                                                vm = vm,
+                                                                onEventSequence = handleEventSequence
                                                             )
                                                         }
                                                         ResourceType.SCENE -> {
@@ -331,7 +321,7 @@ fun ResourcePreviewScreen(
                                                                     message = message,
                                                                     highlightedSpeaker = highlightedSpeaker,
                                                                     onEventSequence = handleEventSequence,
-                                                                    onFilePreview = handleFilePreview
+                                                                    vm = vm
                                                                 )
                                                             }
                                                         }
@@ -373,13 +363,6 @@ fun ResourcePreviewScreen(
                 }
             }
         }
-    }
-    filePreviewInfo?.let { info ->
-        FilePreviewDialog(
-            info = info,
-            vm = vm,
-            onDismiss = { filePreviewInfo = null }
-        )
     }
 }
 
@@ -567,7 +550,7 @@ private fun SceneBubble(
     message: SceneMessage,
     highlightedSpeaker: String?,
     onEventSequence: (EventSequence) -> Unit,
-    onFilePreview: (String) -> Unit
+    vm: ResourceViewModel
 ) {
     val isHighlighted = highlightedSpeaker != null && highlightedSpeaker == message.speaker
     Row(
@@ -592,10 +575,10 @@ private fun SceneBubble(
                 }
             )
             Spacer(Modifier.height(4.dp))
-            PreviewTextBlock(
+            PreviewTextWithInlineFile(
                 text = message.content,
+                vm = vm,
                 onEventSequence = onEventSequence,
-                onFilePreview = onFilePreview,
                 textStyle = MaterialTheme.typography.bodyMedium
             )
         }
@@ -603,54 +586,77 @@ private fun SceneBubble(
 }
 
 @Composable
-private fun FilePreviewDialog(
+private fun PreviewTextWithInlineFile(
+    text: String,
+    vm: ResourceViewModel,
+    onEventSequence: (EventSequence) -> Unit,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle = MaterialTheme.typography.bodyMedium
+) {
+    val context = LocalContext.current
+    var previewInfo by remember(text) { mutableStateOf<ResourceFileInfo?>(null) }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        previewInfo?.let { info ->
+            InlineFilePreview(info = info, vm = vm)
+        }
+        PreviewTextBlock(
+            text = text,
+            onEventSequence = onEventSequence,
+            onFilePreview = { info ->
+                val decoded = decodeResourceFileInfo(info)
+                if (decoded == null) {
+                    Toast.makeText(context, "文件信息无效", Toast.LENGTH_SHORT).show()
+                } else {
+                    previewInfo = if (previewInfo == decoded) null else decoded
+                }
+            },
+            textStyle = textStyle
+        )
+    }
+}
+
+@Composable
+private fun InlineFilePreview(
     info: ResourceFileInfo,
     vm: ResourceViewModel,
-    onDismiss: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(),
-        title = { Text("文件预览") },
-        text = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 260.dp, max = 420.dp)
-            ) {
-                when (info.type) {
-                    ResourceType.IMAGE -> {
-                        val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
-                            value = vm.decodeUriToBitmap(info.uri)
-                        }
-                        if (preview != null) {
-                            Image(
-                                bitmap = preview!!.asImageBitmap(),
-                                contentDescription = "图片预览",
-                                modifier = Modifier.fillMaxWidth(),
-                                contentScale = ContentScale.Fit
-                            )
-                        } else {
-                            Text("图片加载中…")
-                        }
+    Card(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 220.dp, max = 360.dp)
+                .padding(12.dp)
+        ) {
+            when (info.type) {
+                ResourceType.IMAGE -> {
+                    val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
+                        value = vm.decodeUriToBitmap(info.uri)
                     }
-                    ResourceType.VIDEO -> {
-                        MediaPreview(
-                            uri = info.uri,
-                            modifier = Modifier.height(300.dp)
+                    if (preview != null) {
+                        Image(
+                            bitmap = preview!!.asImageBitmap(),
+                            contentDescription = "图片预览",
+                            modifier = Modifier.fillMaxWidth(),
+                            contentScale = ContentScale.Fit
                         )
+                    } else {
+                        Text("图片加载中…")
                     }
-                    ResourceType.SOUND -> {
-                        AudioPreviewSingle(uri = info.uri)
-                    }
-                    else -> Text("暂不支持的文件类型")
                 }
+                ResourceType.VIDEO -> {
+                    MediaPreview(
+                        uri = info.uri,
+                        modifier = Modifier.height(280.dp)
+                    )
+                }
+                ResourceType.SOUND -> {
+                    AudioPreviewSingle(uri = info.uri)
+                }
+                else -> Text("暂不支持的文件类型")
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
         }
-    )
+    }
 }
 
 @Composable
