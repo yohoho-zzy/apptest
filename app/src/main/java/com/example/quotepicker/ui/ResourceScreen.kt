@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
@@ -115,6 +116,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var editTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var bottomSheetTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var deleteTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
+    var moveTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
     var manageScreen by remember { mutableStateOf(false) }
@@ -312,6 +314,14 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     Text("编辑")
                 }
                 TextButton(onClick = {
+                    moveTarget = target
+                    bottomSheetTarget = null
+                }) {
+                    Icon(Icons.Default.DriveFileMove, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("移动")
+                }
+                TextButton(onClick = {
                     deleteTarget = target
                     bottomSheetTarget = null
                 }) {
@@ -323,6 +333,87 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             }
             Spacer(Modifier.height(12.dp))
         }
+    }
+
+    moveTarget?.let { target ->
+        val targetCharacterIds = remember(target) { target.characters.map { it.id }.toSet() }
+        val candidateGroups = remember(allResources, targetCharacterIds, target) {
+            allResources
+                .filter {
+                    it.resource.type == target.resource.type &&
+                        it.resource.id != target.resource.id &&
+                        it.characters.map { character -> character.id }.toSet() == targetCharacterIds
+                }
+                .map { it.resource.title }
+                .distinct()
+                .sorted()
+        }
+        var selectedGroup by remember(target) { mutableStateOf(candidateGroups.firstOrNull()) }
+        var newGroupName by remember(target) { mutableStateOf("") }
+        val canConfirm = newGroupName.isNotBlank() || selectedGroup != null
+
+        AlertDialog(
+            onDismissRequest = { moveTarget = null },
+            title = { Text("移动资源") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (candidateGroups.isEmpty()) {
+                        Text("暂无可移动的同角色资源组", style = MaterialTheme.typography.labelMedium)
+                    } else {
+                        Text("选择目标组", style = MaterialTheme.typography.labelMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            candidateGroups.forEach { title ->
+                                FilterChip(
+                                    selected = selectedGroup == title,
+                                    onClick = { selectedGroup = title },
+                                    label = { Text(title) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = newGroupName,
+                        onValueChange = { newGroupName = it },
+                        label = { Text("或输入新组名称") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val destinationTitle = if (newGroupName.isNotBlank()) {
+                            newGroupName.trim()
+                        } else {
+                            selectedGroup.orEmpty()
+                        }
+                        if (destinationTitle.isNotBlank()) {
+                            val groupResources = allResources.filter {
+                                it.resource.type == target.resource.type &&
+                                    it.resource.title == destinationTitle &&
+                                    it.characters.map { character -> character.id }.toSet() == targetCharacterIds &&
+                                    it.resource.id != target.resource.id
+                            }
+                            val minCreatedAt = groupResources.minOfOrNull { it.resource.createdAt }
+                            val newCreatedAt = minCreatedAt?.minus(1) ?: System.currentTimeMillis()
+                            vm.moveResourceToGroup(target.resource, destinationTitle, newCreatedAt)
+                        }
+                        moveTarget = null
+                    },
+                    enabled = canConfirm
+                ) { Text("移动") }
+            },
+            dismissButton = { TextButton(onClick = { moveTarget = null }) { Text("取消") } }
+        )
     }
 
     deleteTarget?.let { target ->
