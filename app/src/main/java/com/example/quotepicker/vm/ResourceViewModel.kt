@@ -139,6 +139,16 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         filters.value = filters.value.copy(selectedCharacterId = characterId)
     }
 
+    fun moveResourceToGroup(resource: ResourceEntity, newTitle: String, newCreatedAt: Long) =
+        viewModelScope.launch {
+            repo.updateResource(
+                resource.copy(
+                    title = newTitle,
+                    createdAt = newCreatedAt
+                )
+            )
+        }
+
     fun addTextResource(title: String, text: String, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch {
             if (characterIds.isEmpty()) return@launch
