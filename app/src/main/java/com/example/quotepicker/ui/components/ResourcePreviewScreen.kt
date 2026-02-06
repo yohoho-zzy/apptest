@@ -938,7 +938,6 @@ private fun FullScreenImageDialog(bitmap: android.graphics.Bitmap, onDismiss: ()
                 .fillMaxSize()
                 .background(Color.Black)
                 .transformable(state = transformState)
-                .clickable(onClick = onDismiss)
         ) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
@@ -982,7 +981,6 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .transformable(state = transformState)
         ) {
             val viewHolder = remember { mutableStateOf<VideoView?>(null) }
             DisposableEffect(Unit) {
@@ -1020,6 +1018,7 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
                     }
                 },
                 modifier = Modifier
+                    .transformable(state = transformState)
                     .fillMaxSize()
                     .then(
                         if (aspectRatio > 0f) {
