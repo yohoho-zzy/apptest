@@ -77,6 +77,17 @@ data class ExecutionSettingsEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "execution_resources")
+data class ExecutionResourceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val resourceId: Long,
+    val characterId: Long,
+    val tagId: Long,
+    val characterName: String,
+    val tagName: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "resources")
 data class ResourceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

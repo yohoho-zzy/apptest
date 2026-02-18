@@ -42,17 +42,12 @@ import com.example.quotepicker.data.ExecutionSettingsEntity
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
+import com.example.quotepicker.vm.ExecutionResourceDisplay
 import com.example.quotepicker.vm.ExecutionViewModel
 import com.example.quotepicker.vm.ResourceViewModel
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-private data class ExecutionResourceItem(
-    val resource: ResourceWithTagsCharacters,
-    val characterId: Long,
-    val characterName: String,
-    val tagName: String
-)
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -65,14 +60,13 @@ fun ExecutionScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
     var previewTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
-    var executionItems by remember { mutableStateOf<List<ExecutionResourceItem>>(emptyList()) }
-    var completionTarget by remember { mutableStateOf<ExecutionResourceItem?>(null) }
+    var completionTarget by remember { mutableStateOf<ExecutionResourceDisplay?>(null) }
     var showDailyInputDialog by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val today = LocalDate.now().toString()
     val shouldPromptDailyInput = ui.settings.lastExecutionDate != today
     val isExecutionAvailable = ui.settings.remainingValue > 0
-    val executionSlotsAvailable = executionItems.size < 5
+    val executionSlotsAvailable = ui.executionItems.size < 5
 
     LaunchedEffect(shouldPromptDailyInput) {
         showDailyInputDialog = shouldPromptDailyInput
@@ -172,22 +166,16 @@ fun ExecutionScreen(
                                     Toast.makeText(context, "执行资源最多保留5个，请先完成", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                vm.consumeRecord(record.characterId, record.tagId)
                                 val candidates = ui.resources.filter { res ->
                                     res.characters.any { it.id == record.characterId } &&
                                         res.tags.any { it.id == record.tagId }
                                 }
                                 val picked = candidates.randomOrNull()
                                 if (picked == null) {
-                                    Toast.makeText(context, "未找到匹配资源", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "未找到匹配资源，请先补充资源信息", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                executionItems = executionItems + ExecutionResourceItem(
-                                    resource = picked,
-                                    characterId = record.characterId,
-                                    characterName = record.characterName,
-                                    tagName = record.tagName
-                                )
+                                vm.consumeRecordAndAddExecutionResource(record, picked)
                             },
                                 enabled = isExecutionAvailable && !shouldPromptDailyInput && executionSlotsAvailable,
                                 shape = MaterialTheme.shapes.small
@@ -200,11 +188,11 @@ fun ExecutionScreen(
             }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f, fill = false)) {
                 Text("执行资源", style = MaterialTheme.typography.titleMedium)
-                if (executionItems.isEmpty()) {
+                if (ui.executionItems.isEmpty()) {
                     Text("暂无执行资源", style = MaterialTheme.typography.labelMedium)
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(executionItems) { item ->
+                        items(ui.executionItems, key = { it.id }) { item ->
                             ResourceListRow(
                                 resource = item.resource,
                                 categories = emptyList(),
@@ -245,7 +233,7 @@ fun ExecutionScreen(
                 val newPoints = ((sum + currentPoints) / 2.0).roundToInt()
                 vm.updateCharacterPoints(target.characterId, newPoints)
                 vm.incrementCharacterFamiliarity(target.characterId)
-                executionItems = executionItems.filterNot { it == target }
+                vm.removeExecutionResource(target.id)
                 completionTarget = null
             },
             onDismiss = { completionTarget = null }

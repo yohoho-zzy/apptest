@@ -13,13 +13,14 @@ data class BackupSnapshot(
     val resourceCharacterRefs: List<ResourceCharacterCrossRef>,
     val responseRecords: List<ResponseRecordEntity> = emptyList(),
     val executionSettings: ExecutionSettingsEntity? = null,
+    val executionResources: List<ExecutionResourceEntity> = emptyList(),
     val media: List<MediaBackupItem> = emptyList()
 ) {
     fun toJsonString(): String = toJson().toString()
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
-            put("version", 5)
+            put("version", 6)
             put("categories", JSONArray(categories.map(::categoryToJson)))
             put("tags", JSONArray(tags.map(::tagToJson)))
             put("characters", JSONArray(characters.map(::characterToJson)))
@@ -29,6 +30,7 @@ data class BackupSnapshot(
             put("resourceCharacterRefs", JSONArray(resourceCharacterRefs.map(::resourceCharacterToJson)))
             put("responseRecords", JSONArray(responseRecords.map(::responseRecordToJson)))
             executionSettings?.let { put("executionSettings", executionSettingsToJson(it)) }
+            put("executionResources", JSONArray(executionResources.map(::executionResourceToJson)))
             put("media", JSONArray(media.map(::mediaToJson)))
         }
     }
@@ -46,6 +48,7 @@ data class BackupSnapshot(
                 resourceCharacterRefs = parseArray(obj, "resourceCharacterRefs", ::resourceCharacterFromJson),
                 responseRecords = parseArray(obj, "responseRecords", ::responseRecordFromJson),
                 executionSettings = obj.optJSONObject("executionSettings")?.let(::executionSettingsFromJson),
+                executionResources = parseArray(obj, "executionResources", ::executionResourceFromJson),
                 media = parseArray(obj, "media", ::mediaFromJson)
             )
         }
@@ -135,6 +138,17 @@ private fun executionSettingsToJson(settings: ExecutionSettingsEntity): JSONObje
         .put("lastExecutionDate", settings.lastExecutionDate)
         .put("createdAt", settings.createdAt)
         .put("updatedAt", settings.updatedAt)
+
+
+private fun executionResourceToJson(item: ExecutionResourceEntity): JSONObject =
+    JSONObject()
+        .put("id", item.id)
+        .put("resourceId", item.resourceId)
+        .put("characterId", item.characterId)
+        .put("tagId", item.tagId)
+        .put("characterName", item.characterName)
+        .put("tagName", item.tagName)
+        .put("createdAt", item.createdAt)
 
 private fun mediaToJson(item: MediaBackupItem): JSONObject =
     JSONObject().apply {
@@ -228,6 +242,18 @@ private fun executionSettingsFromJson(obj: JSONObject): ExecutionSettingsEntity 
         lastExecutionDate = readNullableString(obj, "lastExecutionDate"),
         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
         updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+    )
+
+
+private fun executionResourceFromJson(obj: JSONObject): ExecutionResourceEntity =
+    ExecutionResourceEntity(
+        id = obj.optLong("id", 0),
+        resourceId = obj.getLong("resourceId"),
+        characterId = obj.getLong("characterId"),
+        tagId = obj.getLong("tagId"),
+        characterName = obj.optString("characterName", "角色"),
+        tagName = obj.optString("tagName", "标签"),
+        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
     )
 
 private fun mediaFromJson(obj: JSONObject): MediaBackupItem =

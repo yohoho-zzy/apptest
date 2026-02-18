@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ExecutionSettingsEntity
+import com.example.quotepicker.data.ExecutionResourceEntity
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagEntity
@@ -29,9 +30,18 @@ data class ResponseRecordDisplay(
 data class ExecutionUiState(
     val records: List<ResponseRecordDisplay> = emptyList(),
     val settings: ExecutionSettingsEntity = ExecutionSettingsEntity(),
+    val executionItems: List<ExecutionResourceDisplay> = emptyList(),
     val resources: List<ResourceWithTagsCharacters> = emptyList(),
     val characters: List<CharacterEntity> = emptyList(),
     val tags: List<TagEntity> = emptyList()
+)
+
+data class ExecutionResourceDisplay(
+    val id: Long,
+    val resource: ResourceWithTagsCharacters,
+    val characterId: Long,
+    val characterName: String,
+    val tagName: String
 )
 
 class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
@@ -48,10 +58,12 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeCharacters(),
         repo.observeAllTags(),
         repo.observeResourcesWithRelations(),
-        repo.observeExecutionSettings()
-    ) { records, characters, tags, resources, settings ->
+        repo.observeExecutionSettings(),
+        repo.observeExecutionResources()
+    ) { records, characters, tags, resources, settings, executionItems ->
         val characterMap = characters.associateBy { it.id }
         val tagMap = tags.associateBy { it.id }
+        val resourcesById = resources.associateBy { it.resource.id }
         val displayRecords = records.map { record ->
             ResponseRecordDisplay(
                 characterId = record.characterId,
@@ -61,9 +73,14 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
                 tagName = tagMap[record.tagId]?.name ?: "标签"
             )
         }
+        val displayExecutionItems = executionItems.mapNotNull { item ->
+            val resource = resourcesById[item.resourceId] ?: return@mapNotNull null
+            item.toDisplay(resource)
+        }
         ExecutionUiState(
             records = displayRecords,
             settings = settings ?: ExecutionSettingsEntity(),
+            executionItems = displayExecutionItems,
             resources = resources,
             characters = characters,
             tags = tags
@@ -72,6 +89,24 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
 
     fun consumeRecord(characterId: Long, tagId: Long) = viewModelScope.launch {
         repo.consumeResponseRecord(characterId, tagId)
+    }
+
+    fun consumeRecordAndAddExecutionResource(
+        record: ResponseRecordDisplay,
+        resource: ResourceWithTagsCharacters
+    ) = viewModelScope.launch {
+        repo.addExecutionResource(
+            resourceId = resource.resource.id,
+            characterId = record.characterId,
+            tagId = record.tagId,
+            characterName = record.characterName,
+            tagName = record.tagName
+        )
+        repo.consumeResponseRecord(record.characterId, record.tagId)
+    }
+
+    fun removeExecutionResource(id: Long) = viewModelScope.launch {
+        repo.removeExecutionResource(id)
     }
 
     fun updateSettings(settings: ExecutionSettingsEntity) = viewModelScope.launch {
@@ -125,3 +160,12 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
     }
 }
+
+private fun ExecutionResourceEntity.toDisplay(resource: ResourceWithTagsCharacters): ExecutionResourceDisplay =
+    ExecutionResourceDisplay(
+        id = id,
+        resource = resource,
+        characterId = characterId,
+        characterName = characterName,
+        tagName = tagName
+    )
