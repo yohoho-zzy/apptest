@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -189,7 +190,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     openedGroup?.let { target ->
         ResourceGroupScreen(
-            title = target.key,
+            title = target.title,
             resources = target.resources,
             categories = ui.categories,
             onBack = { openedGroup = null },
@@ -259,7 +260,8 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     ) {
                         items(groupedResources, key = { it.key }) { group ->
                             GroupListRow(
-                                name = group.key,
+                                name = group.title,
+                                childNames = group.childNames,
                                 count = group.resources.size,
                                 onClick = { openedGroup = group }
                             )
@@ -866,6 +868,8 @@ private fun FilterBar(
 
 private data class ResourceTitleGroup(
     val key: String,
+    val title: String,
+    val childNames: String,
     val resources: List<ResourceWithTagsCharacters>
 )
 
@@ -875,41 +879,66 @@ private fun buildResourceGroups(
     level2: Boolean
 ): List<ResourceTitleGroup> {
     if (!level1 && !level2) return emptyList()
-    val grouped = resources.groupBy { resourceTitleGroupKey(it.resource.title, level1, level2) }
+    val grouped = resources.groupBy { resourceTitleGroupKey(it.resource.title, level1, level2).first }
     return grouped.entries
         .sortedWith(compareByDescending<Map.Entry<String, List<ResourceWithTagsCharacters>>> { it.value.size }.thenBy { it.key })
-        .map { ResourceTitleGroup(it.key, it.value) }
+        .map { entry ->
+            val childNames = entry.value
+                .mapNotNull { resourceTitleGroupKey(it.resource.title, level1, level2).second }
+                .distinct()
+                .joinToString("・")
+            ResourceTitleGroup(
+                key = entry.key,
+                title = entry.key,
+                childNames = childNames,
+                resources = entry.value
+            )
+        }
 }
 
-private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean): String {
+private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean): Pair<String, String?> {
     val parts = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
     val p1 = parts.getOrNull(0)
     val p2 = parts.getOrNull(1)
+    val p3 = parts.getOrNull(2)
     return when {
-        level1 && level2 -> listOfNotNull(p1, p2).joinToString("-").ifBlank { "未分组" }
-        level1 -> p1 ?: "未分组"
-        level2 -> p2 ?: "未分组"
-        else -> title
+        level1 && level2 -> {
+            val name = listOfNotNull(p1, p2).joinToString("-").ifBlank { "未分组" }
+            name to p3
+        }
+        level1 -> (p1 ?: "未分组") to p2
+        level2 -> (p2 ?: "未分组") to p3
+        else -> title to null
     }
 }
 
 @Composable
 private fun GroupListRow(
     name: String,
+    childNames: String,
     count: Int,
     onClick: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        Text("${count}个资源", color = Color(0xFF1565C0), style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text("${count}个资源", color = Color(0xFF1565C0), style = MaterialTheme.typography.labelMedium)
+        }
+        if (childNames.isNotBlank()) {
+            Text(childNames, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

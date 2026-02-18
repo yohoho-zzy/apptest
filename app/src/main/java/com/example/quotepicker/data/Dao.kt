@@ -145,6 +145,12 @@ interface CrossRefDao {
     @Query("SELECT * FROM resource_character_cross_ref")
     suspend fun listResourceCharacters(): List<ResourceCharacterCrossRef>
 
+    @Query("SELECT DISTINCT tagId FROM resource_tag_cross_ref")
+    fun observeUsedResourceTagIds(): Flow<List<Long>>
+
+    @Query("SELECT DISTINCT tagId FROM character_tag_cross_ref")
+    fun observeUsedCharacterTagIds(): Flow<List<Long>>
+
     @Query("DELETE FROM resource_tag_cross_ref WHERE resourceId = :resourceId")
     suspend fun clearResourceTags(resourceId: Long)
 
@@ -177,6 +183,9 @@ interface ResponseRecordDao {
 
     @Query("SELECT * FROM response_records")
     suspend fun listAll(): List<ResponseRecordEntity>
+
+    @Query("SELECT DISTINCT tagId FROM response_records")
+    fun observeUsedTagIds(): Flow<List<Long>>
 
     @Query("SELECT * FROM response_records WHERE characterId = :characterId AND tagId = :tagId LIMIT 1")
     suspend fun findRecord(characterId: Long, tagId: Long): ResponseRecordEntity?
