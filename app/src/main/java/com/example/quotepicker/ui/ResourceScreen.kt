@@ -188,6 +188,17 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected)
     }
 
+    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected) {
+        if (!groupLevel1Selected && !groupLevel2Selected) {
+            openedGroup = null
+            return@LaunchedEffect
+        }
+        val exists = groupedResources.any { it.key == openedGroup?.key }
+        if (!exists) {
+            openedGroup = null
+        }
+    }
+
     if (previewTarget != null) {
         ResourcePreviewScreen(
             resource = previewTarget!!,
@@ -241,29 +252,19 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         Text("暂无资源，点击右下角添加")
                     }
                 }
+                openedGroup != null -> {
+                    openedGroup?.let { group ->
+                        ResourceGroupedPage(
+                            group = group,
+                            categories = ui.categories,
+                            onBack = { openedGroup = null },
+                            onPreview = { previewTarget = it },
+                            onLongClick = { bottomSheetTarget = it }
+                        )
+                    }
+                }
                 groupLevel1Selected || groupLevel2Selected -> {
-                    if (openedGroup != null) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            TextButton(onClick = { openedGroup = null }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                                Text("返回分组")
-                            }
-                            LazyColumn(
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                items(openedGroup!!.resources, key = { it.resource.id }) { resource ->
-                                    ResourceListRow(
-                                        resource = resource,
-                                        categories = ui.categories,
-                                        roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
-                                        onClick = { previewTarget = resource },
-                                        onLongClick = { bottomSheetTarget = resource }
-                                    )
-                                }
-                            }
-                        }
-                    } else {
+                    if (openedGroup == null) {
                         LazyColumn(
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -949,6 +950,36 @@ private fun GroupListRow(
         }
         if (childNames.isNotBlank()) {
             Text(childNames, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ResourceGroupedPage(
+    group: ResourceTitleGroup,
+    categories: List<TagCategoryEntity>,
+    onBack: () -> Unit,
+    onPreview: (ResourceWithTagsCharacters) -> Unit,
+    onLongClick: (ResourceWithTagsCharacters) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TextButton(onClick = onBack, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text("返回 ${group.title}")
+        }
+        LazyColumn(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(group.resources, key = { it.resource.id }) { resource ->
+                ResourceListRow(
+                    resource = resource,
+                    categories = categories,
+                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                    onClick = { onPreview(resource) },
+                    onLongClick = { onLongClick(resource) }
+                )
+            }
         }
     }
 }
