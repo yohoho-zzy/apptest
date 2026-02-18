@@ -134,6 +134,10 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.incrementCharacterFamiliarity(characterId)
     }
 
+    fun updateCharacterFamiliarity(characterId: Long, familiarity: Int) = viewModelScope.launch {
+        repo.updateCharacterFamiliarity(characterId, familiarity)
+    }
+
     fun applyDailyInput(input: Int) = viewModelScope.launch {
         val current = uiState.value.settings
         val today = LocalDate.now()
