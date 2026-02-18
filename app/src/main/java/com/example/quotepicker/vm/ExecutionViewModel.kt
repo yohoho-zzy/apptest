@@ -8,6 +8,7 @@ import com.example.quotepicker.data.ExecutionSettingsEntity
 import com.example.quotepicker.data.ExecutionResourceEntity
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.data.ResponseRecordEntity
 import com.example.quotepicker.data.TagEntity
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -53,18 +54,30 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    val uiState: StateFlow<ExecutionUiState> = combine(
+    private val baseExecutionFlow = combine(
         repo.observeResponseRecords(),
         repo.observeCharacters(),
         repo.observeAllTags(),
         repo.observeResourcesWithRelations(),
-        repo.observeExecutionSettings(),
+        repo.observeExecutionSettings()
+    ) { records, characters, tags, resources, settings ->
+        BaseExecutionData(
+            records = records,
+            characters = characters,
+            tags = tags,
+            resources = resources,
+            settings = settings
+        )
+    }
+
+    val uiState: StateFlow<ExecutionUiState> = combine(
+        baseExecutionFlow,
         repo.observeExecutionResources()
-    ) { records, characters, tags, resources, settings, executionItems ->
-        val characterMap = characters.associateBy { it.id }
-        val tagMap = tags.associateBy { it.id }
-        val resourcesById = resources.associateBy { it.resource.id }
-        val displayRecords = records.map { record ->
+    ) { baseData, executionItems ->
+        val characterMap = baseData.characters.associateBy { it.id }
+        val tagMap = baseData.tags.associateBy { it.id }
+        val resourcesById = baseData.resources.associateBy { it.resource.id }
+        val displayRecords = baseData.records.map { record ->
             ResponseRecordDisplay(
                 characterId = record.characterId,
                 tagId = record.tagId,
@@ -79,11 +92,11 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         }
         ExecutionUiState(
             records = displayRecords,
-            settings = settings ?: ExecutionSettingsEntity(),
+            settings = baseData.settings ?: ExecutionSettingsEntity(),
             executionItems = displayExecutionItems,
-            resources = resources,
-            characters = characters,
-            tags = tags
+            resources = baseData.resources,
+            characters = baseData.characters,
+            tags = baseData.tags
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ExecutionUiState())
 
@@ -160,6 +173,14 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
     }
 }
+
+private data class BaseExecutionData(
+    val records: List<ResponseRecordEntity>,
+    val characters: List<CharacterEntity>,
+    val tags: List<TagEntity>,
+    val resources: List<ResourceWithTagsCharacters>,
+    val settings: ExecutionSettingsEntity?
+)
 
 private fun ExecutionResourceEntity.toDisplay(resource: ResourceWithTagsCharacters): ExecutionResourceDisplay =
     ExecutionResourceDisplay(
