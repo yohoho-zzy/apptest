@@ -63,6 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -653,6 +655,7 @@ private fun CharacterEditDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf(character.name) }
+    var familiarityInput by remember { mutableStateOf(character.familiarity.toString()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("编辑角色") },
@@ -670,11 +673,25 @@ private fun CharacterEditDialog(
                     label = { Text("角色名") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = familiarityInput,
+                    onValueChange = { value ->
+                        if (value.all { it.isDigit() }) {
+                            familiarityInput = value
+                        }
+                    },
+                    label = { Text("熟悉度") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isNotBlank()) onConfirm(character.copy(name = name.trim()))
+                if (name.isNotBlank()) {
+                    val familiarity = familiarityInput.toIntOrNull()?.coerceAtLeast(0) ?: character.familiarity
+                    onConfirm(character.copy(name = name.trim(), familiarity = familiarity))
+                }
                 onDismiss()
             }) { Text("确定") }
         },
