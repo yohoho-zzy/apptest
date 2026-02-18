@@ -188,18 +188,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected)
     }
 
-    openedGroup?.let { target ->
-        ResourceGroupScreen(
-            title = target.title,
-            resources = target.resources,
-            categories = ui.categories,
-            onBack = { openedGroup = null },
-            onPreview = { previewTarget = it; openedGroup = null },
-            onLongPress = { bottomSheetTarget = it }
-        )
-        return
-    }
-
     if (previewTarget != null) {
         ResourcePreviewScreen(
             resource = previewTarget!!,
@@ -254,17 +242,40 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     }
                 }
                 groupLevel1Selected || groupLevel2Selected -> {
-                    LazyColumn(
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(groupedResources, key = { it.key }) { group ->
-                            GroupListRow(
-                                name = group.title,
-                                childNames = group.childNames,
-                                count = group.resources.size,
-                                onClick = { openedGroup = group }
-                            )
+                    if (openedGroup != null) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            TextButton(onClick = { openedGroup = null }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                Text("返回分组")
+                            }
+                            LazyColumn(
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                items(openedGroup!!.resources, key = { it.resource.id }) { resource ->
+                                    ResourceListRow(
+                                        resource = resource,
+                                        categories = ui.categories,
+                                        roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                                        onClick = { previewTarget = resource },
+                                        onLongClick = { bottomSheetTarget = resource }
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(groupedResources, key = { it.key }) { group ->
+                                GroupListRow(
+                                    name = group.title,
+                                    childNames = group.childNames,
+                                    count = group.resources.size,
+                                    onClick = { openedGroup = group }
+                                )
+                            }
                         }
                     }
                 }
@@ -938,48 +949,6 @@ private fun GroupListRow(
         }
         if (childNames.isNotBlank()) {
             Text(childNames, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ResourceGroupScreen(
-    title: String,
-    resources: List<ResourceWithTagsCharacters>,
-    categories: List<TagCategoryEntity>,
-    onBack: () -> Unit,
-    onPreview: (ResourceWithTagsCharacters) -> Unit,
-    onLongPress: (ResourceWithTagsCharacters) -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                }
-            )
-        }
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(resources, key = { it.resource.id }) { resource ->
-                ResourceListRow(
-                    resource = resource,
-                    categories = categories,
-                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
-                    onClick = { onPreview(resource) },
-                    onLongClick = { onLongPress(resource) }
-                )
-            }
         }
     }
 }

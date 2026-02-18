@@ -189,6 +189,12 @@ class Repository private constructor(context: Context) {
         characterDao.update(target.copy(points = points.coerceIn(0, 30), updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun incrementCharacterFamiliarity(characterId: Long) {
+        val characters = characterDao.listAll()
+        val target = characters.firstOrNull { it.id == characterId } ?: return
+        characterDao.update(target.copy(familiarity = target.familiarity + 1, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun updateCharacterProbability(characterId: Long, probability: Int, date: String) {
         val characters = characterDao.listAll()
         val target = characters.firstOrNull { it.id == characterId } ?: return

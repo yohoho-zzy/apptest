@@ -22,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -369,36 +371,19 @@ fun CharacterScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Button(onClick = {
-                                        val current = char
-                                        if (current.points <= 0) {
-                                            vm.updateCharacter(current.copy(points = 30, familiarity = current.familiarity + 1))
-                                            val fallbackTag = narrativeTags.firstOrNull()
-                                            if (fallbackTag != null) {
-                                                vm.addResponseRecord(current.id, fallbackTag.id, count = 3)
-                                                Toast.makeText(
-                                                    context,
-                                                    fillTemplate(
-                                                        ui.executionSettings.successToast,
-                                                        listOf(current.name, fallbackTag.name)
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            } else {
-                                                Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } else {
-                                            vm.updateCharacterPoints(current.id, current.points - 1)
-                                            val hit = (1..100).random() <= current.probability
-                                            if (hit) {
-                                                val pick = narrativeTags.randomOrNull()
-                                                if (pick != null) {
-                                                    vm.addResponseRecord(current.id, pick.id)
+                                    Button(
+                                        onClick = {
+                                            val current = char
+                                            if (current.points <= 0) {
+                                                vm.updateCharacter(current.copy(points = 30))
+                                                val fallbackTag = narrativeTags.firstOrNull()
+                                                if (fallbackTag != null) {
+                                                    vm.addResponseRecord(current.id, fallbackTag.id, count = 3)
                                                     Toast.makeText(
                                                         context,
                                                         fillTemplate(
                                                             ui.executionSettings.successToast,
-                                                            listOf(current.name, pick.name)
+                                                            listOf(current.name, fallbackTag.name)
                                                         ),
                                                         Toast.LENGTH_SHORT
                                                     ).show()
@@ -406,15 +391,38 @@ fun CharacterScreen(
                                                     Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
                                                 }
                                             } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    fillTemplate(ui.executionSettings.failureToast, listOf(current.name)),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                                vm.updateCharacterPoints(current.id, current.points - 1)
+                                                val hit = (1..100).random() <= current.probability
+                                                if (hit) {
+                                                    val pick = narrativeTags.randomOrNull()
+                                                    if (pick != null) {
+                                                        vm.addResponseRecord(current.id, pick.id)
+                                                        Toast.makeText(
+                                                            context,
+                                                            fillTemplate(
+                                                                ui.executionSettings.successToast,
+                                                                listOf(current.name, pick.name)
+                                                            ),
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } else {
+                                                        Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        fillTemplate(
+                                                            ui.executionSettings.failureToast,
+                                                            listOf(current.name)
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
                                             }
-                                        }
-                                        vm.consumeExecutionRemaining()
-                                    }) {
+                                            vm.consumeExecutionRemaining()
+                                        },
+                                        shape = MaterialTheme.shapes.small
+                                    ) {
                                         Text(ui.executionSettings.buttonLabel)
                                     }
                                     Text(
@@ -800,6 +808,8 @@ private fun GroupSummaryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
