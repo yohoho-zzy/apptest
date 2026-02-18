@@ -144,6 +144,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             items = manageItems,
             resources = allResources,
             vm = vm,
+            characters = ui.characters,
             onBack = { manageScreen = false },
             onRestore = { item ->
                 restoreTarget = item
@@ -479,6 +480,7 @@ private fun ManageStorageScreen(
     items: List<StoredMediaItem>,
     resources: List<ResourceWithTagsCharacters>,
     vm: ResourceViewModel,
+    characters: List<CharacterEntity>,
     onBack: () -> Unit,
     onRestore: (StoredMediaItem) -> Unit,
     onRefresh: () -> Unit
@@ -488,9 +490,13 @@ private fun ManageStorageScreen(
     var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var selectedType by remember { mutableStateOf(ResourceType.IMAGE) }
+    var selectedCharacterId by remember { mutableStateOf<Long?>(null) }
+    var showCharacterDialog by remember { mutableStateOf(false) }
     val groupExpandedState = remember { mutableStateMapOf<String, Boolean>() }
     val coroutineScope = rememberCoroutineScope()
-    val groupedItems = remember(items, resources) { buildStoredMediaGroups(items, resources) }
+    val groupedItems = remember(items, resources, selectedCharacterId) {
+        buildStoredMediaGroups(items, resources, selectedCharacterId)
+    }
 
     Scaffold(
         topBar = {
@@ -515,7 +521,7 @@ private fun ManageStorageScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("长按文件进行管理", style = MaterialTheme.typography.labelSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ResourceType.IMAGE, ResourceType.VIDEO, ResourceType.SOUND).forEach { type ->
                     FilterChip(
                         selected = selectedType == type,
@@ -523,6 +529,11 @@ private fun ManageStorageScreen(
                         label = { Text(typeLabel(type)) }
                     )
                 }
+                val selectedCharacter = characters.firstOrNull { it.id == selectedCharacterId }
+                AssistChip(
+                    onClick = { showCharacterDialog = true },
+                    label = { Text(selectedCharacter?.name ?: "全部角色") }
+                )
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val groups = groupedItems[selectedType].orEmpty()
@@ -558,6 +569,15 @@ private fun ManageStorageScreen(
                 }
             }
         }
+    }
+
+    if (showCharacterDialog) {
+        FilterCharacterDialog(
+            characters = characters,
+            selectedId = selectedCharacterId,
+            onConfirm = { selectedCharacterId = it },
+            onDismiss = { showCharacterDialog = false }
+        )
     }
 
     actionTarget?.let { target ->
@@ -720,13 +740,18 @@ private fun StorageSectionHeader(
 
 private fun buildStoredMediaGroups(
     items: List<StoredMediaItem>,
-    resources: List<ResourceWithTagsCharacters>
+    resources: List<ResourceWithTagsCharacters>,
+    selectedCharacterId: Long?
 ): Map<ResourceType, List<StoredMediaGroup>> {
     val imageTitleMap = mutableMapOf<String, String>()
     val videoTitleMap = mutableMapOf<String, String>()
     val soundTitleMap = mutableMapOf<String, String>()
 
-    resources.forEach { resource ->
+    val filteredResources = resources.filter { resource ->
+        selectedCharacterId == null || resource.characters.any { it.id == selectedCharacterId }
+    }
+
+    filteredResources.forEach { resource ->
         when (resource.resource.type) {
             ResourceType.IMAGE -> {
                 parseImageItems(resource.resource.contentUriOrPath, resource.resource.quoteImageBase64)
