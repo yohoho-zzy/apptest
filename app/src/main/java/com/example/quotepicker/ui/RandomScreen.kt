@@ -229,10 +229,13 @@ fun ExecutionScreen(
             characterName = target.characterName,
             onConfirm = { completion, belonging, emotion ->
                 val sum = completion + belonging + emotion
-                val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
+                val currentCharacter = ui.characters.firstOrNull { it.id == target.characterId }
+                val currentPoints = currentCharacter?.points ?: 0
+                val currentFamiliarity = currentCharacter?.familiarity ?: 0
                 val newPoints = ((sum + currentPoints) / 2.0).roundToInt()
+                val newFamiliarity = ((sum + currentFamiliarity) / 2.0).roundToInt()
                 vm.updateCharacterPoints(target.characterId, newPoints)
-                vm.incrementCharacterFamiliarity(target.characterId)
+                vm.updateCharacterFamiliarity(target.characterId, newFamiliarity)
                 vm.removeExecutionResource(target.id)
                 completionTarget = null
             },

@@ -278,6 +278,12 @@ class Repository private constructor(context: Context) {
         characterDao.update(target.copy(familiarity = target.familiarity + 1, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun updateCharacterFamiliarity(characterId: Long, familiarity: Int) {
+        val characters = characterDao.listAll()
+        val target = characters.firstOrNull { it.id == characterId } ?: return
+        characterDao.update(target.copy(familiarity = familiarity.coerceAtLeast(0), updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun updateCharacterProbability(characterId: Long, probability: Int, date: String) {
         val characters = characterDao.listAll()
         val target = characters.firstOrNull { it.id == characterId } ?: return
