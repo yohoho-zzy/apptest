@@ -20,33 +20,33 @@
 15-->[androidx.core:core:1.13.1] C:\Users\17805\.gradle\caches\8.10\transforms\b119a43c38a893ff320f47b08cd84451\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
 16
 17    <application
-17-->D:\app1\app\src\main\AndroidManifest.xml:2:5-14:19
+17-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:2:5-14:19
 18        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
 18-->[androidx.core:core:1.13.1] C:\Users\17805\.gradle\caches\8.10\transforms\b119a43c38a893ff320f47b08cd84451\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
 19        android:debuggable="true"
 20        android:extractNativeLibs="false"
 21        android:icon="@mipmap/ic_launcher"
-21-->D:\app1\app\src\main\AndroidManifest.xml:4:9-43
+21-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:4:9-43
 22        android:label="@string/app_name"
-22-->D:\app1\app\src\main\AndroidManifest.xml:3:9-41
+22-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:3:9-41
 23        android:testOnly="true"
 24        android:theme="@style/Theme.QuotePicker" >
-24-->D:\app1\app\src\main\AndroidManifest.xml:5:9-49
+24-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:5:9-49
 25        <activity
-25-->D:\app1\app\src\main\AndroidManifest.xml:6:9-13:20
+25-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:6:9-13:20
 26            android:name="com.example.quotepicker.MainActivity"
-26-->D:\app1\app\src\main\AndroidManifest.xml:7:13-41
+26-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:7:13-41
 27            android:exported="true" >
-27-->D:\app1\app\src\main\AndroidManifest.xml:8:13-36
+27-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:8:13-36
 28            <intent-filter>
-28-->D:\app1\app\src\main\AndroidManifest.xml:9:13-12:29
+28-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:9:13-12:29
 29                <action android:name="android.intent.action.MAIN" />
-29-->D:\app1\app\src\main\AndroidManifest.xml:10:17-69
-29-->D:\app1\app\src\main\AndroidManifest.xml:10:25-66
+29-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:10:17-69
+29-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:10:25-66
 30
 31                <category android:name="android.intent.category.LAUNCHER" />
-31-->D:\app1\app\src\main\AndroidManifest.xml:11:17-77
-31-->D:\app1\app\src\main\AndroidManifest.xml:11:27-74
+31-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:11:17-77
+31-->D:\gitapp\apptest\app\src\main\AndroidManifest.xml:11:27-74
 32            </intent-filter>
 33        </activity>
 34        <activity

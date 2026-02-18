@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:1:1-15:12
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml:1:1-15:12
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml:1:1-15:12
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml:1:1-15:12
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:1:1-15:12
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:1:1-15:12
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:1:1-15:12
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:1:1-15:12
 MERGED from [com.google.accompanist:accompanist-systemuicontroller:0.34.0] C:\Users\17805\.gradle\caches\8.10\transforms\989428cc97426443e1564b7d408fbba7\transformed\accompanist-systemuicontroller-0.34.0\AndroidManifest.xml:17:1-23:12
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\17805\.gradle\caches\8.10\transforms\4f7cb805b09e7b53533f7ea9028ae00f\transformed\material-1.12.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\17805\.gradle\caches\8.10\transforms\bdabe1104629aa10ae663bde6d4010fe\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -86,16 +86,16 @@ MERGED from [androidx.documentfile:documentfile:1.0.0] C:\Users\17805\.gradle\ca
 MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\Users\17805\.gradle\caches\8.10\transforms\942deb6980bc0b42ceac4e1ded2c889d\transformed\localbroadcastmanager-1.0.0\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.print:print:1.0.0] C:\Users\17805\.gradle\caches\8.10\transforms\e77971c3bc517697c09be6f73f51618a\transformed\print-1.0.0\AndroidManifest.xml:17:1-22:12
 	package
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 	android:versionName
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 	android:versionCode
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 	xmlns:android
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:1:11-69
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:1:11-69
 application
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:2:5-14:19
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml:2:5-14:19
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:2:5-14:19
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:2:5-14:19
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\17805\.gradle\caches\8.10\transforms\4f7cb805b09e7b53533f7ea9028ae00f\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\17805\.gradle\caches\8.10\transforms\4f7cb805b09e7b53533f7ea9028ae00f\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\17805\.gradle\caches\8.10\transforms\bdabe1104629aa10ae663bde6d4010fe\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -117,35 +117,35 @@ MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\17805\.g
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\17805\.gradle\caches\8.10\transforms\e20023b1fd233283f4a2ff44df2a11db\transformed\startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\17805\.gradle\caches\8.10\transforms\e20023b1fd233283f4a2ff44df2a11db\transformed\startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
 	android:extractNativeLibs
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.13.1] C:\Users\17805\.gradle\caches\8.10\transforms\b119a43c38a893ff320f47b08cd84451\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
 	android:label
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:3:9-41
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:3:9-41
 	android:icon
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:4:9-43
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:4:9-43
 	android:theme
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:5:9-49
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:5:9-49
 activity#com.example.quotepicker.MainActivity
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:6:9-13:20
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:6:9-13:20
 	android:exported
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:8:13-36
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:8:13-36
 	android:name
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:7:13-41
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:7:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:9:13-12:29
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:9:13-12:29
 action#android.intent.action.MAIN
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:10:17-69
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:10:17-69
 	android:name
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:10:25-66
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:10:25-66
 category#android.intent.category.LAUNCHER
-ADDED from D:\app1\app\src\main\AndroidManifest.xml:11:17-77
+ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:11:17-77
 	android:name
-		ADDED from D:\app1\app\src\main\AndroidManifest.xml:11:27-74
+		ADDED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml:11:27-74
 uses-sdk
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml
-INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
+INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 MERGED from [com.google.accompanist:accompanist-systemuicontroller:0.34.0] C:\Users\17805\.gradle\caches\8.10\transforms\989428cc97426443e1564b7d408fbba7\transformed\accompanist-systemuicontroller-0.34.0\AndroidManifest.xml:21:5-44
 MERGED from [com.google.accompanist:accompanist-systemuicontroller:0.34.0] C:\Users\17805\.gradle\caches\8.10\transforms\989428cc97426443e1564b7d408fbba7\transformed\accompanist-systemuicontroller-0.34.0\AndroidManifest.xml:21:5-44
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\17805\.gradle\caches\8.10\transforms\4f7cb805b09e7b53533f7ea9028ae00f\transformed\material-1.12.0\AndroidManifest.xml:20:5-44
@@ -309,9 +309,9 @@ MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\User
 MERGED from [androidx.print:print:1.0.0] C:\Users\17805\.gradle\caches\8.10\transforms\e77971c3bc517697c09be6f73f51618a\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
 MERGED from [androidx.print:print:1.0.0] C:\Users\17805\.gradle\caches\8.10\transforms\e77971c3bc517697c09be6f73f51618a\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
 	android:targetSdkVersion
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 	android:minSdkVersion
-		INJECTED from D:\app1\app\src\main\AndroidManifest.xml
+		INJECTED from D:\gitapp\apptest\app\src\main\AndroidManifest.xml
 activity#androidx.compose.ui.tooling.PreviewActivity
 ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] C:\Users\17805\.gradle\caches\8.10\transforms\47101afdb00e74628588a1e570aa7b10\transformed\ui-tooling-release\AndroidManifest.xml:23:9-25:39
 	android:exported

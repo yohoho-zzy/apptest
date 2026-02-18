@@ -348,7 +348,13 @@ private fun CompletionDialog(
                     errorText = "三个值都必须填写 0-10 之间的整数"
                     return@TextButton
                 }
-                onConfirm(completion, belonging, emotion)
+                if (completion != null) {
+                    if (belonging != null) {
+                        if (emotion != null) {
+                            onConfirm(completion, belonging, emotion)
+                        }
+                    }
+                }
             }) { Text("完成") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }

@@ -62,10 +62,10 @@ com.example.quotepicker.app-startup-runtime-1.1.1-60 C:\Users\17805\.gradle\cach
 com.example.quotepicker.app-viewpager2-1.0.0-61 C:\Users\17805\.gradle\caches\8.10\transforms\e638d3e2fa54776aaf307a47638f78a4\transformed\viewpager2-1.0.0\res
 com.example.quotepicker.app-transition-1.5.0-62 C:\Users\17805\.gradle\caches\8.10\transforms\e78bdc341eb0a00333dfb2efb974fbe4\transformed\transition-1.5.0\res
 com.example.quotepicker.app-navigation-runtime-2.7.7-63 C:\Users\17805\.gradle\caches\8.10\transforms\fdb6b8115a2e6b5630675cc55711373a\transformed\navigation-runtime-2.7.7\res
-com.example.quotepicker.app-pngs-64 D:\app1\app\build\generated\res\pngs\debug
-com.example.quotepicker.app-resValues-65 D:\app1\app\build\generated\res\resValues\debug
-com.example.quotepicker.app-packageDebugResources-66 D:\app1\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.example.quotepicker.app-packageDebugResources-67 D:\app1\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.example.quotepicker.app-debug-68 D:\app1\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.example.quotepicker.app-debug-69 D:\app1\app\src\debug\res
-com.example.quotepicker.app-main-70 D:\app1\app\src\main\res
+com.example.quotepicker.app-pngs-64 D:\gitapp\apptest\app\build\generated\res\pngs\debug
+com.example.quotepicker.app-resValues-65 D:\gitapp\apptest\app\build\generated\res\resValues\debug
+com.example.quotepicker.app-packageDebugResources-66 D:\gitapp\apptest\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.quotepicker.app-packageDebugResources-67 D:\gitapp\apptest\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.quotepicker.app-debug-68 D:\gitapp\apptest\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.example.quotepicker.app-debug-69 D:\gitapp\apptest\app\src\debug\res
+com.example.quotepicker.app-main-70 D:\gitapp\apptest\app\src\main\res

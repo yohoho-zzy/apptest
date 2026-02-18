@@ -1,0 +1,55 @@
+##############################
+# Android / Kotlin
+##############################
+
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Local config
+local.properties
+
+# Log
+*.log
+
+# Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VSCode
+.vscode/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# keystore
+*.jks
+*.keystore
+
+# temp
+captures/
+.externalNativeBuild/
+.cxx/
+
+##############################
+# Kotlin
+##############################
+*.class
+*.jar
+*.war
+
+##############################
+# Generated
+##############################
+generated/
+out/
+
+##############################
+# Room DB export (optional)
+schemas/
