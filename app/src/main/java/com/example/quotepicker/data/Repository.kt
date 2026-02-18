@@ -20,6 +20,7 @@ class Repository private constructor(context: Context) {
     private val crossRefDao = db.crossRefDao()
     private val responseRecordDao = db.responseRecordDao()
     private val executionSettingsDao = db.executionSettingsDao()
+    private val executionResourceDao = db.executionResourceDao()
 
     fun observeCategories(): Flow<List<TagCategoryEntity>> = categoryDao.observeCategories()
     fun observeTagsByCategory(categoryId: Long): Flow<List<TagEntity>> = tagDao.observeTagsByCategory(categoryId)
@@ -39,6 +40,7 @@ class Repository private constructor(context: Context) {
         (resourceTagIds + characterTagIds + responseTagIds).toSet()
     }
     fun observeExecutionSettings(): Flow<ExecutionSettingsEntity?> = executionSettingsDao.observeSettings()
+    fun observeExecutionResources(): Flow<List<ExecutionResourceEntity>> = executionResourceDao.observeItems()
 
     data class ExportPackage(
         val snapshot: BackupSnapshot,
@@ -67,6 +69,7 @@ class Repository private constructor(context: Context) {
             resourceCharacterRefs = crossRefDao.listResourceCharacters(),
             responseRecords = responseRecordDao.listAll(),
             executionSettings = executionSettingsDao.getSettings(),
+            executionResources = executionResourceDao.listAll(),
             media = mediaItems
         )
         return ExportPackage(snapshot = snapshot, mediaSources = mediaSources)
@@ -89,6 +92,7 @@ class Repository private constructor(context: Context) {
         }
         responseRecordDao.deleteAll()
         executionSettingsDao.deleteAll()
+        executionResourceDao.deleteAll()
         crossRefDao.deleteAllResourceTags()
         crossRefDao.deleteAllCharacterTags()
         crossRefDao.deleteAllResourceCharacters()
@@ -107,6 +111,9 @@ class Repository private constructor(context: Context) {
             snapshot.responseRecords.forEach { responseRecordDao.upsert(it) }
         }
         snapshot.executionSettings?.let { executionSettingsDao.upsert(it) }
+        if (snapshot.executionResources.isNotEmpty()) {
+            snapshot.executionResources.forEach { executionResourceDao.insert(it) }
+        }
     }
 
     suspend fun addCategory(name: String, type: TagCategoryType) =
@@ -231,6 +238,33 @@ class Repository private constructor(context: Context) {
 
     suspend fun resourceIdsForCharacter(characterId: Long) = crossRefDao.resourceIdsForCharacter(characterId)
     suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
+
+
+    suspend fun addExecutionResource(
+        resourceId: Long,
+        characterId: Long,
+        tagId: Long,
+        characterName: String,
+        tagName: String
+    ) {
+        executionResourceDao.insert(
+            ExecutionResourceEntity(
+                resourceId = resourceId,
+                characterId = characterId,
+                tagId = tagId,
+                characterName = characterName,
+                tagName = tagName
+            )
+        )
+    }
+
+    suspend fun removeExecutionResource(id: Long) {
+        executionResourceDao.deleteById(id)
+    }
+
+    suspend fun clearExecutionResources() {
+        executionResourceDao.deleteAll()
+    }
 
     suspend fun updateCharacterPoints(characterId: Long, points: Int) {
         val characters = characterDao.listAll()

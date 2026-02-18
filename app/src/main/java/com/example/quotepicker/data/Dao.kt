@@ -214,3 +214,21 @@ interface ExecutionSettingsDao {
     @Query("DELETE FROM execution_settings")
     suspend fun deleteAll()
 }
+
+@Dao
+interface ExecutionResourceDao {
+    @Query("SELECT * FROM execution_resources ORDER BY createdAt ASC")
+    fun observeItems(): Flow<List<ExecutionResourceEntity>>
+
+    @Query("SELECT * FROM execution_resources ORDER BY createdAt ASC")
+    suspend fun listAll(): List<ExecutionResourceEntity>
+
+    @Insert
+    suspend fun insert(item: ExecutionResourceEntity)
+
+    @Query("DELETE FROM execution_resources WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM execution_resources")
+    suspend fun deleteAll()
+}
