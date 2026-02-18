@@ -3,10 +3,12 @@ package com.example.quotepicker.data
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import androidx.room.withTransaction
 import java.io.File
 import java.io.InputStream
 import java.time.LocalDate
 import org.json.JSONArray
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -270,6 +272,21 @@ class Repository private constructor(context: Context) {
         val characters = characterDao.listAll()
         val target = characters.firstOrNull { it.id == characterId } ?: return
         characterDao.update(target.copy(points = points.coerceIn(0, 30), updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int) {
+        db.withTransaction {
+            val characters = characterDao.listAll()
+            val target = characters.firstOrNull { it.id == characterId } ?: return@withTransaction
+            val nextPoints = ((target.points + completionScoreSum) / 2.0).roundToInt()
+            characterDao.update(
+                target.copy(
+                    points = nextPoints.coerceIn(0, 30),
+                    familiarity = target.familiarity + 1,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
     }
 
     suspend fun incrementCharacterFamiliarity(characterId: Long) {

@@ -46,7 +46,6 @@ import com.example.quotepicker.vm.ExecutionResourceDisplay
 import com.example.quotepicker.vm.ExecutionViewModel
 import com.example.quotepicker.vm.ResourceViewModel
 import java.time.LocalDate
-import kotlin.math.roundToInt
 
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -229,11 +228,7 @@ fun ExecutionScreen(
             characterName = target.characterName,
             onConfirm = { completion, belonging, emotion ->
                 val sum = completion + belonging + emotion
-                val currentCharacter = ui.characters.firstOrNull { it.id == target.characterId }
-                val currentPoints = currentCharacter?.points ?: 0
-                val newPoints = ((sum + currentPoints) / 2.0).roundToInt()
-                vm.updateCharacterPoints(target.characterId, newPoints)
-                vm.incrementCharacterFamiliarity(target.characterId)
+                vm.applyExecutionCompletion(target.characterId, sum)
                 vm.removeExecutionResource(target.id)
                 completionTarget = null
             },
@@ -302,6 +297,7 @@ private fun CompletionDialog(
     var completionText by remember { mutableStateOf("") }
     var belongingText by remember { mutableStateOf("") }
     var emotionText by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -311,29 +307,47 @@ private fun CompletionDialog(
                 Text("$characterName 的完成情况")
                 OutlinedTextField(
                     value = completionText,
-                    onValueChange = { completionText = it },
+                    onValueChange = {
+                        completionText = it
+                        errorText = null
+                    },
                     label = { Text("完成度(0-10)") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = belongingText,
-                    onValueChange = { belongingText = it },
+                    onValueChange = {
+                        belongingText = it
+                        errorText = null
+                    },
                     label = { Text("归属感(0-10)") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = emotionText,
-                    onValueChange = { emotionText = it },
+                    onValueChange = {
+                        emotionText = it
+                        errorText = null
+                    },
                     label = { Text("情绪值(0-10)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                errorText?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val completion = completionText.toIntOrNull()?.coerceIn(0, 10) ?: 0
-                val belonging = belongingText.toIntOrNull()?.coerceIn(0, 10) ?: 0
-                val emotion = emotionText.toIntOrNull()?.coerceIn(0, 10) ?: 0
+                val completion = completionText.toIntOrNull()
+                val belonging = belongingText.toIntOrNull()
+                val emotion = emotionText.toIntOrNull()
+                val isValid = completion != null && belonging != null && emotion != null &&
+                    completion in 0..10 && belonging in 0..10 && emotion in 0..10
+                if (!isValid) {
+                    errorText = "三个值都必须填写 0-10 之间的整数"
+                    return@TextButton
+                }
                 onConfirm(completion, belonging, emotion)
             }) { Text("完成") }
         },
