@@ -75,7 +75,7 @@ import com.example.quotepicker.ui.components.PreviewTextBlock
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.tagTextColor
-import com.example.quotepicker.ui.components.ResourceGridCard
+import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.ui.components.sortTagsForDisplay
@@ -108,6 +108,9 @@ fun CharacterScreen(
     var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
     var selectedType by remember { mutableStateOf<ResourceType?>(null) }
     var previewTarget by remember { mutableStateOf<com.example.quotepicker.data.ResourceWithTagsCharacters?>(null) }
+    var groupLevel1Selected by remember { mutableStateOf(true) }
+    var groupLevel2Selected by remember { mutableStateOf(false) }
+    var openedGroup by remember { mutableStateOf<CharacterResourceGroup?>(null) }
     val pagerState = rememberPagerState(pageCount = { 3 })
     val pagerScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -125,6 +128,9 @@ fun CharacterScreen(
     LaunchedEffect(selectedId) {
         selectedTagIds = emptySet()
         selectedType = null
+        groupLevel1Selected = true
+        groupLevel2Selected = false
+        openedGroup = null
     }
 
     if (previewTarget != null) {
@@ -440,29 +446,60 @@ fun CharacterScreen(
                                 CharacterResourceFilterBar(
                                     selectedType = selectedType,
                                     selectedTagIds = selectedTagIds,
+                                    groupLevel1Selected = groupLevel1Selected,
+                                    groupLevel2Selected = groupLevel2Selected,
                                     onTypeChange = { selectedType = it },
-                                    onTagDialog = { filterTagDialog = true }
+                                    onTagDialog = { filterTagDialog = true },
+                                    onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
+                                    onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected }
                                 )
-                                if (filteredResources.isEmpty()) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text("暂无资源")
+                                val groupedResources = remember(filteredResources, groupLevel1Selected, groupLevel2Selected) {
+                                    buildCharacterResourceGroups(filteredResources, groupLevel1Selected, groupLevel2Selected)
+                                }
+                                when {
+                                    filteredResources.isEmpty() -> {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            Text("暂无资源")
+                                        }
                                     }
-                                } else {
-                                    LazyVerticalGrid(
-                                        columns = GridCells.Fixed(3),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        items(filteredResources, key = { it.resource.id }) { resource ->
-                                            ResourceGridCard(
-                                                title = resource.resource.title,
-                                                typeLabel = typeLabel(resource.resource.type),
-                                                tags = sortTagsForDisplay(resource.tags, resourceUi.categories),
-                                                onClick = { previewTarget = resource },
-                                                onLongClick = {}
-                                            )
+                                    openedGroup != null -> {
+                                        CharacterGroupedResourcePage(
+                                            group = openedGroup!!,
+                                            categories = resourceUi.categories,
+                                            onBack = { openedGroup = null },
+                                            onPreview = { previewTarget = it }
+                                        )
+                                    }
+                                    groupLevel1Selected || groupLevel2Selected -> {
+                                        LazyColumn(
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            items(groupedResources, key = { it.key }) { group ->
+                                                GroupSummaryRow(
+                                                    title = group.key,
+                                                    count = group.resources.size,
+                                                    onClick = { openedGroup = group }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        LazyColumn(
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            items(filteredResources, key = { it.resource.id }) { resource ->
+                                                ResourceListRow(
+                                                    resource = resource,
+                                                    categories = resourceUi.categories,
+                                                    roleText = char.name,
+                                                    onClick = { previewTarget = resource },
+                                                    onLongClick = {}
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -691,8 +728,12 @@ private fun TagSummarySection(
 private fun CharacterResourceFilterBar(
     selectedType: ResourceType?,
     selectedTagIds: Set<Long>,
+    groupLevel1Selected: Boolean,
+    groupLevel2Selected: Boolean,
     onTypeChange: (ResourceType?) -> Unit,
-    onTagDialog: () -> Unit
+    onTagDialog: () -> Unit,
+    onToggleLevel1: () -> Unit,
+    onToggleLevel2: () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -713,7 +754,89 @@ private fun CharacterResourceFilterBar(
             }
         }
         Spacer(Modifier.height(8.dp))
-        AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
+            FilterChip(selected = groupLevel1Selected, onClick = onToggleLevel1, label = { Text("1") })
+            FilterChip(selected = groupLevel2Selected, onClick = onToggleLevel2, label = { Text("2") })
+        }
+    }
+}
+
+private data class CharacterResourceGroup(
+    val key: String,
+    val resources: List<com.example.quotepicker.data.ResourceWithTagsCharacters>
+)
+
+private fun buildCharacterResourceGroups(
+    resources: List<com.example.quotepicker.data.ResourceWithTagsCharacters>,
+    level1: Boolean,
+    level2: Boolean
+): List<CharacterResourceGroup> {
+    if (!level1 && !level2) return emptyList()
+    return resources
+        .groupBy { resourceTitleGroupKey(it.resource.title, level1, level2) }
+        .toList()
+        .sortedWith(compareByDescending<Pair<String, List<com.example.quotepicker.data.ResourceWithTagsCharacters>>> { it.second.size }.thenBy { it.first })
+        .map { CharacterResourceGroup(it.first, it.second) }
+}
+
+private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean): String {
+    val parts = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    val p1 = parts.getOrNull(0)
+    val p2 = parts.getOrNull(1)
+    return when {
+        level1 && level2 -> listOfNotNull(p1, p2).joinToString("-").ifBlank { "未分组" }
+        level1 -> p1 ?: "未分组"
+        level2 -> p2 ?: "未分组"
+        else -> title
+    }
+}
+
+@Composable
+private fun GroupSummaryRow(
+    title: String,
+    count: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Text("${count}个资源", style = MaterialTheme.typography.labelMedium, color = Color(0xFF1565C0))
+    }
+}
+
+@Composable
+private fun CharacterGroupedResourcePage(
+    group: CharacterResourceGroup,
+    categories: List<TagCategoryEntity>,
+    onBack: () -> Unit,
+    onPreview: (com.example.quotepicker.data.ResourceWithTagsCharacters) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TextButton(onClick = onBack, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text("返回 ${group.key}")
+        }
+        LazyColumn(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(group.resources, key = { it.resource.id }) { resource ->
+                ResourceListRow(
+                    resource = resource,
+                    categories = categories,
+                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                    onClick = { onPreview(resource) },
+                    onLongClick = {}
+                )
+            }
+        }
     }
 }
 
