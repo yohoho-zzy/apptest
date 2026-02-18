@@ -161,6 +161,55 @@ class Repository private constructor(context: Context) {
         return id
     }
 
+    suspend fun ensureSeedResources(minCount: Int = 5) {
+        if (minCount <= 0) return
+        val existingCount = resourceDao.listAll().size
+        if (existingCount >= minCount) return
+        val now = System.currentTimeMillis()
+        val seeds = listOf(
+            ResourceEntity(
+                type = ResourceType.TEXT,
+                title = "新手引导",
+                quoteText = "欢迎使用资源库，这是默认的示例文本资源。",
+                createdAt = now,
+                updatedAt = now
+            ),
+            ResourceEntity(
+                type = ResourceType.TEXT,
+                title = "每日提示",
+                quoteText = "坚持记录灵感，资源会越积越多。",
+                createdAt = now + 1,
+                updatedAt = now + 1
+            ),
+            ResourceEntity(
+                type = ResourceType.SCENE,
+                title = "场景模板",
+                quoteText = "可在此基础上继续编辑剧情。",
+                sceneJson = "[]",
+                createdAt = now + 2,
+                updatedAt = now + 2
+            ),
+            ResourceEntity(
+                type = ResourceType.TEXT,
+                title = "执行口令",
+                quoteText = "执行资源 5 条记录入库完成。",
+                createdAt = now + 3,
+                updatedAt = now + 3
+            ),
+            ResourceEntity(
+                type = ResourceType.TEXT,
+                title = "持久保留",
+                quoteText = "这些记录已保存在本地数据库中，可长期保留。",
+                createdAt = now + 4,
+                updatedAt = now + 4
+            )
+        )
+        val toInsert = seeds.take(minCount - existingCount)
+        if (toInsert.isNotEmpty()) {
+            resourceDao.insertAll(toInsert)
+        }
+    }
+
     suspend fun updateResource(resource: ResourceEntity) =
         resourceDao.update(resource.copy(updatedAt = System.currentTimeMillis()))
 

@@ -91,6 +91,12 @@ data class FlowUpdateItem(
 class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository.get(app)
 
+    init {
+        viewModelScope.launch {
+            repo.ensureSeedResources(minCount = 5)
+        }
+    }
+
     private val filters = MutableStateFlow(ResourceFilterState())
 
     val allResources: StateFlow<List<ResourceWithTagsCharacters>> = repo.observeResourcesWithRelations()
