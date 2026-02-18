@@ -130,6 +130,10 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateCharacterPoints(characterId, points)
     }
 
+    fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int) = viewModelScope.launch {
+        repo.applyExecutionCompletion(characterId, completionScoreSum)
+    }
+
     fun incrementCharacterFamiliarity(characterId: Long) = viewModelScope.launch {
         repo.incrementCharacterFamiliarity(characterId)
     }
