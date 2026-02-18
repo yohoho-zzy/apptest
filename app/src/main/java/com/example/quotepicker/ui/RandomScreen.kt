@@ -1,8 +1,6 @@
 package com.example.quotepicker.ui
 
 import android.widget.Toast
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.ExecutionSettingsEntity
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.vm.ExecutionViewModel
 import com.example.quotepicker.vm.ResourceViewModel
@@ -56,11 +54,7 @@ private data class ExecutionResourceItem(
     val tagName: String
 )
 
-@OptIn(
-    ExperimentalFoundationApi::class,
-    ExperimentalLayoutApi::class,
-    ExperimentalMaterial3Api::class
-)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ExecutionScreen(
     modifier: Modifier = Modifier,
@@ -78,6 +72,7 @@ fun ExecutionScreen(
     val today = LocalDate.now().toString()
     val shouldPromptDailyInput = ui.settings.lastExecutionDate != today
     val isExecutionAvailable = ui.settings.remainingValue > 0
+    val executionSlotsAvailable = executionItems.size < 5
 
     LaunchedEffect(shouldPromptDailyInput) {
         showDailyInputDialog = shouldPromptDailyInput
@@ -173,6 +168,10 @@ fun ExecutionScreen(
                                     Toast.makeText(context, "祈求不可用", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
+                                if (!executionSlotsAvailable) {
+                                    Toast.makeText(context, "执行资源最多保留5个，请先完成", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
                                 vm.consumeRecord(record.characterId, record.tagId)
                                 val candidates = ui.resources.filter { res ->
                                     res.characters.any { it.id == record.characterId } &&
@@ -189,7 +188,10 @@ fun ExecutionScreen(
                                     characterName = record.characterName,
                                     tagName = record.tagName
                                 )
-                            }, enabled = isExecutionAvailable && !shouldPromptDailyInput) {
+                            },
+                                enabled = isExecutionAvailable && !shouldPromptDailyInput && executionSlotsAvailable,
+                                shape = MaterialTheme.shapes.small
+                            ) {
                                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
@@ -201,33 +203,18 @@ fun ExecutionScreen(
                 if (executionItems.isEmpty()) {
                     Text("暂无执行资源", style = MaterialTheme.typography.labelMedium)
                 } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(executionItems) { item ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = {
-                                            previewTarget = item.resource
-                                            showPreview = true
-                                        },
-                                        onLongClick = { completionTarget = item }
-                                    )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(item.resource.resource.title, style = MaterialTheme.typography.titleMedium)
-                                    Text(
-                                        text = "${item.characterName} ${item.tagName}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                            ResourceListRow(
+                                resource = item.resource,
+                                categories = emptyList(),
+                                roleText = "${item.characterName} ${item.tagName}",
+                                onClick = {
+                                    previewTarget = item.resource
+                                    showPreview = true
+                                },
+                                onLongClick = { completionTarget = item }
+                            )
                         }
                     }
                 }
@@ -257,6 +244,7 @@ fun ExecutionScreen(
                 val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
                 val newPoints = ((sum + currentPoints) / 2.0).roundToInt()
                 vm.updateCharacterPoints(target.characterId, newPoints)
+                vm.incrementCharacterFamiliarity(target.characterId)
                 executionItems = executionItems.filterNot { it == target }
                 completionTarget = null
             },
