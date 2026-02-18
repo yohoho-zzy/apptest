@@ -53,6 +53,15 @@ class TagViewModel(app: Application) : AndroidViewModel(app) {
     fun addTag(categoryId: Long, name: String, colorArgb: Int) =
         viewModelScope.launch { repo.addTag(categoryId, name, colorArgb) }
 
+    fun addTags(categoryId: Long, names: List<String>, colorArgb: Int) =
+        viewModelScope.launch {
+            names
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .forEach { repo.addTag(categoryId, it, colorArgb) }
+        }
+
     fun updateTag(tag: TagEntity) = viewModelScope.launch { repo.updateTag(tag) }
     fun deleteTag(tag: TagEntity) = viewModelScope.launch { repo.deleteTag(tag) }
 }

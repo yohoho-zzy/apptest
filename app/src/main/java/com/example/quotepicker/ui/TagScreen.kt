@@ -207,7 +207,13 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
             initialName = "",
             initialColor = 0xFFB388FF.toInt(),
             onConfirm = { name, color ->
-                ui.currentCategory?.let { vm.addTag(it.id, name, color) }
+                ui.currentCategory?.let { category ->
+                    val names = name
+                        .split("+")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                    vm.addTags(category.id, names, color)
+                }
             },
             onDismiss = { showTagDialog = false }
         )

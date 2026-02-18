@@ -91,7 +91,7 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.encodeResourceFileInfo
-import com.example.quotepicker.ui.components.ResourceGridCard
+import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.sortTagsForDisplay
@@ -125,6 +125,9 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var manageScreen by remember { mutableStateOf(false) }
     var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
     var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    var groupLevel1Selected by remember { mutableStateOf(true) }
+    var groupLevel2Selected by remember { mutableStateOf(false) }
+    var openedGroup by remember { mutableStateOf<ResourceTitleGroup?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val target = restoreTarget
@@ -179,6 +182,22 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         return
     }
 
+    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected) {
+        buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected)
+    }
+
+    openedGroup?.let { target ->
+        ResourceGroupScreen(
+            title = target.key,
+            resources = target.resources,
+            categories = ui.categories,
+            onBack = { openedGroup = null },
+            onPreview = { previewTarget = it; openedGroup = null },
+            onLongPress = { bottomSheetTarget = it }
+        )
+        return
+    }
+
     if (previewTarget != null) {
         ResourcePreviewScreen(
             resource = previewTarget!!,
@@ -218,29 +237,48 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 selectedTagIds = ui.filters.selectedTagIds,
                 characters = ui.characters,
                 selectedCharacterId = ui.filters.selectedCharacterId,
+                groupLevel1Selected = groupLevel1Selected,
+                groupLevel2Selected = groupLevel2Selected,
                 onTypeChange = vm::updateTypeFilter,
                 onCharacterDialog = { filterCharacterDialog = true },
-                onTagDialog = { filterTagDialog = true }
+                onTagDialog = { filterTagDialog = true },
+                onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
+                onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected }
             )
-            if (ui.resources.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无资源，点击右下角添加")
+            when {
+                ui.resources.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("暂无资源，点击右下角添加")
+                    }
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    gridItems(ui.resources, key = { it.resource.id }) { res ->
-                        ResourceGridCard(
-                            title = res.resource.title,
-                            typeLabel = typeLabel(res.resource.type),
-                            tags = sortTagsForDisplay(res.tags, ui.categories),
-                            onClick = { previewTarget = res },
-                            onLongClick = { bottomSheetTarget = res }
-                        )
+                groupLevel1Selected || groupLevel2Selected -> {
+                    LazyColumn(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(groupedResources, key = { it.key }) { group ->
+                            GroupListRow(
+                                name = group.key,
+                                count = group.resources.size,
+                                onClick = { openedGroup = group }
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(ui.resources, key = { it.resource.id }) { res ->
+                            ResourceListRow(
+                                resource = res,
+                                categories = ui.categories,
+                                roleText = res.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                                onClick = { previewTarget = res },
+                                onLongClick = { bottomSheetTarget = res }
+                            )
+                        }
                     }
                 }
             }
@@ -752,9 +790,13 @@ private fun FilterBar(
     selectedTagIds: Set<Long>,
     characters: List<CharacterEntity>,
     selectedCharacterId: Long?,
+    groupLevel1Selected: Boolean,
+    groupLevel2Selected: Boolean,
     onTypeChange: (ResourceType?) -> Unit,
     onCharacterDialog: () -> Unit,
-    onTagDialog: () -> Unit
+    onTagDialog: () -> Unit,
+    onToggleLevel1: () -> Unit,
+    onToggleLevel2: () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -782,6 +824,108 @@ private fun FilterBar(
                 onClick = onCharacterDialog,
                 label = { Text(selectedCharacter?.name ?: "全部角色") }
             )
+            FilterChip(
+                selected = groupLevel1Selected,
+                onClick = onToggleLevel1,
+                label = { Text("1") }
+            )
+            FilterChip(
+                selected = groupLevel2Selected,
+                onClick = onToggleLevel2,
+                label = { Text("2") }
+            )
+        }
+    }
+}
+
+
+private data class ResourceTitleGroup(
+    val key: String,
+    val resources: List<ResourceWithTagsCharacters>
+)
+
+private fun buildResourceGroups(
+    resources: List<ResourceWithTagsCharacters>,
+    level1: Boolean,
+    level2: Boolean
+): List<ResourceTitleGroup> {
+    if (!level1 && !level2) return emptyList()
+    val grouped = resources.groupBy { resourceTitleGroupKey(it.resource.title, level1, level2) }
+    return grouped.entries
+        .sortedWith(compareByDescending<Map.Entry<String, List<ResourceWithTagsCharacters>>> { it.value.size }.thenBy { it.key })
+        .map { ResourceTitleGroup(it.key, it.value) }
+}
+
+private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean): String {
+    val parts = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    val p1 = parts.getOrNull(0)
+    val p2 = parts.getOrNull(1)
+    return when {
+        level1 && level2 -> listOfNotNull(p1, p2).joinToString("-").ifBlank { "未分组" }
+        level1 -> p1 ?: "未分组"
+        level2 -> p2 ?: "未分组"
+        else -> title
+    }
+}
+
+@Composable
+private fun GroupListRow(
+    name: String,
+    count: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text("${count}个资源", color = Color(0xFF1565C0), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ResourceGroupScreen(
+    title: String,
+    resources: List<ResourceWithTagsCharacters>,
+    categories: List<TagCategoryEntity>,
+    onBack: () -> Unit,
+    onPreview: (ResourceWithTagsCharacters) -> Unit,
+    onLongPress: (ResourceWithTagsCharacters) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                }
+            )
+        }
+    ) { inner ->
+        LazyColumn(
+            modifier = Modifier
+                .padding(inner)
+                .fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(resources, key = { it.resource.id }) { resource ->
+                ResourceListRow(
+                    resource = resource,
+                    categories = categories,
+                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                    onClick = { onPreview(resource) },
+                    onLongClick = { onLongPress(resource) }
+                )
+            }
         }
     }
 }
