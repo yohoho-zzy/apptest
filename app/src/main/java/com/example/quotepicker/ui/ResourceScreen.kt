@@ -83,6 +83,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
@@ -128,6 +129,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var groupLevel1Selected by remember { mutableStateOf(true) }
     var groupLevel2Selected by remember { mutableStateOf(false) }
+    var groupLevel3Selected by remember { mutableStateOf(false) }
     var openedGroup by remember { mutableStateOf<ResourceTitleGroup?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -184,12 +186,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         return
     }
 
-    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected) {
-        buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected)
+    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
+        buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected)
     }
 
-    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected) {
-        if (!groupLevel1Selected && !groupLevel2Selected) {
+    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
+        if (!groupLevel1Selected && !groupLevel2Selected && !groupLevel3Selected) {
             openedGroup = null
             return@LaunchedEffect
         }
@@ -240,11 +242,13 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 selectedCharacterId = ui.filters.selectedCharacterId,
                 groupLevel1Selected = groupLevel1Selected,
                 groupLevel2Selected = groupLevel2Selected,
+                groupLevel3Selected = groupLevel3Selected,
                 onTypeChange = vm::updateTypeFilter,
                 onCharacterDialog = { filterCharacterDialog = true },
                 onTagDialog = { filterTagDialog = true },
                 onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
-                onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected }
+                onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected },
+                onToggleLevel3 = { groupLevel3Selected = !groupLevel3Selected }
             )
             when {
                 ui.resources.isEmpty() -> {
@@ -263,7 +267,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         )
                     }
                 }
-                groupLevel1Selected || groupLevel2Selected -> {
+                groupLevel1Selected || groupLevel2Selected || groupLevel3Selected -> {
                     if (openedGroup == null) {
                         LazyColumn(
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
@@ -831,11 +835,13 @@ private fun FilterBar(
     selectedCharacterId: Long?,
     groupLevel1Selected: Boolean,
     groupLevel2Selected: Boolean,
+    groupLevel3Selected: Boolean,
     onTypeChange: (ResourceType?) -> Unit,
     onCharacterDialog: () -> Unit,
     onTagDialog: () -> Unit,
     onToggleLevel1: () -> Unit,
-    onToggleLevel2: () -> Unit
+    onToggleLevel2: () -> Unit,
+    onToggleLevel3: () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -873,6 +879,11 @@ private fun FilterBar(
                 onClick = onToggleLevel2,
                 label = { Text("2") }
             )
+            FilterChip(
+                selected = groupLevel3Selected,
+                onClick = onToggleLevel3,
+                label = { Text("3") }
+            )
         }
     }
 }
@@ -888,15 +899,16 @@ private data class ResourceTitleGroup(
 private fun buildResourceGroups(
     resources: List<ResourceWithTagsCharacters>,
     level1: Boolean,
-    level2: Boolean
+    level2: Boolean,
+    level3: Boolean
 ): List<ResourceTitleGroup> {
-    if (!level1 && !level2) return emptyList()
-    val grouped = resources.groupBy { resourceTitleGroupKey(it.resource.title, level1, level2).first }
+    if (!level1 && !level2 && !level3) return emptyList()
+    val grouped = resources.groupBy { resourceTitleGroupKey(it.resource.title, level1, level2, level3).first }
     return grouped.entries
         .sortedWith(compareByDescending<Map.Entry<String, List<ResourceWithTagsCharacters>>> { it.value.size }.thenBy { it.key })
         .map { entry ->
             val childNames = entry.value
-                .mapNotNull { resourceTitleGroupKey(it.resource.title, level1, level2).second }
+                .mapNotNull { resourceTitleGroupKey(it.resource.title, level1, level2, level3).second }
                 .distinct()
                 .joinToString("・")
             ResourceTitleGroup(
@@ -908,19 +920,31 @@ private fun buildResourceGroups(
         }
 }
 
-private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean): Pair<String, String?> {
+private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolean, level3: Boolean): Pair<String, String?> {
     val parts = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
     val p1 = parts.getOrNull(0)
     val p2 = parts.getOrNull(1)
     val p3 = parts.getOrNull(2)
-    return when {
-        level1 && level2 -> {
-            val name = listOfNotNull(p1, p2).joinToString("-").ifBlank { "未分组" }
-            name to p3
-        }
-        level1 -> (p1 ?: "未分组") to p2
-        level2 -> (p2 ?: "未分组") to p3
-        else -> title to null
+    val p4 = parts.getOrNull(3)
+    val selectedParts = buildList {
+        if (level1) add(p1)
+        if (level2) add(p2)
+        if (level3) add(p3)
+    }.filterNotNull()
+    val child = when {
+        level1 && level2 && level3 -> p4
+        level1 && level2 -> p3
+        level1 && level3 -> p2
+        level2 && level3 -> p1
+        level1 -> p2
+        level2 -> p3
+        level3 -> p4
+        else -> null
+    }
+    return if (selectedParts.isNotEmpty()) {
+        selectedParts.joinToString("-").ifBlank { "未分组" } to child
+    } else {
+        title to null
     }
 }
 
@@ -1050,12 +1074,12 @@ private fun FilterCharacterDialog(
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text("角色")
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     FilterChip(
                         selected = current == null,
@@ -1063,10 +1087,12 @@ private fun FilterCharacterDialog(
                         label = {
                             Text(
                                 text = "全部角色",
+                                fontSize = 12.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         },
+                        modifier = Modifier.height(30.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = Color.White,
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -1080,10 +1106,12 @@ private fun FilterCharacterDialog(
                             label = {
                                 Text(
                                     text = character.name,
+                                    fontSize = 12.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             },
+                            modifier = Modifier.height(30.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = Color.White,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -2529,7 +2557,7 @@ private fun CharacterPickerDialog(
                     .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     characters.forEach { character ->
                         val isSelected = selected.contains(character.id)
                         FilterChip(
@@ -2541,10 +2569,12 @@ private fun CharacterPickerDialog(
                             label = {
                                 Text(
                                     text = character.name,
+                                    fontSize = 12.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             },
+                            modifier = Modifier.height(30.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -2579,8 +2609,8 @@ private fun TagSelectionSection(
         )
     }
     var uncategorizedExpanded by remember { mutableStateOf(true) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall)
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
             if (items.isNotEmpty()) {
@@ -2595,7 +2625,7 @@ private fun TagSelectionSection(
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(category.name, style = MaterialTheme.typography.labelMedium)
+                    Text(category.name, style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -2611,7 +2641,8 @@ private fun TagSelectionSection(
                             TagFilterChip(
                                 tag = tag,
                                 selected = selected,
-                                onChange = onChange
+                                onChange = onChange,
+                                compact = true
                             )
                         }
                     }
@@ -2625,7 +2656,7 @@ private fun TagSelectionSection(
                     .clickable { uncategorizedExpanded = !uncategorizedExpanded },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("未分类", style = MaterialTheme.typography.labelMedium)
+                Text("未分类", style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.width(6.dp))
                 Icon(
                     imageVector = if (uncategorizedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -2641,7 +2672,8 @@ private fun TagSelectionSection(
                         TagFilterChip(
                             tag = tag,
                             selected = selected,
-                            onChange = onChange
+                            onChange = onChange,
+                            compact = true
                         )
                     }
                 }
@@ -2654,7 +2686,8 @@ private fun TagSelectionSection(
 private fun TagFilterChip(
     tag: TagEntity,
     selected: Set<Long>,
-    onChange: (Set<Long>) -> Unit
+    onChange: (Set<Long>) -> Unit,
+    compact: Boolean = false
 ) {
     val isSelected = selected.contains(tag.id)
     val tagColor = Color(tag.colorArgb)
@@ -2669,10 +2702,12 @@ private fun TagFilterChip(
         label = {
             Text(
                 text = tag.name,
+                fontSize = if (compact) 12.sp else 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         },
+        modifier = if (compact) Modifier.height(30.dp) else Modifier,
         colors = FilterChipDefaults.filterChipColors(
             containerColor = tagColor.copy(alpha = 0.2f),
             selectedContainerColor = tagColor,
