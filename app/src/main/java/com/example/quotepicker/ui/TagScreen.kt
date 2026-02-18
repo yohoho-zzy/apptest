@@ -180,10 +180,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         items(tags, key = { it.id }) { tag ->
                             val bg = Color(tag.colorArgb)
                             val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                            val isUsed = tag.id in ui.usedTagIds
                             SquareGridItem(
                                 title = formatTagLabel(tag.name),
                                 backgroundColor = bg,
                                 contentColor = textColor,
+                                borderColor = if (isUsed) Color.Black else null,
                                 onClick = {},
                                 onLongClick = { bottomSheetTarget = tag }
                             )

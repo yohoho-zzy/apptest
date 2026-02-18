@@ -19,7 +19,8 @@ data class TagUiState(
     val categories: List<TagCategoryEntity> = emptyList(),
     val currentCategory: TagCategoryEntity? = null,
     val tags: List<TagEntity> = emptyList(),
-    val allTags: List<TagEntity> = emptyList()
+    val allTags: List<TagEntity> = emptyList(),
+    val usedTagIds: Set<Long> = emptySet()
 )
 
 class TagViewModel(app: Application) : AndroidViewModel(app) {
@@ -38,10 +39,17 @@ class TagViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeCategories(),
         selectedCategoryId,
         tagsFlow,
-        repo.observeAllTags()
-    ) { categories, selectedId, tags, allTags ->
+        repo.observeAllTags(),
+        repo.observeUsedTagIds()
+    ) { categories, selectedId, tags, allTags, usedTagIds ->
         val current = categories.firstOrNull { it.id == selectedId }
-        TagUiState(categories = categories, currentCategory = current, tags = tags, allTags = allTags)
+        TagUiState(
+            categories = categories,
+            currentCategory = current,
+            tags = tags,
+            allTags = allTags,
+            usedTagIds = usedTagIds
+        )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, TagUiState())
 
     fun selectCategory(id: Long?) { selectedCategoryId.value = id }

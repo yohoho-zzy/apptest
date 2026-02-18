@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.time.LocalDate
 import org.json.JSONArray
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 
 class Repository private constructor(context: Context) {
     private val appContext = context.applicationContext
@@ -30,6 +31,13 @@ class Repository private constructor(context: Context) {
     fun observeResources(): Flow<List<ResourceEntity>> = resourceDao.observeResources()
     fun observeResourcesWithRelations(): Flow<List<ResourceWithTagsCharacters>> = resourceDao.observeResourcesWithRelations()
     fun observeResponseRecords(): Flow<List<ResponseRecordEntity>> = responseRecordDao.observeRecords()
+    fun observeUsedTagIds(): Flow<Set<Long>> = combine(
+        crossRefDao.observeUsedResourceTagIds(),
+        crossRefDao.observeUsedCharacterTagIds(),
+        responseRecordDao.observeUsedTagIds()
+    ) { resourceTagIds, characterTagIds, responseTagIds ->
+        (resourceTagIds + characterTagIds + responseTagIds).toSet()
+    }
     fun observeExecutionSettings(): Flow<ExecutionSettingsEntity?> = executionSettingsDao.observeSettings()
 
     data class ExportPackage(

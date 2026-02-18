@@ -3,6 +3,7 @@ package com.example.quotepicker.ui.components
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -100,6 +101,7 @@ private fun CompactTagLabel(tag: TagEntity) {
         fontSize = 10.sp,
         lineHeight = 10.sp,
         modifier = Modifier
+            .background(bgColor)
             .border(0.5.dp, bgColor)
             .padding(horizontal = 4.dp, vertical = 1.dp)
     )
