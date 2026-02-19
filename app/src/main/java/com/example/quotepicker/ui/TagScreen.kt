@@ -180,7 +180,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                     val usePrefixGrouping = isPrefixGroupingCategory(ui.currentCategory?.name)
                     val groupingResult = remember(tags) { splitTagsByPrefix(tags) }
                     val expandedMap = remember(tags) {
-                        mutableStateOf(groupingResult.groups.associate { it.name to false }.toMutableMap())
+                        mutableStateOf(groupingResult.groups.associate { it.name to true }.toMutableMap())
                     }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(5),
