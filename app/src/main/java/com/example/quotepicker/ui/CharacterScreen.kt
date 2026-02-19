@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -78,7 +79,7 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.PreviewTextBlock
 import com.example.quotepicker.ui.components.NameDialog
-import com.example.quotepicker.ui.components.TagBadge
+import com.example.quotepicker.ui.components.formatTagLabel
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
@@ -736,7 +737,7 @@ private fun TagSummarySection(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items.forEach { tag ->
-                            TagBadge(tag = tag, modifier = Modifier.padding(vertical = 1.dp))
+                            CharacterDetailTagLabel(tag = tag, modifier = Modifier.padding(vertical = 1.dp))
                         }
                     }
                 } else {
@@ -744,7 +745,7 @@ private fun TagSummarySection(
                     val brown = Color(0xFF795548)
                     groupedByPrefix.groups.forEach { prefixGroup ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TagBadge(
+                            CharacterDetailTagLabel(
                                 tag = prefixGroup.items.firstOrNull()?.tag?.copy(
                                     name = "${prefixGroup.name}->",
                                     colorArgb = brown.toArgb()
@@ -760,7 +761,7 @@ private fun TagSummarySection(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 prefixGroup.items.forEach { groupedTag ->
-                                    TagBadge(
+                                    CharacterDetailTagLabel(
                                         tag = groupedTag.tag.copy(name = groupedTag.displayName),
                                         modifier = Modifier.padding(vertical = 1.dp)
                                     )
@@ -773,6 +774,25 @@ private fun TagSummarySection(
             }
         }
     }
+}
+
+
+@Composable
+private fun CharacterDetailTagLabel(
+    tag: TagEntity,
+    modifier: Modifier = Modifier
+) {
+    val bg = Color(tag.colorArgb)
+    Text(
+        text = formatTagLabel(tag.name),
+        color = tagTextColor(bg),
+        fontSize = 11.sp,
+        lineHeight = 11.sp,
+        modifier = modifier
+            .background(bg, shape = MaterialTheme.shapes.extraSmall)
+            .border(0.5.dp, bg, shape = MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    )
 }
 
 @Composable
