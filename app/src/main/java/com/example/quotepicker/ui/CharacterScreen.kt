@@ -83,6 +83,8 @@ import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.ui.components.sortTagsForDisplay
+import com.example.quotepicker.ui.components.isPrefixGroupingCategory
+import com.example.quotepicker.ui.components.splitTagsByPrefix
 import com.example.quotepicker.vm.CharacterViewModel
 import com.example.quotepicker.vm.TransferMode
 import com.example.quotepicker.vm.ResourceViewModel
@@ -713,8 +715,7 @@ private fun TagSummarySection(
 ) {
     val sortedTags = sortTagsForDisplay(tags, categories)
     val grouped = sortedTags.groupBy { it.categoryId }
-    val categoryMap = categories.associateBy { it.id }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -726,28 +727,42 @@ private fun TagSummarySection(
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
             if (items.isNotEmpty()) {
-                Text(category.name, style = MaterialTheme.typography.labelMedium)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items.forEach { tag ->
-                        TagBadge(tag = tag)
+                val usePrefixGrouping = isPrefixGroupingCategory(category.name)
+                if (!usePrefixGrouping) {
+                    Text(category.name, style = MaterialTheme.typography.labelMedium, color = Color(0xFF795548))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items.forEach { tag ->
+                            TagBadge(tag = tag, modifier = Modifier.padding(vertical = 1.dp))
+                        }
+                    }
+                } else {
+                    val groupedByPrefix = splitTagsByPrefix(items)
+                    groupedByPrefix.groups.forEach { prefixGroup ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+                            Text(
+                                text = "${prefixGroup.name}->",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF795548),
+                                fontWeight = FontWeight.Bold
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                prefixGroup.items.forEach { groupedTag ->
+                                    TagBadge(
+                                        tag = groupedTag.tag.copy(name = groupedTag.displayName),
+                                        modifier = Modifier.padding(vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        val uncategorized = sortedTags.filter { it.categoryId !in categoryMap.keys }
-        if (uncategorized.isNotEmpty()) {
-            Text("未分类", style = MaterialTheme.typography.labelMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                uncategorized.forEach { tag ->
-                    TagBadge(tag = tag)
-                }
+                Spacer(Modifier.height(6.dp))
             }
         }
     }
@@ -942,7 +957,8 @@ private fun TagPickerDialog(
                 categories = categories,
                 tags = tags,
                 selected = selected,
-                onChange = { selected = it.toMutableSet() }
+                onChange = { selected = it.toMutableSet() },
+                showOnlyPrefixGroups = true
             )
         },
         confirmButton = {
@@ -959,7 +975,8 @@ private fun TagSelectionSection(
     categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
     selected: Set<Long>,
-    onChange: (Set<Long>) -> Unit
+    onChange: (Set<Long>) -> Unit,
+    showOnlyPrefixGroups: Boolean = false
 ) {
     val sortedTags = sortTagsForDisplay(tags, categories)
     val grouped = sortedTags.groupBy { it.categoryId }
@@ -969,6 +986,7 @@ private fun TagSelectionSection(
         mutableStateOf(categories.associate { it.id to true }.toMutableMap())
     }
     var uncategorizedExpanded by remember { mutableStateOf(true) }
+    val selectedPrefixGroup = remember(categories) { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -979,7 +997,11 @@ private fun TagSelectionSection(
         Text(label, style = MaterialTheme.typography.labelSmall)
         categories.forEach { category ->
             val items = grouped[category.id].orEmpty()
-            if (items.isNotEmpty()) {
+            if (items.isEmpty()) return@forEach
+            val isPrefixCategory = isPrefixGroupingCategory(category.name)
+            if (showOnlyPrefixGroups && !isPrefixCategory) return@forEach
+
+            if (!isPrefixCategory) {
                 val isExpanded = expandedState.value[category.id] ?: true
                 Row(
                     modifier = Modifier
@@ -999,10 +1021,7 @@ private fun TagSelectionSection(
                     )
                 }
                 if (isExpanded) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         items.forEach { tag ->
                             val isSelected = selected.contains(tag.id)
                             val tagColor = Color(tag.colorArgb)
@@ -1014,14 +1033,58 @@ private fun TagSelectionSection(
                                     if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
                                     onChange(newSet)
                                 },
-                                label = {
-                                    Text(
-                                        text = tag.name,
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
+                                label = { Text(text = tag.name, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                                modifier = Modifier.height(30.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = tagColor.copy(alpha = 0.2f),
+                                    selectedContainerColor = tagColor,
+                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedLabelColor = selectedTextColor
+                                )
+                            )
+                        }
+                    }
+                }
+            } else {
+                val groupedByPrefix = splitTagsByPrefix(items)
+                val currentGroup = selectedPrefixGroup.value[category.id]
+                val brown = Color(0xFF795548)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    groupedByPrefix.groups.forEach { prefixGroup ->
+                        FilterChip(
+                            selected = currentGroup == prefixGroup.name,
+                            onClick = {
+                                selectedPrefixGroup.value = selectedPrefixGroup.value.toMutableMap().apply {
+                                    put(category.id, if (currentGroup == prefixGroup.name) null else prefixGroup.name)
+                                }
+                            },
+                            label = { Text(prefixGroup.name, fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = brown.copy(alpha = 0.15f),
+                                selectedContainerColor = brown,
+                                labelColor = brown,
+                                selectedLabelColor = Color.White
+                            ),
+                            modifier = Modifier.height(30.dp)
+                        )
+                    }
+                }
+                if (currentGroup != null) {
+                    val selectedGroupItems = groupedByPrefix.groups.firstOrNull { it.name == currentGroup }?.items.orEmpty()
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        selectedGroupItems.forEach { groupedTag ->
+                            val tag = groupedTag.tag
+                            val isSelected = selected.contains(tag.id)
+                            val tagColor = Color(tag.colorArgb)
+                            val selectedTextColor = tagTextColor(tagColor)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val newSet = selected.toMutableSet()
+                                    if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
+                                    onChange(newSet)
                                 },
+                                label = { Text(text = groupedTag.displayName, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                                 modifier = Modifier.height(30.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     containerColor = tagColor.copy(alpha = 0.2f),
@@ -1035,7 +1098,7 @@ private fun TagSelectionSection(
                 }
             }
         }
-        if (uncategorized.isNotEmpty()) {
+        if (!showOnlyPrefixGroups && uncategorized.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1050,10 +1113,7 @@ private fun TagSelectionSection(
                 )
             }
             if (uncategorizedExpanded) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     uncategorized.forEach { tag ->
                         val isSelected = selected.contains(tag.id)
                         val tagColor = Color(tag.colorArgb)
@@ -1065,16 +1125,9 @@ private fun TagSelectionSection(
                                 if (isSelected) newSet.remove(tag.id) else newSet.add(tag.id)
                                 onChange(newSet)
                             },
-                            label = {
-                            Text(
-                                text = tag.name,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                        },
-                        modifier = Modifier.height(30.dp),
-                        colors = FilterChipDefaults.filterChipColors(
+                            label = { Text(text = tag.name, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                            modifier = Modifier.height(30.dp),
+                            colors = FilterChipDefaults.filterChipColors(
                                 containerColor = tagColor.copy(alpha = 0.2f),
                                 selectedContainerColor = tagColor,
                                 labelColor = MaterialTheme.colorScheme.onSurface,
