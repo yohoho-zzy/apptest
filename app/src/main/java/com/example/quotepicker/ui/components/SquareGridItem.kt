@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.BorderStroke
 
@@ -33,6 +34,8 @@ fun SquareGridItem(
     subtitleOnTop: Boolean = false,
     subtitleColor: Color? = null,
     subtitleFontWeight: FontWeight? = null,
+    titleTextStyle: TextStyle = MaterialTheme.typography.bodyMedium,
+    itemAspectRatio: Float = 1f,
     subtitleContent: (@Composable () -> Unit)? = null,
     bottomContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
@@ -43,7 +46,7 @@ fun SquareGridItem(
     val resolvedSubtitleWeight = subtitleFontWeight ?: FontWeight.Normal
     OutlinedCard(
         modifier = modifier
-            .aspectRatio(1f)
+            .aspectRatio(itemAspectRatio)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ,
         colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
@@ -76,7 +79,7 @@ fun SquareGridItem(
                 }
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = titleTextStyle,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
                     maxLines = 2,

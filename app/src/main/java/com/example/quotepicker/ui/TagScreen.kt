@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -57,10 +59,14 @@ import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.ui.components.tagColorSortIndex
 import com.example.quotepicker.ui.components.formatTagLabel
+import com.example.quotepicker.ui.components.isPrefixGroupingCategory
+import com.example.quotepicker.ui.components.splitTagsByPrefix
 import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,24 +177,111 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         compareBy<TagEntity> { tagColorSortIndex(it.colorArgb) }
                             .thenBy { it.name.lowercase() }
                     )
+                    val usePrefixGrouping = isPrefixGroupingCategory(ui.currentCategory?.name)
+                    val groupingResult = remember(tags) { splitTagsByPrefix(tags) }
+                    val expandedMap = remember(tags) {
+                        mutableStateOf(groupingResult.groups.associate { it.name to false }.toMutableMap())
+                    }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(5),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(tags, key = { it.id }) { tag ->
-                            val bg = Color(tag.colorArgb)
-                            val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
-                            val isUsed = tag.id in ui.usedTagIds
-                            SquareGridItem(
-                                title = formatTagLabel(tag.name),
-                                backgroundColor = bg,
-                                contentColor = textColor,
-                                borderColor = if (isUsed) Color.Black else null,
-                                onClick = {},
-                                onLongClick = { bottomSheetTarget = tag }
-                            )
+                        if (!usePrefixGrouping) {
+                            items(tags, key = { it.id }) { tag ->
+                                val bg = Color(tag.colorArgb)
+                                val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                                val isUsed = tag.id in ui.usedTagIds
+                                SquareGridItem(
+                                    title = formatTagLabel(tag.name),
+                                    backgroundColor = bg,
+                                    contentColor = textColor,
+                                    borderColor = if (isUsed) Color.Black else null,
+                                    itemAspectRatio = 1.55f,
+                                    titleTextStyle = MaterialTheme.typography.labelMedium,
+                                    onClick = {},
+                                    onLongClick = { bottomSheetTarget = tag }
+                                )
+                            }
+                        } else {
+                            groupingResult.groups.forEach { group ->
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    val isExpanded = expandedMap.value[group.name] ?: false
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .combinedClickable(
+                                                onClick = {
+                                                    expandedMap.value = expandedMap.value.toMutableMap().apply {
+                                                        put(group.name, !isExpanded)
+                                                    }
+                                                },
+                                                onLongClick = {}
+                                            )
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = group.name,
+                                            color = Color(0xFF795548),
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = Color(0xFF795548)
+                                        )
+                                    }
+                                }
+                                if (expandedMap.value[group.name] == true) {
+                                    items(group.items, key = { it.tag.id }) { groupedTag ->
+                                        val tag = groupedTag.tag
+                                        val bg = Color(tag.colorArgb)
+                                        val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                                        val isUsed = tag.id in ui.usedTagIds
+                                        SquareGridItem(
+                                            title = formatTagLabel(groupedTag.displayName),
+                                            backgroundColor = bg,
+                                            contentColor = textColor,
+                                            borderColor = if (isUsed) Color.Black else null,
+                                            itemAspectRatio = 1.55f,
+                                            titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                            onClick = {},
+                                            onLongClick = { bottomSheetTarget = tag }
+                                        )
+                                    }
+                                }
+                            }
+                            if (groupingResult.ungrouped.isNotEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    Text(
+                                        text = "未分组",
+                                        color = Color(0xFF795548),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
+                                items(groupingResult.ungrouped, key = { it.tag.id }) { groupedTag ->
+                                    val tag = groupedTag.tag
+                                    val bg = Color(tag.colorArgb)
+                                    val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                                    val isUsed = tag.id in ui.usedTagIds
+                                    SquareGridItem(
+                                        title = formatTagLabel(groupedTag.displayName),
+                                        backgroundColor = bg,
+                                        contentColor = textColor,
+                                        borderColor = if (isUsed) Color.Black else null,
+                                        itemAspectRatio = 1.55f,
+                                        titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                        onClick = {},
+                                        onLongClick = { bottomSheetTarget = tag }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
