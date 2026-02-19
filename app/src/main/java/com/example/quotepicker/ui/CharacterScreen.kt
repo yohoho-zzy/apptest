@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -740,13 +741,19 @@ private fun TagSummarySection(
                     }
                 } else {
                     val groupedByPrefix = splitTagsByPrefix(items)
+                    val brown = Color(0xFF795548)
                     groupedByPrefix.groups.forEach { prefixGroup ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-                            Text(
-                                text = "${prefixGroup.name}->",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFF795548),
-                                fontWeight = FontWeight.Bold
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TagBadge(
+                                tag = prefixGroup.items.firstOrNull()?.tag?.copy(
+                                    name = "${prefixGroup.name}->",
+                                    colorArgb = brown.toArgb()
+                                ) ?: TagEntity(
+                                    categoryId = category.id,
+                                    name = "${prefixGroup.name}->",
+                                    colorArgb = brown.toArgb()
+                                ),
+                                modifier = Modifier.padding(vertical = 1.dp)
                             )
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -957,8 +964,7 @@ private fun TagPickerDialog(
                 categories = categories,
                 tags = tags,
                 selected = selected,
-                onChange = { selected = it.toMutableSet() },
-                showOnlyPrefixGroups = true
+                onChange = { selected = it.toMutableSet() }
             )
         },
         confirmButton = {
