@@ -743,6 +743,7 @@ private fun TagSummarySection(
                 } else {
                     val groupedByPrefix = splitTagsByPrefix(items)
                     val brown = Color(0xFF795548)
+                    Text(category.name, style = MaterialTheme.typography.labelMedium, color = brown)
                     groupedByPrefix.groups.forEach { prefixGroup ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             CharacterDetailTagLabel(
@@ -1075,6 +1076,7 @@ private fun TagSelectionSection(
                 val groupedByPrefix = splitTagsByPrefix(items)
                 val currentGroup = selectedPrefixGroup.value[category.id]
                 val brown = Color(0xFF795548)
+                Text(category.name, style = MaterialTheme.typography.labelSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     groupedByPrefix.groups.forEach { prefixGroup ->
                         FilterChip(
