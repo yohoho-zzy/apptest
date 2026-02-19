@@ -68,7 +68,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     val ui by vm.uiState.collectAsState()
