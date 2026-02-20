@@ -258,6 +258,15 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun updateResource(resource: ResourceEntity) =
         viewModelScope.launch { repo.updateResource(resource) }
 
+    fun updateResourceTitles(updates: List<Pair<ResourceEntity, String>>) =
+        viewModelScope.launch {
+            updates.forEach { (resource, newTitle) ->
+                if (newTitle.isNotBlank() && newTitle != resource.title) {
+                    repo.updateResource(resource.copy(title = newTitle))
+                }
+            }
+        }
+
     fun updateTextResource(
         resource: ResourceEntity,
         title: String,
