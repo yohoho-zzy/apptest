@@ -78,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
@@ -131,6 +132,8 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
     var openedGroup by remember { mutableStateOf<ResourceTitleGroup?>(null) }
+    var renameGroupTarget by remember { mutableStateOf<ResourceTitleGroup?>(null) }
+    var renameGroupValue by remember { mutableStateOf(TextFieldValue("")) }
     val coroutineScope = rememberCoroutineScope()
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val target = restoreTarget
@@ -278,7 +281,11 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                                     name = group.title,
                                     childNames = group.childNames,
                                     count = group.resources.size,
-                                    onClick = { openedGroup = group }
+                                    onClick = { openedGroup = group },
+                                    onLongClick = {
+                                        renameGroupTarget = group
+                                        renameGroupValue = TextFieldValue(group.title)
+                                    }
                                 )
                             }
                         }
@@ -488,6 +495,46 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 }) { Text("删除") }
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
+        )
+    }
+
+    if (renameGroupTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameGroupTarget = null },
+            title = { Text("编辑组名") },
+            text = {
+                OutlinedTextField(
+                    value = renameGroupValue,
+                    onValueChange = { renameGroupValue = it },
+                    label = { Text("组名") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = renameGroupTarget ?: return@TextButton
+                        val updates = buildGroupRenameUpdates(
+                            resources = target.resources,
+                            newGroupName = renameGroupValue.text,
+                            level1 = groupLevel1Selected,
+                            level2 = groupLevel2Selected,
+                            level3 = groupLevel3Selected
+                        )
+                        if (updates.isNotEmpty()) {
+                            vm.updateResourceTitles(updates)
+                        }
+                        renameGroupTarget = null
+                    }
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameGroupTarget = null }) {
+                    Text("取消")
+                }
+            }
         )
     }
 }
@@ -727,6 +774,7 @@ private fun StorageMediaRow(
             )
         }
     }
+
 }
 
 private data class StoredMediaGroup(
@@ -953,14 +1001,15 @@ private fun GroupListRow(
     name: String,
     childNames: String,
     count: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
@@ -975,6 +1024,36 @@ private fun GroupListRow(
         if (childNames.isNotBlank()) {
             Text(childNames, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+private fun buildGroupRenameUpdates(
+    resources: List<ResourceWithTagsCharacters>,
+    newGroupName: String,
+    level1: Boolean,
+    level2: Boolean,
+    level3: Boolean
+): List<Pair<com.example.quotepicker.data.ResourceEntity, String>> {
+    val renameParts = newGroupName.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    val selectedIndexes = buildList {
+        if (level1) add(0)
+        if (level2) add(1)
+        if (level3) add(2)
+    }
+    if (selectedIndexes.isEmpty() || renameParts.isEmpty()) return emptyList()
+    return resources.mapNotNull { item ->
+        val oldParts = item.resource.title.split("-").map { it.trim() }.toMutableList()
+        val nextParts = oldParts.toMutableList()
+        val requiredSize = (selectedIndexes.maxOrNull() ?: 0) + 1
+        while (nextParts.size < requiredSize) {
+            nextParts.add("")
+        }
+        selectedIndexes.forEachIndexed { index, partIndex ->
+            val renamed = renameParts.getOrNull(index) ?: return@forEachIndexed
+            nextParts[partIndex] = renamed
+        }
+        val nextTitle = nextParts.joinToString("-").trim('-').ifBlank { item.resource.title }
+        if (nextTitle != item.resource.title) item.resource to nextTitle else null
     }
 }
 
