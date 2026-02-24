@@ -122,7 +122,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var editTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var bottomSheetTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var deleteTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
-    var moveTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
+    var regroupTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
     var manageScreen by remember { mutableStateOf(false) }
@@ -381,12 +381,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                     Text("编辑")
                 }
                 TextButton(onClick = {
-                    moveTarget = target
+                    regroupTarget = target
                     bottomSheetTarget = null
                 }) {
                     Icon(Icons.Default.DriveFileMove, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("移动")
+                    Text("改组")
                 }
                 TextButton(onClick = {
                     deleteTarget = target
@@ -402,26 +402,36 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         }
     }
 
-    moveTarget?.let { target ->
-        val targetCharacterIds = remember(target) { target.characters.map { it.id }.toSet() }
-        val candidateGroups = remember(allResources, targetCharacterIds, target) {
-            allResources
-                .filter {
-                    it.resource.type == target.resource.type &&
-                        it.resource.id != target.resource.id &&
-                        it.characters.map { character -> character.id }.toSet() == targetCharacterIds
-                }
-                .map { it.resource.title }
-                .distinct()
-                .sorted()
+    regroupTarget?.let { target ->
+        val selectedIndexes = remember(groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
+            buildList {
+                if (groupLevel1Selected) add(0)
+                if (groupLevel2Selected) add(1)
+                if (groupLevel3Selected) add(2)
+            }
         }
-        var selectedGroup by remember(target) { mutableStateOf(candidateGroups.firstOrNull()) }
-        var newGroupName by remember(target) { mutableStateOf("") }
-        val canConfirm = newGroupName.isNotBlank() || selectedGroup != null
+        val candidateGroups = remember(allResources, target, selectedIndexes) {
+            if (selectedIndexes.isEmpty()) {
+                emptyList()
+            } else {
+                allResources
+                    .asSequence()
+                    .filter { it.resource.type == target.resource.type }
+                    .mapNotNull { candidate ->
+                        groupedPartsForIndexes(candidate.resource.title, selectedIndexes)
+                            ?.takeIf { it.isNotBlank() }
+                    }
+                    .distinct()
+                    .sorted()
+                    .toList()
+            }
+        }
+        var selectedGroup by remember(target, candidateGroups) { mutableStateOf(candidateGroups.firstOrNull()) }
+        val canConfirm = selectedGroup != null && selectedIndexes.isNotEmpty()
 
         AlertDialog(
-            onDismissRequest = { moveTarget = null },
-            title = { Text("移动资源") },
+            onDismissRequest = { regroupTarget = null },
+            title = { Text("改组") },
             text = {
                 Column(
                     modifier = Modifier
@@ -430,10 +440,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (candidateGroups.isEmpty()) {
-                        Text("暂无可移动的同角色资源组", style = MaterialTheme.typography.labelMedium)
+                    if (selectedIndexes.isEmpty()) {
+                        Text("请先选择 1/2/3 分组按钮", style = MaterialTheme.typography.labelMedium)
+                    } else if (candidateGroups.isEmpty()) {
+                        Text("暂无可用组名", style = MaterialTheme.typography.labelMedium)
                     } else {
-                        Text("选择目标组", style = MaterialTheme.typography.labelMedium)
+                        Text("选择目标组名", style = MaterialTheme.typography.labelMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             candidateGroups.forEach { title ->
                                 FilterChip(
@@ -447,39 +459,32 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                             }
                         }
                     }
-                    OutlinedTextField(
-                        value = newGroupName,
-                        onValueChange = { newGroupName = it },
-                        label = { Text("或输入新组名称") },
-                        singleLine = true
-                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val destinationTitle = if (newGroupName.isNotBlank()) {
-                            newGroupName.trim()
-                        } else {
-                            selectedGroup.orEmpty()
+                        val nextTitle = buildRegroupedTitle(
+                            originalTitle = target.resource.title,
+                            selectedIndexes = selectedIndexes,
+                            selectedGroupName = selectedGroup
+                        )
+                        if (nextTitle != null && nextTitle != target.resource.title) {
+                            vm.updateResource(
+                                target.resource,
+                                title = nextTitle,
+                                content = target.resource.contentUriOrPath,
+                                type = target.resource.type,
+                                tags = target.tags,
+                                characters = target.characters
+                            )
                         }
-                        if (destinationTitle.isNotBlank()) {
-                            val groupResources = allResources.filter {
-                                it.resource.type == target.resource.type &&
-                                    it.resource.title == destinationTitle &&
-                                    it.characters.map { character -> character.id }.toSet() == targetCharacterIds &&
-                                    it.resource.id != target.resource.id
-                            }
-                            val minCreatedAt = groupResources.minOfOrNull { it.resource.createdAt }
-                            val newCreatedAt = minCreatedAt?.minus(1) ?: System.currentTimeMillis()
-                            vm.moveResourceToGroup(target.resource, destinationTitle, newCreatedAt)
-                        }
-                        moveTarget = null
+                        regroupTarget = null
                     },
                     enabled = canConfirm
-                ) { Text("移动") }
+                ) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { moveTarget = null }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { regroupTarget = null }) { Text("取消") } }
         )
     }
 
@@ -1055,6 +1060,32 @@ private fun buildGroupRenameUpdates(
         val nextTitle = nextParts.joinToString("-").trim('-').ifBlank { item.resource.title }
         if (nextTitle != item.resource.title) item.resource to nextTitle else null
     }
+}
+
+private fun groupedPartsForIndexes(title: String, selectedIndexes: List<Int>): String? {
+    if (selectedIndexes.isEmpty()) return null
+    val parts = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    val selected = selectedIndexes.mapNotNull { index -> parts.getOrNull(index) }
+    return selected.takeIf { it.isNotEmpty() }?.joinToString("-")
+}
+
+private fun buildRegroupedTitle(
+    originalTitle: String,
+    selectedIndexes: List<Int>,
+    selectedGroupName: String?
+): String? {
+    if (selectedIndexes.isEmpty() || selectedGroupName.isNullOrBlank()) return null
+    val originalParts = originalTitle.split("-").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+    val replacementParts = selectedGroupName.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    if (replacementParts.isEmpty()) return null
+    val requiredSize = (selectedIndexes.maxOrNull() ?: 0) + 1
+    while (originalParts.size < requiredSize) {
+        originalParts.add("")
+    }
+    selectedIndexes.forEachIndexed { position, partIndex ->
+        replacementParts.getOrNull(position)?.let { originalParts[partIndex] = it }
+    }
+    return originalParts.filter { it.isNotBlank() }.joinToString("-").ifBlank { null }
 }
 
 @Composable
