@@ -78,6 +78,7 @@ class Repository private constructor(context: Context) {
     }
 
     suspend fun replaceSnapshot(snapshot: BackupSnapshot, mediaPayloads: Map<String, MediaPayload> = emptyMap()) {
+        clearManagedMediaDirectories()
         val mediaMapping = restoreMedia(snapshot.media, mediaPayloads)
         val restoredResources = snapshot.resources.map { resource ->
             when (resource.type) {
@@ -115,6 +116,17 @@ class Repository private constructor(context: Context) {
         snapshot.executionSettings?.let { executionSettingsDao.upsert(it) }
         if (snapshot.executionResources.isNotEmpty()) {
             snapshot.executionResources.forEach { executionResourceDao.insert(it) }
+        }
+    }
+
+    private fun clearManagedMediaDirectories() {
+        listOf("images", "videos", "audio").forEach { folder ->
+            val dir = File(appContext.filesDir, folder)
+            dir.listFiles()?.forEach { file ->
+                runCatching {
+                    if (file.isDirectory) file.deleteRecursively() else file.delete()
+                }
+            }
         }
     }
 
