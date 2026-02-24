@@ -470,14 +470,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                             selectedGroupName = selectedGroup
                         )
                         if (nextTitle != null && nextTitle != target.resource.title) {
-                            vm.updateResource(
-                                target.resource,
-                                title = nextTitle,
-                                content = target.resource.contentUriOrPath,
-                                type = target.resource.type,
-                                tags = target.tags,
-                                characters = target.characters
-                            )
+                            vm.updateResource(target.resource.copy(title = nextTitle))
                         }
                         regroupTarget = null
                     },
