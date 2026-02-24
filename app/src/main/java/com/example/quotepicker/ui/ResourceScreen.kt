@@ -107,6 +107,7 @@ import com.example.quotepicker.vm.StoredMediaItem
 import com.example.quotepicker.vm.VideoUpdateItem
 import com.example.quotepicker.vm.SoundUpdateItem
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -598,7 +599,10 @@ private fun ManageStorageScreen(
                     label = { Text(selectedCharacter?.name ?: "全部角色") }
                 )
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 28.dp)
+            ) {
                 val groups = groupedItems[selectedType].orEmpty()
                 if (groups.isEmpty()) {
                     item {
@@ -770,6 +774,11 @@ private fun StorageMediaRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Text(
+                text = "大小: ${formatFileSizeInMb(item.path)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 
@@ -779,6 +788,16 @@ private data class StoredMediaGroup(
     val title: String,
     val items: List<StoredMediaItem>
 )
+
+private fun formatFileSizeInMb(path: String): String {
+    val sizeBytes = runCatching {
+        val uri = Uri.parse(path)
+        val filePath = uri.path ?: return@runCatching null
+        File(filePath).takeIf { it.exists() }?.length()
+    }.getOrNull()
+    val sizeMb = (sizeBytes ?: 0L).toDouble() / (1024 * 1024)
+    return String.format(Locale.US, "%.1fM", sizeMb)
+}
 
 @Composable
 private fun StorageSectionHeader(
