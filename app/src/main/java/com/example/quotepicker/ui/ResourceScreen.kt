@@ -1001,6 +1001,7 @@ private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolea
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GroupListRow(
     name: String,
