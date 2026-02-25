@@ -62,6 +62,9 @@ interface TagDao {
     @Delete
     suspend fun delete(tag: TagEntity)
 
+    @Query("DELETE FROM tags WHERE categoryId = :categoryId")
+    suspend fun deleteByCategoryId(categoryId: Long)
+
     @Query("UPDATE tags SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
     suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
 
