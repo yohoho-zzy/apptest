@@ -149,6 +149,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 
     if (manageScreen) {
         ManageStorageScreen(
+            modifier = modifier,
             items = manageItems,
             resources = allResources,
             vm = vm,
@@ -542,6 +543,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ManageStorageScreen(
+    modifier: Modifier = Modifier,
     items: List<StoredMediaItem>,
     resources: List<ResourceWithTagsCharacters>,
     vm: ResourceViewModel,
@@ -564,6 +566,7 @@ private fun ManageStorageScreen(
     }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("资源存储") },
