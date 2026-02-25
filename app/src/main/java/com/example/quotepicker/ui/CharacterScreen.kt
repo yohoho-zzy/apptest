@@ -338,7 +338,7 @@ fun CharacterScreen(
                 val introCandidates = resources.filter { res ->
                     res.characters.any { c -> c.id == char.id } &&
                         res.resource.type == ResourceType.TEXT &&
-                        res.resource.title.take(2) == "要点"
+                        res.resource.title.contains("要点文本")
                 }
                 val introText = introCandidates.firstOrNull()?.resource?.quoteText.orEmpty()
                 TabRow(selectedTabIndex = pagerState.currentPage) {

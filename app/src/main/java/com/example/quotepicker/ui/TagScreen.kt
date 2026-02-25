@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import kotlin.text.Regex
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -85,8 +87,20 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     var bottomSheetTarget by remember { mutableStateOf<Any?>(null) }
     var deleteCategory by remember { mutableStateOf<TagCategoryEntity?>(null) }
     var deleteTag by remember { mutableStateOf<TagEntity?>(null) }
+    var selectedParentTag by remember { mutableStateOf<SelectedParentTagContext?>(null) }
+    var showSubTagDialog by remember { mutableStateOf(false) }
 
     val isInCategory = ui.currentCategory != null
+    val linkedCategoryName = remember(ui.currentCategory) { extractLinkedCategoryName(ui.currentCategory?.name) }
+    val linkedCategory = remember(ui.currentCategory, linkedCategoryName, ui.categories) {
+        val current = ui.currentCategory
+        if (current == null || linkedCategoryName.isNullOrBlank()) {
+            null
+        } else {
+            ui.categories.firstOrNull { it.type == current.type && it.name == linkedCategoryName }
+        }
+    }
+    val isInSubTagPage = selectedParentTag != null
     val categoryTagCounts = remember(ui.allTags) {
         ui.allTags.groupingBy { it.categoryId }.eachCount()
     }
@@ -97,14 +111,47 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
         ui.categories.filter { it.type == TagCategoryType.RESOURCE }
     }
 
+    LaunchedEffect(ui.currentCategory?.id, linkedCategory?.id, ui.tags, ui.allTags) {
+        if (!isInCategory || linkedCategoryName.isNullOrBlank()) return@LaunchedEffect
+        val targetTags = ui.tags
+        targetTags.forEach { tag ->
+            val parentKey = resolveParentKeyForLinkedSubTag(tag.name, isPrefixGroupingCategory(ui.currentCategory?.name))
+            val prefix = "${parentKey}-"
+            val hasSubTag = linkedCategory?.let { category ->
+                ui.allTags.any {
+                    it.categoryId == category.id &&
+                        it.name.startsWith(prefix) &&
+                        it.name.length > prefix.length
+                }
+            } ?: false
+            val expectedColor = if (hasSubTag) LINKED_TAG_COLOR_PURPLE else LINKED_TAG_COLOR_BLUE
+            if (tag.colorArgb != expectedColor) {
+                vm.updateTag(tag.copy(colorArgb = expectedColor))
+            }
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(if (isInCategory) ui.currentCategory?.name ?: "" else "标签类别") },
+                title = {
+                    val title = when {
+                        isInSubTagPage -> formatTagLabel(selectedParentTag?.displayName.orEmpty())
+                        isInCategory -> categoryDisplayName(ui.currentCategory?.name)
+                        else -> "标签类别"
+                    }
+                    Text(title)
+                },
                 navigationIcon = {
-                    if (isInCategory) {
-                        IconButton(onClick = { vm.selectCategory(null) }) {
+                    if (isInCategory || isInSubTagPage) {
+                        IconButton(onClick = {
+                            if (isInSubTagPage) {
+                                selectedParentTag = null
+                            } else {
+                                vm.selectCategory(null)
+                            }
+                        }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
                     }
@@ -113,7 +160,11 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
-                if (isInCategory) showTagDialog = true else showCategoryDialog = true
+                when {
+                    isInSubTagPage -> showSubTagDialog = true
+                    isInCategory -> showTagDialog = true
+                    else -> showCategoryDialog = true
+                }
             }) {
                 Icon(Icons.Default.Add, contentDescription = null)
             }
@@ -143,9 +194,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                             items(characterCategories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
                                 val count = categoryTagCounts[category.id] ?: 0
                                 SquareGridItem(
-                                    title = category.name,
+                                    title = categoryDisplayName(category.name),
                                     subtitle = "标签 $count",
-                                    onClick = { vm.selectCategory(category.id) },
+                                    onClick = {
+                                        selectedParentTag = null
+                                        vm.selectCategory(category.id)
+                                    },
                                     onLongClick = { bottomSheetTarget = category }
                                 )
                             }
@@ -164,9 +218,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                             items(resourceCategories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
                                 val count = categoryTagCounts[category.id] ?: 0
                                 SquareGridItem(
-                                    title = category.name,
+                                    title = categoryDisplayName(category.name),
                                     subtitle = "标签 $count",
-                                    onClick = { vm.selectCategory(category.id) },
+                                    onClick = {
+                                        selectedParentTag = null
+                                        vm.selectCategory(category.id)
+                                    },
                                     onLongClick = { bottomSheetTarget = category }
                                 )
                             }
@@ -174,7 +231,56 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                     }
                 }
             } else {
-                if (ui.tags.isEmpty()) {
+                if (isInSubTagPage) {
+                    val parentTag = selectedParentTag
+                    val subtags = remember(parentTag, linkedCategory, ui.allTags) {
+                        if (parentTag == null || linkedCategory == null) {
+                            emptyList()
+                        } else {
+                            val prefix = "${parentTag.parentKey}-"
+                            ui.allTags
+                                .filter { it.categoryId == linkedCategory.id && it.name.startsWith(prefix) }
+                                .sortedBy { it.name.lowercase() }
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp)
+                    ) {
+                        if (linkedCategory == null) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("未找到映射类别：${linkedCategoryName ?: ""}")
+                            }
+                        } else if (subtags.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("暂无子标签，点击右下角追加")
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(5),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(subtags, key = { it.id }) { tag ->
+                                    val bg = Color(tag.colorArgb)
+                                    val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
+                                    val displayName = parentTag?.let { ctx -> tag.name.substringAfter("${ctx.parentKey}-", tag.name) } ?: tag.name
+                                    SquareGridItem(
+                                        title = formatTagLabel(displayName),
+                                        backgroundColor = bg,
+                                        contentColor = textColor,
+                                        itemAspectRatio = 1.55f,
+                                        titleTextStyle = MaterialTheme.typography.labelMedium,
+                                        onClick = {},
+                                        onLongClick = { bottomSheetTarget = tag }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (ui.tags.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("暂无标签，点击右下角添加")
                     }
@@ -206,7 +312,15 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                     borderColor = if (isUsed) Color.Black else null,
                                     itemAspectRatio = 1.55f,
                                     titleTextStyle = MaterialTheme.typography.labelMedium,
-                                    onClick = {},
+                                    onClick = {
+                                        if (linkedCategory != null) {
+                                            selectedParentTag = SelectedParentTagContext(
+                                                tag = tag,
+                                                parentKey = resolveParentKeyForLinkedSubTag(tag.name, usePrefixGrouping),
+                                                displayName = tag.name
+                                            )
+                                        }
+                                    },
                                     onLongClick = { bottomSheetTarget = tag }
                                 )
                             }
@@ -255,7 +369,15 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                             borderColor = if (isUsed) Color.Black else null,
                                             itemAspectRatio = 1.55f,
                                             titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                            onClick = {},
+                                            onClick = {
+                                                if (linkedCategory != null) {
+                                                    selectedParentTag = SelectedParentTagContext(
+                                                        tag = tag,
+                                                        parentKey = groupedTag.displayName,
+                                                        displayName = groupedTag.displayName
+                                                    )
+                                                }
+                                            },
                                             onLongClick = { bottomSheetTarget = tag }
                                         )
                                     }
@@ -283,7 +405,15 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                         borderColor = if (isUsed) Color.Black else null,
                                         itemAspectRatio = 1.55f,
                                         titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                        onClick = {},
+                                        onClick = {
+                                            if (linkedCategory != null) {
+                                                selectedParentTag = SelectedParentTagContext(
+                                                    tag = tag,
+                                                    parentKey = groupedTag.displayName,
+                                                    displayName = groupedTag.displayName
+                                                )
+                                            }
+                                        },
                                         onLongClick = { bottomSheetTarget = tag }
                                     )
                                 }
@@ -317,6 +447,24 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                 }
             },
             onDismiss = { showTagDialog = false }
+        )
+    }
+    if (showSubTagDialog) {
+        NameDialog(
+            title = "追加子标签",
+            initial = "",
+            onConfirm = { suffix ->
+                val parent = selectedParentTag
+                val category = linkedCategory
+                if (parent != null && category != null && suffix.isNotBlank()) {
+                    vm.addTag(
+                        categoryId = category.id,
+                        name = "${parent.parentKey}-${suffix.trim()}",
+                        colorArgb = parent.tag.colorArgb
+                    )
+                }
+            },
+            onDismiss = { showSubTagDialog = false }
         )
     }
 
@@ -405,6 +553,32 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
             onDismiss = { deleteTag = null }
         )
     }
+}
+
+private val LINKED_CATEGORY_PATTERN = Regex("\\[(.+?)]")
+private const val LINKED_TAG_COLOR_PURPLE = 0xFFB388FF.toInt()
+private const val LINKED_TAG_COLOR_BLUE = 0xFF82B1FF.toInt()
+
+data class SelectedParentTagContext(
+    val tag: TagEntity,
+    val parentKey: String,
+    val displayName: String
+)
+
+private fun resolveParentKeyForLinkedSubTag(tagName: String, usePrefixGrouping: Boolean): String {
+    if (!usePrefixGrouping) return tagName
+    val parts = tagName.split("-", limit = 2)
+    return if (parts.size == 2 && parts[1].isNotBlank()) parts[1].trim() else tagName
+}
+
+private fun extractLinkedCategoryName(categoryName: String?): String? {
+    if (categoryName.isNullOrBlank()) return null
+    return LINKED_CATEGORY_PATTERN.find(categoryName)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+}
+
+private fun categoryDisplayName(categoryName: String?): String {
+    if (categoryName.isNullOrBlank()) return ""
+    return categoryName.replace(LINKED_CATEGORY_PATTERN, "").trim()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
