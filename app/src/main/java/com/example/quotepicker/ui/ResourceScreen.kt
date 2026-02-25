@@ -617,7 +617,7 @@ private fun ManageStorageScreen(
                     }
                 } else {
                     groups.forEach { group ->
-                        val expanded = groupExpandedState.getOrPut("${selectedType.name}-${group.title}") { true }
+                        val expanded = groupExpandedState.getOrPut("${selectedType.name}-${group.title}") { false }
                         item {
                             StorageSectionHeader(
                                 title = group.title,
