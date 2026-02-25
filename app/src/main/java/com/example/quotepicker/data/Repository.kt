@@ -136,7 +136,11 @@ class Repository private constructor(context: Context) {
     suspend fun updateCategory(category: TagCategoryEntity) =
         categoryDao.update(category.copy(updatedAt = System.currentTimeMillis()))
     suspend fun deleteCategory(category: TagCategoryEntity) {
-        if (category.name == ORPHAN_CATEGORY_NAME) return
+        if (category.name == ORPHAN_CATEGORY_NAME) {
+            tagDao.deleteByCategoryId(category.id)
+            categoryDao.delete(category)
+            return
+        }
         val orphan = ensureOrphanCategory(category.type)
         tagDao.reassignCategory(category.id, orphan.id)
         categoryDao.delete(category)
