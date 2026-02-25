@@ -87,7 +87,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     var bottomSheetTarget by remember { mutableStateOf<Any?>(null) }
     var deleteCategory by remember { mutableStateOf<TagCategoryEntity?>(null) }
     var deleteTag by remember { mutableStateOf<TagEntity?>(null) }
-    var selectedParentTag by remember { mutableStateOf<TagEntity?>(null) }
+    var selectedParentTag by remember { mutableStateOf<SelectedParentTagContext?>(null) }
     var showSubTagDialog by remember { mutableStateOf(false) }
 
     val isInCategory = ui.currentCategory != null
@@ -115,7 +115,8 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
         if (!isInCategory || linkedCategoryName.isNullOrBlank()) return@LaunchedEffect
         val targetTags = ui.tags
         targetTags.forEach { tag ->
-            val prefix = "${tag.name}-"
+            val parentKey = resolveParentKeyForLinkedSubTag(tag.name, isPrefixGroupingCategory(ui.currentCategory?.name))
+            val prefix = "${parentKey}-"
             val hasSubTag = linkedCategory?.let { category ->
                 ui.allTags.any {
                     it.categoryId == category.id &&
@@ -136,7 +137,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
             TopAppBar(
                 title = {
                     val title = when {
-                        isInSubTagPage -> formatTagLabel(selectedParentTag?.name.orEmpty())
+                        isInSubTagPage -> formatTagLabel(selectedParentTag?.displayName.orEmpty())
                         isInCategory -> categoryDisplayName(ui.currentCategory?.name)
                         else -> "标签类别"
                     }
@@ -236,7 +237,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         if (parentTag == null || linkedCategory == null) {
                             emptyList()
                         } else {
-                            val prefix = "${parentTag.name}-"
+                            val prefix = "${parentTag.parentKey}-"
                             ui.allTags
                                 .filter { it.categoryId == linkedCategory.id && it.name.startsWith(prefix) }
                                 .sortedBy { it.name.lowercase() }
@@ -265,7 +266,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                 items(subtags, key = { it.id }) { tag ->
                                     val bg = Color(tag.colorArgb)
                                     val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
-                                    val displayName = tag.name.substringAfter("${parentTag?.name}-", tag.name)
+                                    val displayName = parentTag?.let { ctx -> tag.name.substringAfter("${ctx.parentKey}-", tag.name) } ?: tag.name
                                     SquareGridItem(
                                         title = formatTagLabel(displayName),
                                         backgroundColor = bg,
@@ -313,7 +314,11 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                     titleTextStyle = MaterialTheme.typography.labelMedium,
                                     onClick = {
                                         if (linkedCategory != null) {
-                                            selectedParentTag = tag
+                                            selectedParentTag = SelectedParentTagContext(
+                                                tag = tag,
+                                                parentKey = resolveParentKeyForLinkedSubTag(tag.name, usePrefixGrouping),
+                                                displayName = tag.name
+                                            )
                                         }
                                     },
                                     onLongClick = { bottomSheetTarget = tag }
@@ -366,7 +371,11 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                             titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                                             onClick = {
                                                 if (linkedCategory != null) {
-                                                    selectedParentTag = tag
+                                                    selectedParentTag = SelectedParentTagContext(
+                                                        tag = tag,
+                                                        parentKey = groupedTag.displayName,
+                                                        displayName = groupedTag.displayName
+                                                    )
                                                 }
                                             },
                                             onLongClick = { bottomSheetTarget = tag }
@@ -398,7 +407,11 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                         titleTextStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                                         onClick = {
                                             if (linkedCategory != null) {
-                                                selectedParentTag = tag
+                                                selectedParentTag = SelectedParentTagContext(
+                                                    tag = tag,
+                                                    parentKey = groupedTag.displayName,
+                                                    displayName = groupedTag.displayName
+                                                )
                                             }
                                         },
                                         onLongClick = { bottomSheetTarget = tag }
@@ -446,8 +459,8 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                 if (parent != null && category != null && suffix.isNotBlank()) {
                     vm.addTag(
                         categoryId = category.id,
-                        name = "${parent.name}-${suffix.trim()}",
-                        colorArgb = parent.colorArgb
+                        name = "${parent.parentKey}-${suffix.trim()}",
+                        colorArgb = parent.tag.colorArgb
                     )
                 }
             },
@@ -545,6 +558,18 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
 private val LINKED_CATEGORY_PATTERN = Regex("\\[(.+?)]")
 private const val LINKED_TAG_COLOR_PURPLE = 0xFFB388FF.toInt()
 private const val LINKED_TAG_COLOR_BLUE = 0xFF82B1FF.toInt()
+
+data class SelectedParentTagContext(
+    val tag: TagEntity,
+    val parentKey: String,
+    val displayName: String
+)
+
+private fun resolveParentKeyForLinkedSubTag(tagName: String, usePrefixGrouping: Boolean): String {
+    if (!usePrefixGrouping) return tagName
+    val parts = tagName.split("-", limit = 2)
+    return if (parts.size == 2 && parts[1].isNotBlank()) parts[1].trim() else tagName
+}
 
 private fun extractLinkedCategoryName(categoryName: String?): String? {
     if (categoryName.isNullOrBlank()) return null
