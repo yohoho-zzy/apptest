@@ -65,13 +65,19 @@ import com.example.quotepicker.vm.TagViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     val ui by vm.uiState.collectAsState()
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
     var editCategory by remember { mutableStateOf<TagCategoryEntity?>(null) }
@@ -361,6 +367,19 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("删除")
+                }
+                if (target is TagCategoryEntity) {
+                    TextButton(onClick = {
+                        val tagsText = ui.allTags
+                            .filter { it.categoryId == target.id }
+                            .sortedBy { it.name.lowercase() }
+                            .joinToString("\n") { formatTagLabel(it.name) }
+                        clipboard.setText(AnnotatedString(tagsText))
+                        Toast.makeText(context, "已复制${target.name}全部标签", Toast.LENGTH_SHORT).show()
+                        bottomSheetTarget = null
+                    }) {
+                        Text("复制标签")
+                    }
                 }
                 TextButton(onClick = { bottomSheetTarget = null }) {
                     Text("关闭")
