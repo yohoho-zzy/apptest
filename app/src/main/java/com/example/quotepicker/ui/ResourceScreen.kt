@@ -166,6 +166,25 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         return
     }
 
+    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
+        buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected)
+    }
+
+    val openedGroup = remember(groupedResources, openedGroupKey) {
+        groupedResources.firstOrNull { it.key == openedGroupKey }
+    }
+
+    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, openedGroupKey) {
+        if (!groupLevel1Selected && !groupLevel2Selected && !groupLevel3Selected) {
+            openedGroupKey = null
+            return@LaunchedEffect
+        }
+        val exists = groupedResources.any { it.key == openedGroupKey }
+        if (!exists) {
+            openedGroupKey = null
+        }
+    }
+
     createMode?.let { mode ->
         ResourceCreateScreen(
             mode = mode,
@@ -196,25 +215,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             onBack = { editTarget = null }
         )
         return
-    }
-
-    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
-        buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected)
-    }
-
-    val openedGroup = remember(groupedResources, openedGroupKey) {
-        groupedResources.firstOrNull { it.key == openedGroupKey }
-    }
-
-    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, openedGroupKey) {
-        if (!groupLevel1Selected && !groupLevel2Selected && !groupLevel3Selected) {
-            openedGroupKey = null
-            return@LaunchedEffect
-        }
-        val exists = groupedResources.any { it.key == openedGroupKey }
-        if (!exists) {
-            openedGroupKey = null
-        }
     }
 
     if (previewTarget != null) {
