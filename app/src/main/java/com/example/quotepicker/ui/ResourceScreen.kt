@@ -133,7 +133,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupLevel1Selected by remember { mutableStateOf(true) }
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
-    var openedGroup by remember { mutableStateOf<ResourceTitleGroup?>(null) }
+    var openedGroupKey by remember { mutableStateOf<String?>(null) }
     var renameGroupTarget by remember { mutableStateOf<ResourceTitleGroup?>(null) }
     var renameGroupValue by remember { mutableStateOf(TextFieldValue("")) }
     val coroutineScope = rememberCoroutineScope()
@@ -196,14 +196,18 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected)
     }
 
-    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected) {
+    val openedGroup = remember(groupedResources, openedGroupKey) {
+        groupedResources.firstOrNull { it.key == openedGroupKey }
+    }
+
+    LaunchedEffect(groupedResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, openedGroupKey) {
         if (!groupLevel1Selected && !groupLevel2Selected && !groupLevel3Selected) {
-            openedGroup = null
+            openedGroupKey = null
             return@LaunchedEffect
         }
-        val exists = groupedResources.any { it.key == openedGroup?.key }
+        val exists = groupedResources.any { it.key == openedGroupKey }
         if (!exists) {
-            openedGroup = null
+            openedGroupKey = null
         }
     }
 
@@ -267,7 +271,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         ResourceGroupedPage(
                             group = group,
                             categories = ui.categories,
-                            onBack = { openedGroup = null },
+                            onBack = { openedGroupKey = null },
                             onPreview = { previewTarget = it },
                             onLongClick = { bottomSheetTarget = it }
                         )
@@ -284,7 +288,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                                     name = group.title,
                                     childNames = group.childNames,
                                     count = group.resources.size,
-                                    onClick = { openedGroup = group },
+                                    onClick = { openedGroupKey = group.key },
                                     onLongClick = {
                                         renameGroupTarget = group
                                         renameGroupValue = TextFieldValue(group.title)
@@ -1338,10 +1342,10 @@ private fun ResourceCreateScreen(
     val canSubmit = title.isNotBlank() && selectedCharacters.isNotEmpty() && when (mode) {
         CreateMode.Flow -> flowItems.isNotEmpty()
         CreateMode.Text -> textContent.isNotBlank()
-        CreateMode.ImageGroup -> imageUris.isNotEmpty()
+        CreateMode.ImageGroup -> true
         CreateMode.Scene -> sceneMessages.isNotEmpty()
-        CreateMode.VideoGroup -> videoUris.isNotEmpty()
-        CreateMode.SoundGroup -> soundUris.isNotEmpty()
+        CreateMode.VideoGroup -> true
+        CreateMode.SoundGroup -> true
     }
 
     val selectedSpeakerNames = remember(selectedCharacters, characters) {
@@ -1524,7 +1528,7 @@ private fun ResourceCreateScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("选择图片")
                     }
-                    Text(if (imageUris.isEmpty()) "未选择图片" else "已选择 ${imageUris.size} 张图片")
+                    Text(if (imageUris.isEmpty()) "未选择图片（将创建空图片组）" else "已选择 ${imageUris.size} 张图片")
                 }
                 CreateMode.Scene -> {
                     OutlinedTextField(
@@ -1609,7 +1613,7 @@ private fun ResourceCreateScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("选择视频")
                     }
-                    Text(if (videoUris.isEmpty()) "未选择视频" else "已选择 ${videoUris.size} 个视频")
+                    Text(if (videoUris.isEmpty()) "未选择视频（将创建空视频组）" else "已选择 ${videoUris.size} 个视频")
                 }
                 CreateMode.SoundGroup -> {
                     TextButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }) {
@@ -1617,7 +1621,7 @@ private fun ResourceCreateScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("选择音频")
                     }
-                    Text(if (soundUris.isEmpty()) "未选择音频" else "已选择 ${soundUris.size} 个音频")
+                    Text(if (soundUris.isEmpty()) "未选择音频（将创建空声音组）" else "已选择 ${soundUris.size} 个音频")
                 }
             }
             ResourceTagPickerRow(

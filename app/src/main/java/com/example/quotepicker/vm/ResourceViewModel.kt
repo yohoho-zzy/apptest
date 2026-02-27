@@ -178,7 +178,6 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                         stored.imagePath
                     }
                 }
-            if (storedPaths.isEmpty()) return@launch
             val payload = org.json.JSONArray(storedPaths).toString()
             repo.addResource(
                 ResourceEntity(type = ResourceType.IMAGE, title = title, contentUriOrPath = payload),
@@ -206,7 +205,6 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
             val storedUris = uris.mapNotNull { uri -> storeVideoToInternal(uri) }
-            if (storedUris.isEmpty()) return@launch
             val payload = org.json.JSONArray(storedUris).toString()
             repo.addResource(
                 ResourceEntity(
@@ -223,7 +221,6 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             if (characterIds.isEmpty()) return@launch
             val storedUris = uris.mapNotNull { uri -> storeAudioToInternal(uri) }
-            if (storedUris.isEmpty()) return@launch
             val payload = org.json.JSONArray(storedUris).toString()
             repo.addResource(
                 ResourceEntity(
