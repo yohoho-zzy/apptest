@@ -173,6 +173,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             tags = ui.tags,
             characters = ui.characters,
             availableResources = allResources,
+            initialTitle = buildCreateTitlePreset(
+                openedGroupTitle = openedGroup?.title,
+                level1 = groupLevel1Selected,
+                level2 = groupLevel2Selected,
+                level3 = groupLevel3Selected
+            ),
             vm = vm,
             onBack = { createMode = null }
         )
@@ -1021,6 +1027,29 @@ private fun resourceTitleGroupKey(title: String, level1: Boolean, level2: Boolea
     }
 }
 
+private fun buildCreateTitlePreset(
+    openedGroupTitle: String?,
+    level1: Boolean,
+    level2: Boolean,
+    level3: Boolean
+): String {
+    if (openedGroupTitle.isNullOrBlank()) return ""
+    val selectedIndexes = buildList {
+        if (level1) add(0)
+        if (level2) add(1)
+        if (level3) add(2)
+    }
+    if (selectedIndexes.isEmpty()) return ""
+    val selectedParts = openedGroupTitle.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+    if (selectedParts.isEmpty()) return ""
+    val maxIndex = selectedIndexes.maxOrNull() ?: return ""
+    val baseParts = MutableList(maxIndex + 1) { "" }
+    selectedIndexes.forEachIndexed { position, index ->
+        selectedParts.getOrNull(position)?.let { baseParts[index] = it }
+    }
+    return baseParts.joinToString("-") + "-"
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GroupListRow(
@@ -1271,10 +1300,11 @@ private fun ResourceCreateScreen(
     tags: List<TagEntity>,
     characters: List<CharacterEntity>,
     availableResources: List<ResourceWithTagsCharacters>,
+    initialTitle: String,
     vm: ResourceViewModel,
     onBack: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
+    var title by remember(mode, initialTitle) { mutableStateOf(initialTitle) }
     var textContent by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var sceneMessages by remember { mutableStateOf<List<SceneMessageDraft>>(emptyList()) }
