@@ -19,6 +19,12 @@ class Converters {
 
     @TypeConverter
     fun toCategoryType(raw: String): TagCategoryType = TagCategoryType.valueOf(raw)
+
+    @TypeConverter
+    fun fromMarkState(state: ResourceMarkState): String = state.name
+
+    @TypeConverter
+    fun toMarkState(raw: String): ResourceMarkState = ResourceMarkState.valueOf(raw)
 }
 
 @Database(
@@ -34,7 +40,7 @@ class Converters {
         ExecutionSettingsEntity::class,
         ExecutionResourceEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
