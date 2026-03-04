@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
@@ -52,7 +53,7 @@ fun ResourceListRow(
         ) {
             Text(
                 text = "[${typeLabel(resource.resource.type)}]",
-                color = Color(0xFF7B4DFF),
+                color = typeColor(resource.resource.markState),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -105,6 +106,13 @@ private fun CompactTagLabel(tag: TagEntity) {
             .border(0.5.dp, bgColor)
             .padding(horizontal = 4.dp, vertical = 1.dp)
     )
+}
+
+
+private fun typeColor(markState: ResourceMarkState): Color = when (markState) {
+    ResourceMarkState.NONE -> Color(0xFF424242)
+    ResourceMarkState.CHECKED -> Color(0xFF2E7D32)
+    ResourceMarkState.FAVORITE -> Color(0xFFC62828)
 }
 
 private fun resourceCountLabel(resource: ResourceWithTagsCharacters): String {

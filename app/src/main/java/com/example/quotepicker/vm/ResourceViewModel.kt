@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.documentfile.provider.DocumentFile
 import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceEntity
+import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
@@ -34,7 +35,8 @@ import kotlinx.coroutines.launch
 data class ResourceFilterState(
     val selectedType: ResourceType? = null,
     val selectedTagIds: Set<Long> = emptySet(),
-    val selectedCharacterId: Long? = null
+    val selectedCharacterId: Long? = null,
+    val selectedMarkState: ResourceMarkState? = null
 )
 
 data class ResourceUiState(
@@ -122,7 +124,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 res.tags.any { filter.selectedTagIds.contains(it.id) }
             }
-            typeMatch && charMatch && tagMatch
+            val markMatch = filter.selectedMarkState?.let { it == res.resource.markState } ?: true
+            typeMatch && charMatch && tagMatch && markMatch
         }
         ResourceUiState(
             resources = filtered,
@@ -143,6 +146,10 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateCharacterFilter(characterId: Long?) {
         filters.value = filters.value.copy(selectedCharacterId = characterId)
+    }
+
+    fun updateMarkStateFilter(state: ResourceMarkState?) {
+        filters.value = filters.value.copy(selectedMarkState = state)
     }
 
     fun moveResourceToGroup(resource: ResourceEntity, newTitle: String, newCreatedAt: Long) =

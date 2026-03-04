@@ -8,6 +8,7 @@ import android.widget.Toast
 import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
@@ -65,6 +69,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.ui.components.TagBadge
@@ -193,6 +198,25 @@ fun ResourcePreviewScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MarkCircleButton(
+                        color = Color(0xFF2E7D32),
+                        selected = resource.resource.markState == ResourceMarkState.CHECKED,
+                        onClick = {
+                            val next = if (resource.resource.markState == ResourceMarkState.CHECKED) ResourceMarkState.NONE else ResourceMarkState.CHECKED
+                            vm.updateResource(resource.resource.copy(markState = next))
+                        }
+                    )
+                    MarkCircleButton(
+                        color = Color(0xFFC62828),
+                        selected = resource.resource.markState == ResourceMarkState.FAVORITE,
+                        onClick = {
+                            val next = if (resource.resource.markState == ResourceMarkState.FAVORITE) ResourceMarkState.NONE else ResourceMarkState.FAVORITE
+                            vm.updateResource(resource.resource.copy(markState = next))
+                        }
+                    )
+                }
                 if (resource.resource.type != ResourceType.FLOW) {
                     ResourceMetaRow(label = "标签") {
                         if (sortedTags.isNotEmpty()) {
@@ -826,6 +850,23 @@ private suspend fun flowPreviewItemFromResource(
         }
         else -> FlowPreviewItem(type = data.type, title = data.title)
     }
+}
+
+
+@Composable
+private fun MarkCircleButton(
+    color: Color,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(if (selected) color else color.copy(alpha = 0.18f))
+            .border(1.dp, color, CircleShape)
+            .clickable(onClick = onClick)
+    )
 }
 
 private fun typeLabel(type: ResourceType): String = when (type) {

@@ -8,6 +8,8 @@ import androidx.room.Relation
 
 enum class ResourceType { FLOW, TEXT, IMAGE, VIDEO, SOUND, SCENE }
 
+enum class ResourceMarkState { NONE, CHECKED, FAVORITE }
+
 enum class TagCategoryType { CHARACTER, RESOURCE }
 
 @Entity(
@@ -97,6 +99,7 @@ data class ResourceEntity(
     val quoteText: String? = null,
     val quoteImageBase64: String? = null,
     val sceneJson: String? = null,
+    val markState: ResourceMarkState = ResourceMarkState.NONE,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
