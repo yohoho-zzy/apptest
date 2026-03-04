@@ -1003,7 +1003,7 @@ private fun FilterBar(
                 )
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
             val selectedCharacter = characters.firstOrNull { it.id == selectedCharacterId }
             AssistChip(
