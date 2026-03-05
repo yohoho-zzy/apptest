@@ -111,8 +111,11 @@ fun ResourcePreviewScreen(
     val scrollState = rememberScrollState()
     val uiState by vm.uiState.collectAsState()
     val allResources by vm.allResources.collectAsState()
-    val sortedTags = remember(resource.tags, uiState.categories) {
-        sortTagsForDisplay(resource.tags, uiState.categories)
+    val liveResource = remember(uiState.resources, resource.resource.id) {
+        uiState.resources.firstOrNull { it.resource.id == resource.resource.id } ?: resource
+    }
+    val sortedTags = remember(liveResource.tags, uiState.categories) {
+        sortTagsForDisplay(liveResource.tags, uiState.categories)
     }
     val highlightedSpeaker = uiState.filters.selectedCharacterId?.let { id ->
         uiState.characters.firstOrNull { it.id == id }?.name
@@ -120,7 +123,7 @@ fun ResourcePreviewScreen(
     val eventRunner = rememberEventSequenceRunner()
 
     LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
-        val res = resource.resource
+        val res = liveResource.resource
         quoteImages = emptyList()
         mediaLoadFailed = false
         flowItems = emptyList()
@@ -194,7 +197,7 @@ fun ResourcePreviewScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = resource.resource.title,
+                    text = liveResource.resource.title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -202,22 +205,29 @@ fun ResourcePreviewScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MarkCircleButton(
                         color = Color(0xFF2E7D32),
-                        selected = resource.resource.markState == ResourceMarkState.CHECKED,
+                        selected = liveResource.resource.markState == ResourceMarkState.CHECKED,
+                        enabled = liveResource.tags.isNotEmpty(),
                         onClick = {
-                            val next = if (resource.resource.markState == ResourceMarkState.CHECKED) ResourceMarkState.NONE else ResourceMarkState.CHECKED
-                            vm.updateResource(resource.resource.copy(markState = next))
+                            if (liveResource.tags.isNotEmpty()) {
+                                val next = if (liveResource.resource.markState == ResourceMarkState.CHECKED) ResourceMarkState.NONE else ResourceMarkState.CHECKED
+                                vm.updateResource(liveResource.resource.copy(markState = next))
+                            }
                         }
                     )
                     MarkCircleButton(
                         color = Color(0xFFC62828),
-                        selected = resource.resource.markState == ResourceMarkState.FAVORITE,
+                        selected = liveResource.resource.markState == ResourceMarkState.FAVORITE,
+                        enabled = liveResource.tags.isNotEmpty() && liveResource.resource.markState != ResourceMarkState.NONE,
                         onClick = {
-                            val next = if (resource.resource.markState == ResourceMarkState.FAVORITE) ResourceMarkState.NONE else ResourceMarkState.FAVORITE
-                            vm.updateResource(resource.resource.copy(markState = next))
+                            if (liveResource.tags.isNotEmpty() && liveResource.resource.markState == ResourceMarkState.CHECKED) {
+                                vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.FAVORITE))
+                            } else if (liveResource.resource.markState == ResourceMarkState.FAVORITE) {
+                                vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.CHECKED))
+                            }
                         }
                     )
                 }
-                if (resource.resource.type != ResourceType.FLOW) {
+                if (liveResource.resource.type != ResourceType.FLOW) {
                     ResourceMetaRow(label = "标签") {
                         if (sortedTags.isNotEmpty()) {
                             FlowRow(
@@ -233,12 +243,12 @@ fun ResourcePreviewScreen(
                         }
                     }
                     ResourceMetaRow(label = "角色") {
-                        if (resource.characters.isNotEmpty()) {
+                        if (liveResource.characters.isNotEmpty()) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                resource.characters.forEach { character ->
+                                liveResource.characters.forEach { character ->
                                     CharacterBadge(name = character.name)
                                 }
                             }
@@ -257,9 +267,9 @@ fun ResourcePreviewScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        when (resource.resource.type) {
+                        when (liveResource.resource.type) {
                             ResourceType.TEXT -> {
-                                val quoteText = resource.resource.quoteText.orEmpty()
+                                val quoteText = liveResource.resource.quoteText.orEmpty()
                                 if (quoteText.isNotBlank()) {
                                     PreviewTextWithInlineFile(
                                         text = quoteText,
@@ -313,7 +323,7 @@ fun ResourcePreviewScreen(
                                         }
                                     }
                                 } else {
-                                    Text(resource.resource.sceneJson.orEmpty())
+                                    Text(liveResource.resource.sceneJson.orEmpty())
                                 }
                             }
                             ResourceType.FLOW -> {
@@ -857,15 +867,16 @@ private suspend fun flowPreviewItemFromResource(
 private fun MarkCircleButton(
     color: Color,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(if (selected) color else color.copy(alpha = 0.18f))
-            .border(1.dp, color, CircleShape)
-            .clickable(onClick = onClick)
+            .background(if (selected) color else color.copy(alpha = if (enabled) 0.18f else 0.08f))
+            .border(1.dp, if (enabled) color else color.copy(alpha = 0.45f), CircleShape)
+            .clickable(enabled = enabled, onClick = onClick)
     )
 }
 
