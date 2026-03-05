@@ -1024,9 +1024,9 @@ private fun FilterBar(
     onMarkStateChange: (ResourceMarkState?) -> Unit
 ) {
     // ---- 紧凑参数（≈80%高度）----
-    val chipH = 28.dp
-    val hGap = 4.dp
-    val vGap = 4.dp
+    val chipH = 30.dp
+    val hGap = 8.dp
+    val vGap = 6.dp
     val textStyle = TextStyle(fontSize = 12.sp)
 
     Column(
@@ -1082,8 +1082,47 @@ private fun FilterBar(
                 onClick = onGroupDialog,
                 label = { Text("分组筛选($groupCount)", style = textStyle, maxLines = 1) }
             )
+        }
 
-            val keywordLabel = if (groupKeyword.isBlank()) "关键词" else "关键词:$groupKeyword"
+        // ---- Row 3: Level + Mode + Mark ----
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(hGap),
+            verticalArrangement = Arrangement.spacedBy(vGap)
+        ) {
+            FilterChip(
+                modifier = Modifier.height(chipH),
+                selected = selectedMarkState == ResourceMarkState.NONE,
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.NONE) null else ResourceMarkState.NONE
+                    )
+                },
+                label = { Text("待理", color = Color.Gray, style = textStyle, maxLines = 1) }
+            )
+
+            FilterChip(
+                modifier = Modifier.height(chipH),
+                selected = selectedMarkState == ResourceMarkState.CHECKED,
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.CHECKED) null else ResourceMarkState.CHECKED
+                    )
+                },
+                label = { Text("通过", color = Color(0xFF22C55E), style = textStyle, maxLines = 1) }
+            )
+
+            FilterChip(
+                modifier = Modifier.height(chipH),
+                selected = selectedMarkState == ResourceMarkState.FAVORITE,
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.FAVORITE) null else ResourceMarkState.FAVORITE
+                    )
+                },
+                label = { Text("标记", color = Color(0xFFC62828), style = textStyle, maxLines = 1) }
+            )
+
+            val keywordLabel = if (groupKeyword.isBlank()) "关键词" else "[$groupKeyword]"
             AssistChip(
                 modifier = Modifier.height(chipH),
                 onClick = onKeywordDialog,
@@ -1100,58 +1139,25 @@ private fun FilterBar(
                 modifier = Modifier.height(chipH),
                 selected = groupLevel1Selected,
                 onClick = onToggleLevel1,
-                label = { Text("1", style = textStyle, maxLines = 1) }
+                label = { Text("一层", style = textStyle, maxLines = 1) }
             )
             FilterChip(
                 modifier = Modifier.height(chipH),
                 selected = groupLevel2Selected,
                 onClick = onToggleLevel2,
-                label = { Text("2", style = textStyle, maxLines = 1) }
+                label = { Text("二层", style = textStyle, maxLines = 1) }
             )
             FilterChip(
                 modifier = Modifier.height(chipH),
                 selected = groupLevel3Selected,
                 onClick = onToggleLevel3,
-                label = { Text("3", style = textStyle, maxLines = 1) }
+                label = { Text("三层", style = textStyle, maxLines = 1) }
             )
             FilterChip(
                 modifier = Modifier.height(chipH),
                 selected = hierarchicalGroupMode,
                 onClick = onToggleHierarchicalMode,
-                label = { Text("+", style = textStyle, maxLines = 1) }
-            )
-
-            FilterChip(
-                modifier = Modifier.height(chipH),
-                selected = selectedMarkState == ResourceMarkState.NONE,
-                onClick = {
-                    onMarkStateChange(
-                        if (selectedMarkState == ResourceMarkState.NONE) null else ResourceMarkState.NONE
-                    )
-                },
-                label = { Text("●", color = Color.Gray, style = textStyle, maxLines = 1) }
-            )
-
-            FilterChip(
-                modifier = Modifier.height(chipH),
-                selected = selectedMarkState == ResourceMarkState.CHECKED,
-                onClick = {
-                    onMarkStateChange(
-                        if (selectedMarkState == ResourceMarkState.CHECKED) null else ResourceMarkState.CHECKED
-                    )
-                },
-                label = { Text("●", color = Color(0xFF22C55E), style = textStyle, maxLines = 1) }
-            )
-
-            FilterChip(
-                modifier = Modifier.height(chipH),
-                selected = selectedMarkState == ResourceMarkState.FAVORITE,
-                onClick = {
-                    onMarkStateChange(
-                        if (selectedMarkState == ResourceMarkState.FAVORITE) null else ResourceMarkState.FAVORITE
-                    )
-                },
-                label = { Text("●", color = Color(0xFFC62828), style = textStyle, maxLines = 1) }
+                label = { Text("折叠", style = textStyle, maxLines = 1) }
             )
         }
     }
