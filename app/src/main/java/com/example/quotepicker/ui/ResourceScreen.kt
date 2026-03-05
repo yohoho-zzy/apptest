@@ -2,6 +2,7 @@
 
 package com.example.quotepicker.ui
 
+import androidx.compose.foundation.layout.WindowInsets
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -256,6 +257,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier,
         topBar = {
             TopAppBar(
@@ -296,7 +298,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 onCharacterDialog = { filterCharacterDialog = true },
                 onTagDialog = { filterTagDialog = true },
                 onGroupDialog = { filterGroupDialog = true },
-                onGroupLongPress = { groupKeywordDialog = true },
+                onKeywordDialog = { groupKeywordDialog = true },
                 groupKeyword = groupKeyword,
                 onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
                 onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected },
@@ -664,6 +666,7 @@ private fun ManageStorageScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier,
         topBar = {
             TopAppBar(
@@ -994,6 +997,7 @@ private sealed class CreateMode {
     data object SoundGroup : CreateMode()
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FilterBar(
     selectedType: ResourceType?,
@@ -1011,7 +1015,7 @@ private fun FilterBar(
     onCharacterDialog: () -> Unit,
     onTagDialog: () -> Unit,
     onGroupDialog: () -> Unit,
-    onGroupLongPress: () -> Unit,
+    onKeywordDialog: () -> Unit,
     groupKeyword: String,
     onToggleLevel1: () -> Unit,
     onToggleLevel2: () -> Unit,
@@ -1073,13 +1077,17 @@ private fun FilterBar(
             )
 
             val groupCount = selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size
-            val groupLabel = if (groupKeyword.isBlank()) "分组筛选($groupCount)" else groupKeyword
             AssistChip(
-                modifier = Modifier
-                    .height(chipH)
-                    .combinedClickable(onClick = onGroupDialog, onLongClick = onGroupLongPress),
+                modifier = Modifier.height(chipH),
                 onClick = onGroupDialog,
-                label = { Text(groupLabel, style = textStyle, maxLines = 1) }
+                label = { Text("分组筛选($groupCount)", style = textStyle, maxLines = 1) }
+            )
+
+            val keywordLabel = if (groupKeyword.isBlank()) "关键词" else "关键词:$groupKeyword"
+            AssistChip(
+                modifier = Modifier.height(chipH),
+                onClick = onKeywordDialog,
+                label = { Text(keywordLabel, style = textStyle, maxLines = 1) }
             )
         }
 

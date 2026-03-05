@@ -1,5 +1,6 @@
 package com.example.quotepicker.ui
 
+import androidx.compose.foundation.layout.WindowInsets
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -84,6 +85,7 @@ fun ExecutionScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier,
         topBar = {
             TopAppBar(
