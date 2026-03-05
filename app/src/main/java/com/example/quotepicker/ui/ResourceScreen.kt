@@ -136,7 +136,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
     var groupByTitleSelected by remember { mutableStateOf(false) }
-    var hierarchicalGroupMode by remember { mutableStateOf(true) }
+    var hierarchicalGroupMode by remember { mutableStateOf(false) }
     var openedGroupPath by remember { mutableStateOf<List<String>>(emptyList()) }
     var renameGroupTarget by remember { mutableStateOf<ResourceTitleGroup?>(null) }
     var renameGroupValue by remember { mutableStateOf(TextFieldValue("")) }
@@ -286,9 +286,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 groupLevel1Selected = groupLevel1Selected,
                 groupLevel2Selected = groupLevel2Selected,
                 groupLevel3Selected = groupLevel3Selected,
-                groupByTitleSelected = groupByTitleSelected,
                 hierarchicalGroupMode = hierarchicalGroupMode,
-                openedGroupPath = openedGroupPath,
                 onTypeChange = vm::updateTypeFilter,
                 onCharacterDialog = { filterCharacterDialog = true },
                 onTagDialog = { filterTagDialog = true },
@@ -296,8 +294,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
                 onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected },
                 onToggleLevel3 = { groupLevel3Selected = !groupLevel3Selected },
-                onToggleGroupByTitle = { groupByTitleSelected = !groupByTitleSelected; openedGroupPath = emptyList() },
-                onNavigateUp = { if (openedGroupPath.isNotEmpty()) openedGroupPath = openedGroupPath.dropLast(1) },
+                onToggleHierarchicalMode = { hierarchicalGroupMode = !hierarchicalGroupMode; openedGroupPath = emptyList() },
                 onMarkStateChange = vm::updateMarkStateFilter
             )
             when {
@@ -989,9 +986,7 @@ private fun FilterBar(
     groupLevel1Selected: Boolean,
     groupLevel2Selected: Boolean,
     groupLevel3Selected: Boolean,
-    groupByTitleSelected: Boolean,
     hierarchicalGroupMode: Boolean,
-    openedGroupPath: List<String>,
     onTypeChange: (ResourceType?) -> Unit,
     onCharacterDialog: () -> Unit,
     onTagDialog: () -> Unit,
@@ -999,12 +994,11 @@ private fun FilterBar(
     onToggleLevel1: () -> Unit,
     onToggleLevel2: () -> Unit,
     onToggleLevel3: () -> Unit,
-    onToggleGroupByTitle: () -> Unit,
-    onNavigateUp: () -> Unit,
+    onToggleHierarchicalMode: () -> Unit,
     onMarkStateChange: (ResourceMarkState?) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             val orderedTypes = listOf(
                 ResourceType.FLOW,
                 ResourceType.TEXT,
@@ -1021,7 +1015,7 @@ private fun FilterBar(
                 )
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
             val selectedCharacter = characters.firstOrNull { it.id == selectedCharacterId }
             AssistChip(
@@ -1033,7 +1027,7 @@ private fun FilterBar(
                 label = { Text("分组筛选(${selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size})") }
             )
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             FilterChip(
                 selected = groupLevel1Selected,
                 onClick = onToggleLevel1,
@@ -1045,12 +1039,7 @@ private fun FilterBar(
                 label = { Text("2") }
             )
             FilterChip(selected = groupLevel3Selected, onClick = onToggleLevel3, label = { Text("3") })
-            FilterChip(
-                selected = openedGroupPath.isNotEmpty(),
-                onClick = onNavigateUp,
-                label = { Text(openedGroupPath.dropLast(1).lastOrNull() ?: "+") }
-            )
-            FilterChip(selected = groupByTitleSelected, onClick = onToggleGroupByTitle, label = { Text("资源名分组") })
+            FilterChip(selected = hierarchicalGroupMode, onClick = onToggleHierarchicalMode, label = { Text("+") })
             FilterChip(
                 selected = selectedMarkState == ResourceMarkState.NONE,
                 onClick = { onMarkStateChange(if (selectedMarkState == ResourceMarkState.NONE) null else ResourceMarkState.NONE) },
@@ -1352,8 +1341,8 @@ private fun FilterGroupDialog(
     val allLevel1 = remember(resources) {
         resources.mapNotNull { titleParts(it.resource.title).getOrNull(0) }.distinct().sorted()
     }
-    var level1Selected by remember { mutableStateOf(selectedLevel1.toMutableSet()) }
-    var pairSelected by remember { mutableStateOf(selectedPairs.toMutableSet()) }
+    var level1Selected by remember(selectedLevel1) { mutableStateOf(selectedLevel1) }
+    var pairSelected by remember(selectedPairs) { mutableStateOf(selectedPairs) }
     val secondLevelMap = remember(resources, level1Selected) {
         level1Selected.associateWith { first ->
             resources.mapNotNull { item ->
@@ -1380,9 +1369,11 @@ private fun FilterGroupDialog(
                         FilterChip(
                             selected = level1Selected.contains(first),
                             onClick = {
-                                if (!level1Selected.add(first)) {
-                                    level1Selected.remove(first)
-                                    pairSelected.removeAll { it.first == first }
+                                level1Selected = if (level1Selected.contains(first)) {
+                                    pairSelected = pairSelected.filterNot { it.first == first }.toSet()
+                                    level1Selected - first
+                                } else {
+                                    level1Selected + first
                                 }
                             },
                             label = { Text(first) }
@@ -1399,7 +1390,11 @@ private fun FilterGroupDialog(
                                 FilterChip(
                                     selected = pairSelected.contains(pair),
                                     onClick = {
-                                        if (!pairSelected.add(pair)) pairSelected.remove(pair)
+                                        pairSelected = if (pairSelected.contains(pair)) {
+                                            pairSelected - pair
+                                        } else {
+                                            pairSelected + pair
+                                        }
                                     },
                                     label = { Text(second) }
                                 )
