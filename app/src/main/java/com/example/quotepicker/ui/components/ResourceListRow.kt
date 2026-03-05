@@ -111,7 +111,7 @@ private fun CompactTagLabel(tag: TagEntity) {
 
 private fun typeColor(markState: ResourceMarkState): Color = when (markState) {
     ResourceMarkState.NONE -> Color(0xFF424242)
-    ResourceMarkState.CHECKED -> Color(0xFF2E7D32)
+    ResourceMarkState.CHECKED -> Color(0xFF22C55E)
     ResourceMarkState.FAVORITE -> Color(0xFFC62828)
 }
 
