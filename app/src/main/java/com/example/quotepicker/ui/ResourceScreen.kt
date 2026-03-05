@@ -28,9 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -87,6 +84,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
+import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.data.ResourceMarkState
@@ -997,8 +995,23 @@ private fun FilterBar(
     onToggleHierarchicalMode: () -> Unit,
     onMarkStateChange: (ResourceMarkState?) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+    // ---- 紧凑参数（≈80%高度）----
+    val chipH = 30.dp
+    val hGap = 6.dp
+    val vGap = 6.dp
+    val textStyle = TextStyle(fontSize = 14.sp)
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(vGap)
+    ) {
+        // ---- Row 1: 资源类型 ----
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(hGap),
+            verticalArrangement = Arrangement.spacedBy(vGap)
+        ) {
             val orderedTypes = listOf(
                 ResourceType.FLOW,
                 ResourceType.TEXT,
@@ -1009,51 +1022,101 @@ private fun FilterBar(
             )
             orderedTypes.forEach { type ->
                 FilterChip(
+                    modifier = Modifier.height(chipH),
                     selected = selectedType == type,
                     onClick = { onTypeChange(if (selectedType == type) null else type) },
-                    label = { Text(typeLabel(type)) }
+                    label = { Text(typeLabel(type), style = textStyle, maxLines = 1) }
                 )
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
+
+        // ---- Row 2: Tag / Character / Group ----
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(hGap),
+            verticalArrangement = Arrangement.spacedBy(vGap)
+        ) {
+            AssistChip(
+                modifier = Modifier.height(chipH),
+                onClick = onTagDialog,
+                label = { Text("标签筛选(${selectedTagIds.size})", style = textStyle, maxLines = 1) }
+            )
+
             val selectedCharacter = characters.firstOrNull { it.id == selectedCharacterId }
             AssistChip(
+                modifier = Modifier.height(chipH),
                 onClick = onCharacterDialog,
-                label = { Text(selectedCharacter?.name ?: "全部角色") }
+                label = { Text(selectedCharacter?.name ?: "全部角色", style = textStyle, maxLines = 1) }
             )
+
+            val groupCount = selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size
             AssistChip(
+                modifier = Modifier.height(chipH),
                 onClick = onGroupDialog,
-                label = { Text("分组筛选(${selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size})") }
+                label = { Text("分组筛选($groupCount)", style = textStyle, maxLines = 1) }
             )
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+
+        // ---- Row 3: Level + Mode + Mark ----
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(hGap),
+            verticalArrangement = Arrangement.spacedBy(vGap)
+        ) {
             FilterChip(
+                modifier = Modifier.height(chipH),
                 selected = groupLevel1Selected,
                 onClick = onToggleLevel1,
-                label = { Text("1") }
+                label = { Text("1", style = textStyle, maxLines = 1) }
             )
             FilterChip(
+                modifier = Modifier.height(chipH),
                 selected = groupLevel2Selected,
                 onClick = onToggleLevel2,
-                label = { Text("2") }
+                label = { Text("2", style = textStyle, maxLines = 1) }
             )
-            FilterChip(selected = groupLevel3Selected, onClick = onToggleLevel3, label = { Text("3") })
-            FilterChip(selected = hierarchicalGroupMode, onClick = onToggleHierarchicalMode, label = { Text("+") })
             FilterChip(
+                modifier = Modifier.height(chipH),
+                selected = groupLevel3Selected,
+                onClick = onToggleLevel3,
+                label = { Text("3", style = textStyle, maxLines = 1) }
+            )
+            FilterChip(
+                modifier = Modifier.height(chipH),
+                selected = hierarchicalGroupMode,
+                onClick = onToggleHierarchicalMode,
+                label = { Text("+", style = textStyle, maxLines = 1) }
+            )
+
+            FilterChip(
+                modifier = Modifier.height(chipH),
                 selected = selectedMarkState == ResourceMarkState.NONE,
-                onClick = { onMarkStateChange(if (selectedMarkState == ResourceMarkState.NONE) null else ResourceMarkState.NONE) },
-                label = { Text("●", color = Color.Gray) }
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.NONE) null else ResourceMarkState.NONE
+                    )
+                },
+                label = { Text("●", color = Color.Gray, style = textStyle, maxLines = 1) }
             )
+
             FilterChip(
+                modifier = Modifier.height(chipH),
                 selected = selectedMarkState == ResourceMarkState.CHECKED,
-                onClick = { onMarkStateChange(if (selectedMarkState == ResourceMarkState.CHECKED) null else ResourceMarkState.CHECKED) },
-                label = { Text("●", color = Color(0xFF2E7D32)) }
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.CHECKED) null else ResourceMarkState.CHECKED
+                    )
+                },
+                label = { Text("●", color = Color(0xFF2E7D32), style = textStyle, maxLines = 1) }
             )
+
             FilterChip(
+                modifier = Modifier.height(chipH),
                 selected = selectedMarkState == ResourceMarkState.FAVORITE,
-                onClick = { onMarkStateChange(if (selectedMarkState == ResourceMarkState.FAVORITE) null else ResourceMarkState.FAVORITE) },
-                label = { Text("●", color = Color(0xFFC62828)) }
+                onClick = {
+                    onMarkStateChange(
+                        if (selectedMarkState == ResourceMarkState.FAVORITE) null else ResourceMarkState.FAVORITE
+                    )
+                },
+                label = { Text("●", color = Color(0xFFC62828), style = textStyle, maxLines = 1) }
             )
         }
     }
