@@ -128,6 +128,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var regroupTarget by remember { mutableStateOf<ResourceWithTagsCharacters?>(null) }
     var filterTagDialog by remember { mutableStateOf(false) }
     var filterCharacterDialog by remember { mutableStateOf(false) }
+    var filterGroupDialog by remember { mutableStateOf(false) }
     var manageScreen by remember { mutableStateOf(false) }
     var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
     var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
@@ -135,10 +136,12 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
     var groupByTitleSelected by remember { mutableStateOf(false) }
-    var hierarchicalGroupMode by remember { mutableStateOf(false) }
+    var hierarchicalGroupMode by remember { mutableStateOf(true) }
     var openedGroupPath by remember { mutableStateOf<List<String>>(emptyList()) }
     var renameGroupTarget by remember { mutableStateOf<ResourceTitleGroup?>(null) }
     var renameGroupValue by remember { mutableStateOf(TextFieldValue("")) }
+    var selectedGroupLevel1 by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedGroupPairs by remember { mutableStateOf<Set<Pair<String, String>>>(emptySet()) }
     val coroutineScope = rememberCoroutineScope()
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val target = restoreTarget
@@ -169,10 +172,18 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         return
     }
 
-    val groupedResources = remember(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, groupByTitleSelected, hierarchicalGroupMode, openedGroupPath) {
+    val groupedFilterResources = remember(ui.resources, selectedGroupLevel1, selectedGroupPairs) {
+        applyGroupFilter(
+            resources = ui.resources,
+            selectedLevel1 = selectedGroupLevel1,
+            selectedPairs = selectedGroupPairs
+        )
+    }
+
+    val groupedResources = remember(groupedFilterResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, groupByTitleSelected, hierarchicalGroupMode, openedGroupPath) {
         if (hierarchicalGroupMode) {
             buildNestedResourceGroups(
-                resources = ui.resources,
+                resources = groupedFilterResources,
                 level1 = groupLevel1Selected,
                 level2 = groupLevel2Selected,
                 level3 = groupLevel3Selected,
@@ -180,7 +191,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 path = openedGroupPath
             )
         } else {
-            buildResourceGroups(ui.resources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, groupByTitleSelected)
+            buildResourceGroups(groupedFilterResources, groupLevel1Selected, groupLevel2Selected, groupLevel3Selected, groupByTitleSelected)
         }
     }
 
@@ -270,23 +281,27 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 characters = ui.characters,
                 selectedCharacterId = ui.filters.selectedCharacterId,
                 selectedMarkState = ui.filters.selectedMarkState,
+                selectedGroupLevel1 = selectedGroupLevel1,
+                selectedGroupPairs = selectedGroupPairs,
                 groupLevel1Selected = groupLevel1Selected,
                 groupLevel2Selected = groupLevel2Selected,
                 groupLevel3Selected = groupLevel3Selected,
                 groupByTitleSelected = groupByTitleSelected,
                 hierarchicalGroupMode = hierarchicalGroupMode,
+                openedGroupPath = openedGroupPath,
                 onTypeChange = vm::updateTypeFilter,
                 onCharacterDialog = { filterCharacterDialog = true },
                 onTagDialog = { filterTagDialog = true },
+                onGroupDialog = { filterGroupDialog = true },
                 onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
                 onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected },
                 onToggleLevel3 = { groupLevel3Selected = !groupLevel3Selected },
                 onToggleGroupByTitle = { groupByTitleSelected = !groupByTitleSelected; openedGroupPath = emptyList() },
-                onToggleHierarchicalMode = { hierarchicalGroupMode = !hierarchicalGroupMode; openedGroupPath = emptyList() },
+                onNavigateUp = { if (openedGroupPath.isNotEmpty()) openedGroupPath = openedGroupPath.dropLast(1) },
                 onMarkStateChange = vm::updateMarkStateFilter
             )
             when {
-                ui.resources.isEmpty() -> {
+                groupedFilterResources.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("暂无资源，点击右下角添加")
                     }
@@ -306,7 +321,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                             group = groupedResources.first(),
                             categories = ui.categories,
                             onBack = { if (openedGroupPath.isNotEmpty()) openedGroupPath = openedGroupPath.dropLast(1) },
-                            backLabel = openedGroupPath.lastOrNull() ?: "上一层",
+                            backLabel = openedGroupPath.dropLast(1).lastOrNull() ?: "根分组",
                             onPreview = { previewTarget = it },
                             onLongClick = { bottomSheetTarget = it }
                         )
@@ -318,7 +333,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                             if (hierarchicalGroupMode && openedGroupPath.isNotEmpty()) {
                                 item {
                                     TextButton(onClick = { openedGroupPath = openedGroupPath.dropLast(1) }) {
-                                        Text("返回上一层")
+                                        Text("返回 ${openedGroupPath.dropLast(1).lastOrNull() ?: "根分组"}")
                                     }
                                 }
                             }
@@ -345,19 +360,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                                     }
                                 )
                             }
-                            if (!hierarchicalGroupMode) {
-                                groupedResources.firstOrNull()?.takeIf { groupedResources.size == 1 }?.let { single ->
-                                    items(single.resources, key = { it.resource.id }) { res ->
-                                        ResourceListRow(
-                                            resource = res,
-                                            categories = ui.categories,
-                                            roleText = res.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
-                                            onClick = { previewTarget = res },
-                                            onLongClick = { bottomSheetTarget = res }
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -366,7 +368,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(ui.resources, key = { it.resource.id }) { res ->
+                        items(groupedFilterResources, key = { it.resource.id }) { res ->
                             ResourceListRow(
                                 resource = res,
                                 categories = ui.categories,
@@ -433,6 +435,18 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             selectedId = ui.filters.selectedCharacterId,
             onConfirm = { vm.updateCharacterFilter(it) },
             onDismiss = { filterCharacterDialog = false }
+        )
+    }
+    if (filterGroupDialog) {
+        FilterGroupDialog(
+            resources = allResources,
+            selectedLevel1 = selectedGroupLevel1,
+            selectedPairs = selectedGroupPairs,
+            onConfirm = { level1, pairs ->
+                selectedGroupLevel1 = level1
+                selectedGroupPairs = pairs
+            },
+            onDismiss = { filterGroupDialog = false }
         )
     }
 
@@ -970,23 +984,27 @@ private fun FilterBar(
     characters: List<CharacterEntity>,
     selectedCharacterId: Long?,
     selectedMarkState: ResourceMarkState?,
+    selectedGroupLevel1: Set<String>,
+    selectedGroupPairs: Set<Pair<String, String>>,
     groupLevel1Selected: Boolean,
     groupLevel2Selected: Boolean,
     groupLevel3Selected: Boolean,
     groupByTitleSelected: Boolean,
     hierarchicalGroupMode: Boolean,
+    openedGroupPath: List<String>,
     onTypeChange: (ResourceType?) -> Unit,
     onCharacterDialog: () -> Unit,
     onTagDialog: () -> Unit,
+    onGroupDialog: () -> Unit,
     onToggleLevel1: () -> Unit,
     onToggleLevel2: () -> Unit,
     onToggleLevel3: () -> Unit,
     onToggleGroupByTitle: () -> Unit,
-    onToggleHierarchicalMode: () -> Unit,
+    onNavigateUp: () -> Unit,
     onMarkStateChange: (ResourceMarkState?) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val orderedTypes = listOf(
                 ResourceType.FLOW,
                 ResourceType.TEXT,
@@ -1003,13 +1021,19 @@ private fun FilterBar(
                 )
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             AssistChip(onClick = onTagDialog, label = { Text("标签筛选(${selectedTagIds.size})") })
             val selectedCharacter = characters.firstOrNull { it.id == selectedCharacterId }
             AssistChip(
                 onClick = onCharacterDialog,
                 label = { Text(selectedCharacter?.name ?: "全部角色") }
             )
+            AssistChip(
+                onClick = onGroupDialog,
+                label = { Text("分组筛选(${selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size})") }
+            )
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             FilterChip(
                 selected = groupLevel1Selected,
                 onClick = onToggleLevel1,
@@ -1021,7 +1045,11 @@ private fun FilterBar(
                 label = { Text("2") }
             )
             FilterChip(selected = groupLevel3Selected, onClick = onToggleLevel3, label = { Text("3") })
-            FilterChip(selected = hierarchicalGroupMode, onClick = onToggleHierarchicalMode, label = { Text("+") })
+            FilterChip(
+                selected = openedGroupPath.isNotEmpty(),
+                onClick = onNavigateUp,
+                label = { Text(openedGroupPath.dropLast(1).lastOrNull() ?: "+") }
+            )
             FilterChip(selected = groupByTitleSelected, onClick = onToggleGroupByTitle, label = { Text("资源名分组") })
             FilterChip(
                 selected = selectedMarkState == ResourceMarkState.NONE,
@@ -1107,7 +1135,19 @@ private fun buildNestedResourceGroups(
         }
     }
     return grouped.entries.map { (k,v) ->
-        ResourceTitleGroup(k, k, if (depth + 1 < indexes.size) "子组" else "", v)
+        val childNames = if (depth + 1 < indexes.size) {
+            val childIndex = indexes[depth + 1]
+            v.mapNotNull { child ->
+                if (childIndex == -1) {
+                    child.resource.title
+                } else {
+                    child.resource.title.split("-").map { it.trim() }.filter { it.isNotEmpty() }.getOrNull(childIndex)
+                }
+            }.distinct().sorted().joinToString("・")
+        } else {
+            ""
+        }
+        ResourceTitleGroup(k, k, childNames, v)
     }.sortedBy { it.title }
 }
 
@@ -1279,6 +1319,104 @@ private fun ResourceGroupedPage(
             }
         }
     }
+}
+
+
+private fun titleParts(title: String): List<String> = title.split("-").map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun applyGroupFilter(
+    resources: List<ResourceWithTagsCharacters>,
+    selectedLevel1: Set<String>,
+    selectedPairs: Set<Pair<String, String>>
+): List<ResourceWithTagsCharacters> {
+    if (selectedLevel1.isEmpty() && selectedPairs.isEmpty()) return resources
+    return resources.filter { item ->
+        val parts = titleParts(item.resource.title)
+        val first = parts.getOrNull(0)
+        val second = parts.getOrNull(1)
+        val matchLevel1 = first != null && selectedLevel1.contains(first)
+        val matchPair = first != null && second != null && selectedPairs.contains(first to second)
+        matchLevel1 || matchPair
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterGroupDialog(
+    resources: List<ResourceWithTagsCharacters>,
+    selectedLevel1: Set<String>,
+    selectedPairs: Set<Pair<String, String>>,
+    onConfirm: (Set<String>, Set<Pair<String, String>>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val allLevel1 = remember(resources) {
+        resources.mapNotNull { titleParts(it.resource.title).getOrNull(0) }.distinct().sorted()
+    }
+    var level1Selected by remember { mutableStateOf(selectedLevel1.toMutableSet()) }
+    var pairSelected by remember { mutableStateOf(selectedPairs.toMutableSet()) }
+    val secondLevelMap = remember(resources, level1Selected) {
+        level1Selected.associateWith { first ->
+            resources.mapNotNull { item ->
+                val parts = titleParts(item.resource.title)
+                if (parts.getOrNull(0) == first) parts.getOrNull(1) else null
+            }.distinct().sorted()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分组筛选") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("第一层分组")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    allLevel1.forEach { first ->
+                        FilterChip(
+                            selected = level1Selected.contains(first),
+                            onClick = {
+                                if (!level1Selected.add(first)) {
+                                    level1Selected.remove(first)
+                                    pairSelected.removeAll { it.first == first }
+                                }
+                            },
+                            label = { Text(first) }
+                        )
+                    }
+                }
+                if (level1Selected.isNotEmpty()) {
+                    Text("第二层分组")
+                    level1Selected.sorted().forEach { first ->
+                        Text(first, style = MaterialTheme.typography.labelMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            secondLevelMap[first].orEmpty().forEach { second ->
+                                val pair = first to second
+                                FilterChip(
+                                    selected = pairSelected.contains(pair),
+                                    onClick = {
+                                        if (!pairSelected.add(pair)) pairSelected.remove(pair)
+                                    },
+                                    label = { Text(second) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(level1Selected.toSet(), pairSelected.toSet())
+                onDismiss()
+            }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }
 
 private fun typeLabel(type: ResourceType): String = when (type) {
