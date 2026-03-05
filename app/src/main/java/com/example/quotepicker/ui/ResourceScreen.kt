@@ -140,6 +140,8 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var renameGroupValue by remember { mutableStateOf(TextFieldValue("")) }
     var selectedGroupLevel1 by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedGroupPairs by remember { mutableStateOf<Set<Pair<String, String>>>(emptySet()) }
+    var groupKeyword by remember { mutableStateOf("") }
+    var groupKeywordDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val target = restoreTarget
@@ -170,9 +172,14 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         return
     }
 
-    val groupedFilterResources = remember(ui.resources, selectedGroupLevel1, selectedGroupPairs) {
+    val keywordFilteredResources = remember(ui.resources, groupKeyword) {
+        if (groupKeyword.isBlank()) ui.resources
+        else ui.resources.filter { it.resource.title.contains(groupKeyword, ignoreCase = true) }
+    }
+
+    val groupedFilterResources = remember(keywordFilteredResources, selectedGroupLevel1, selectedGroupPairs) {
         applyGroupFilter(
-            resources = ui.resources,
+            resources = keywordFilteredResources,
             selectedLevel1 = selectedGroupLevel1,
             selectedPairs = selectedGroupPairs
         )
@@ -289,6 +296,8 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                 onCharacterDialog = { filterCharacterDialog = true },
                 onTagDialog = { filterTagDialog = true },
                 onGroupDialog = { filterGroupDialog = true },
+                onGroupLongPress = { groupKeywordDialog = true },
+                groupKeyword = groupKeyword,
                 onToggleLevel1 = { groupLevel1Selected = !groupLevel1Selected },
                 onToggleLevel2 = { groupLevel2Selected = !groupLevel2Selected },
                 onToggleLevel3 = { groupLevel3Selected = !groupLevel3Selected },
@@ -436,12 +445,25 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
         FilterGroupDialog(
             resources = allResources,
             selectedLevel1 = selectedGroupLevel1,
-            selectedPairs = selectedGroupPairs,
             onConfirm = { level1, pairs ->
                 selectedGroupLevel1 = level1
                 selectedGroupPairs = pairs
             },
             onDismiss = { filterGroupDialog = false }
+        )
+    }
+    if (groupKeywordDialog) {
+        GroupKeywordDialog(
+            initialKeyword = groupKeyword,
+            onConfirm = {
+                groupKeyword = it
+                groupKeywordDialog = false
+            },
+            onClear = {
+                groupKeyword = ""
+                groupKeywordDialog = false
+            },
+            onDismiss = { groupKeywordDialog = false }
         )
     }
 
@@ -989,6 +1011,8 @@ private fun FilterBar(
     onCharacterDialog: () -> Unit,
     onTagDialog: () -> Unit,
     onGroupDialog: () -> Unit,
+    onGroupLongPress: () -> Unit,
+    groupKeyword: String,
     onToggleLevel1: () -> Unit,
     onToggleLevel2: () -> Unit,
     onToggleLevel3: () -> Unit,
@@ -996,10 +1020,10 @@ private fun FilterBar(
     onMarkStateChange: (ResourceMarkState?) -> Unit
 ) {
     // ---- 紧凑参数（≈80%高度）----
-    val chipH = 30.dp
-    val hGap = 6.dp
-    val vGap = 6.dp
-    val textStyle = TextStyle(fontSize = 14.sp)
+    val chipH = 28.dp
+    val hGap = 4.dp
+    val vGap = 4.dp
+    val textStyle = TextStyle(fontSize = 12.sp)
 
     Column(
         Modifier
@@ -1049,11 +1073,14 @@ private fun FilterBar(
             )
 
             val groupCount = selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size
-            AssistChip(
-                modifier = Modifier.height(chipH),
-                onClick = onGroupDialog,
-                label = { Text("分组筛选($groupCount)", style = textStyle, maxLines = 1) }
-            )
+            val groupLabel = if (groupKeyword.isBlank()) "分组筛选($groupCount)" else groupKeyword
+            Box(modifier = Modifier.combinedClickable(onClick = onGroupDialog, onLongClick = onGroupLongPress)) {
+                AssistChip(
+                    modifier = Modifier.height(chipH),
+                    onClick = onGroupDialog,
+                    label = { Text(groupLabel, style = textStyle, maxLines = 1) }
+                )
+            }
         }
 
         // ---- Row 3: Level + Mode + Mark ----
@@ -1105,7 +1132,7 @@ private fun FilterBar(
                         if (selectedMarkState == ResourceMarkState.CHECKED) null else ResourceMarkState.CHECKED
                     )
                 },
-                label = { Text("●", color = Color(0xFF2E7D32), style = textStyle, maxLines = 1) }
+                label = { Text("●", color = Color(0xFF22C55E), style = textStyle, maxLines = 1) }
             )
 
             FilterChip(
@@ -1397,7 +1424,6 @@ private fun applyGroupFilter(
 private fun FilterGroupDialog(
     resources: List<ResourceWithTagsCharacters>,
     selectedLevel1: Set<String>,
-    selectedPairs: Set<Pair<String, String>>,
     onConfirm: (Set<String>, Set<Pair<String, String>>) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1405,15 +1431,7 @@ private fun FilterGroupDialog(
         resources.mapNotNull { titleParts(it.resource.title).getOrNull(0) }.distinct().sorted()
     }
     var level1Selected by remember(selectedLevel1) { mutableStateOf(selectedLevel1) }
-    var pairSelected by remember(selectedPairs) { mutableStateOf(selectedPairs) }
-    val secondLevelMap = remember(resources, level1Selected) {
-        level1Selected.associateWith { first ->
-            resources.mapNotNull { item ->
-                val parts = titleParts(item.resource.title)
-                if (parts.getOrNull(0) == first) parts.getOrNull(1) else null
-            }.distinct().sorted()
-        }
-    }
+    val compactTextStyle = TextStyle(fontSize = 12.sp)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1427,53 +1445,63 @@ private fun FilterGroupDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("第一层分组")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     allLevel1.forEach { first ->
                         FilterChip(
+                            modifier = Modifier.height(28.dp),
                             selected = level1Selected.contains(first),
                             onClick = {
                                 level1Selected = if (level1Selected.contains(first)) {
-                                    pairSelected = pairSelected.filterNot { it.first == first }.toSet()
                                     level1Selected - first
                                 } else {
                                     level1Selected + first
                                 }
                             },
-                            label = { Text(first) }
+                            label = { Text(first, style = compactTextStyle, maxLines = 1) }
                         )
-                    }
-                }
-                if (level1Selected.isNotEmpty()) {
-                    Text("第二层分组")
-                    level1Selected.sorted().forEach { first ->
-                        Text(first, style = MaterialTheme.typography.labelMedium)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            secondLevelMap[first].orEmpty().forEach { second ->
-                                val pair = first to second
-                                FilterChip(
-                                    selected = pairSelected.contains(pair),
-                                    onClick = {
-                                        pairSelected = if (pairSelected.contains(pair)) {
-                                            pairSelected - pair
-                                        } else {
-                                            pairSelected + pair
-                                        }
-                                    },
-                                    label = { Text(second) }
-                                )
-                            }
-                        }
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(level1Selected.toSet(), pairSelected.toSet())
+                onConfirm(level1Selected.toSet(), emptySet())
                 onDismiss()
             }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun GroupKeywordDialog(
+    initialKeyword: String,
+    onConfirm: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var keyword by remember(initialKeyword) { mutableStateOf(initialKeyword) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分组关键字") },
+        text = {
+            OutlinedTextField(
+                value = keyword,
+                onValueChange = { keyword = it },
+                singleLine = true,
+                label = { Text("输入关键字") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(keyword.trim()) }) { Text("确定") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = onClear) { Text("取消关键字") }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        }
     )
 }
 

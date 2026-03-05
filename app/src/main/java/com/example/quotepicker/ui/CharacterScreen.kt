@@ -296,7 +296,7 @@ fun CharacterScreen(
                                                             )
                                                         }
                                                     },
-                                                    modifier = Modifier.width(itemSize),
+                                                    modifier = Modifier.width(itemSize * 0.9f),
                                                     bottomContent = {
                                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                             Text(

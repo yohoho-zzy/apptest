@@ -54,12 +54,15 @@ fun MainScreen() {
             }
         }
     ) { inner ->
-        Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier) {
+        Surface(
+            color = MaterialTheme.colorScheme.background,
+            modifier = Modifier.padding(inner)
+        ) {
             when (currentTab) {
-                0 -> TagScreen(modifier = Modifier.padding(inner))
-                1 -> CharacterScreen(modifier = Modifier.padding(inner))
-                2 -> ResourceScreen(modifier = Modifier.padding(inner))
-                else -> ExecutionScreen(modifier = Modifier.padding(inner))
+                0 -> TagScreen()
+                1 -> CharacterScreen()
+                2 -> ResourceScreen()
+                else -> ExecutionScreen()
             }
         }
     }
