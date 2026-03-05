@@ -1074,13 +1074,13 @@ private fun FilterBar(
 
             val groupCount = selectedGroupPairs.size.takeIf { it > 0 } ?: selectedGroupLevel1.size
             val groupLabel = if (groupKeyword.isBlank()) "分组筛选($groupCount)" else groupKeyword
-            Box(modifier = Modifier.combinedClickable(onClick = onGroupDialog, onLongClick = onGroupLongPress)) {
-                AssistChip(
-                    modifier = Modifier.height(chipH),
-                    onClick = onGroupDialog,
-                    label = { Text(groupLabel, style = textStyle, maxLines = 1) }
-                )
-            }
+            AssistChip(
+                modifier = Modifier
+                    .height(chipH)
+                    .combinedClickable(onClick = onGroupDialog, onLongClick = onGroupLongPress),
+                onClick = onGroupDialog,
+                label = { Text(groupLabel, style = textStyle, maxLines = 1) }
+            )
         }
 
         // ---- Row 3: Level + Mode + Mark ----
