@@ -61,6 +61,7 @@ fun ResourceListRow(
                 text = resource.resource.title,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
+                color = if (resource.resource.title.contains("魔剧")) Color(0xFF8E24AA) else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
