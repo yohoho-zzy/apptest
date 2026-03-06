@@ -29,12 +29,12 @@ fun MainScreen() {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
+                    NavigationBarItem(
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
                     icon = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
                     label = { Text("标签") }
-                )
+                    )
                 NavigationBarItem(
                     selected = currentTab == 1,
                     onClick = { currentTab = 1 },
@@ -46,17 +46,17 @@ fun MainScreen() {
                     onClick = { currentTab = 2 },
                     icon = { Icon(Icons.Default.Folder, contentDescription = null) },
                     label = { Text("资源") }
-                )
+        )
                 NavigationBarItem(
                     selected = currentTab == 3,
                     onClick = { currentTab = 3 },
                     icon = { Icon(Icons.Default.Casino, contentDescription = null) },
                     label = { Text("执行") }
-                )
-            }
-        }
+        )
+    }
+}
     ) { inner ->
-        Surface(
+                Surface(
             color = MaterialTheme.colorScheme.background,
             modifier = Modifier.padding(inner)
         ) {
