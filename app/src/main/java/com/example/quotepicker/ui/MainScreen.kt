@@ -16,10 +16,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+
+private enum class MainTab(val title: String, val icon: ImageVector) {
+    TAG("标签", Icons.Default.LocalOffer),
+    CHARACTER("角色", Icons.Default.Person),
+    RESOURCE("资源", Icons.Default.Folder),
+    EXECUTION("执行", Icons.Default.Casino)
+}
 
 data class MagicSettings(
     val rounds: Int,
@@ -30,122 +38,22 @@ data class MagicSettings(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(vm: MainViewModel = viewModel()) {
-    val ui by vm.uiState.collectAsState()
-
-    var showAddGroup by remember { mutableStateOf(false) }
-    var showAddQuote by remember { mutableStateOf(false) }
-    var showPreview by remember { mutableStateOf(false) }
-    var currentMagicQuote by remember { mutableStateOf<QuoteEntity?>(null) }
-    var previewTitle by remember { mutableStateOf("魔剧进行中") }
-    var playSessionId by remember { mutableIntStateOf(0) }
-
-    var roundsText by remember { mutableStateOf("8") }
-    var intervalText by remember { mutableStateOf("1500") }
-    var speechRateText by remember { mutableStateOf("1.0") }
-    var speechPitchText by remember { mutableStateOf("1.0") }
-
-    val context = LocalContext.current
-    var ttsReady by remember { mutableStateOf(false) }
-    val tts = remember {
-        TextToSpeech(context) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            tts.stop()
-            tts.shutdown()
-        }
-    }
-
-    val effectiveSettings = remember(roundsText, intervalText, speechRateText, speechPitchText) {
-        MagicSettings(
-            rounds = roundsText.toIntOrNull()?.coerceIn(1, 30) ?: 8,
-            intervalMs = intervalText.toLongOrNull()?.coerceIn(500L, 8000L) ?: 1500L,
-            speechRate = speechRateText.toFloatOrNull()?.coerceIn(0.5f, 2f) ?: 1.0f,
-            speechPitch = speechPitchText.toFloatOrNull()?.coerceIn(0.5f, 2f) ?: 1.0f
-        )
-    }
-
-    LaunchedEffect(playSessionId) {
-        if (playSessionId == 0 || ui.quotes.isEmpty()) return@LaunchedEffect
-
-        tts.language = Locale.CHINA
-        tts.setSpeechRate(effectiveSettings.speechRate)
-        tts.setPitch(effectiveSettings.speechPitch)
-
-        repeat(effectiveSettings.rounds) { index ->
-            val picked = weightedPick(ui.quotes)
-            currentMagicQuote = picked
-            if (picked?.type == QuoteType.TEXT && ttsReady) {
-                tts.speak(picked.text.orEmpty(), TextToSpeech.QUEUE_FLUSH, null, "magic_$index")
-            }
-            delay(effectiveSettings.intervalMs)
-        }
-        previewTitle = "魔剧播放完成"
-    }
+fun MainScreen() {
+    var currentTab by remember { mutableStateOf(MainTab.TAG) }
+    val tabs = remember { MainTab.values().toList() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("语录随机器") },
-                actions = {
-                    IconButton(onClick = { showAddGroup = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "添加分组")
-                    }
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            NavigationBar {
+                tabs.forEach { tab ->
+                    NavigationBarItem(
+                        selected = currentTab == tab,
+                        onClick = { currentTab = tab },
+                        icon = { Icon(tab.icon, contentDescription = null) },
+                        label = { Text(tab.title) }
+                    )
                 }
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddQuote = true },
-                icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("添加") }
-            )
-        }
-    ) { inner ->
-        Column(
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            GroupTabs(groups = ui.groups, current = ui.currentGroupId, onSelect = vm::setGroup)
-
-            MagicPanel(
-                roundsText = roundsText,
-                intervalText = intervalText,
-                speechRateText = speechRateText,
-                speechPitchText = speechPitchText,
-                onRoundsChange = { roundsText = it },
-                onIntervalChange = { intervalText = it },
-                onSpeechRateChange = { speechRateText = it },
-                onSpeechPitchChange = { speechPitchText = it },
-                onStart = {
-                    if (ui.quotes.isEmpty()) {
-                        previewTitle = "暂无可播放语录"
-                        currentMagicQuote = null
-                        showPreview = true
-                    } else {
-                        previewTitle = "魔剧进行中"
-                        showPreview = true
-                        playSessionId += 1
-                    }
-                }
-            )
-
-            if (ui.groups.isEmpty()) {
-                Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    Text("暂无分组，点击右上角添加")
-                }
-            } else {
-                QuoteList(
-                    quotes = ui.quotes,
-                    decodeImage = { vm.decodeBase64ToBitmap(it) },
-                    onDelete = vm::deleteQuote
-                )
             }
         }
     }
@@ -308,25 +216,11 @@ private fun QuoteList(
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(quotes, key = { it.id }) { q ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (q.type == com.example.quotepicker.data.QuoteType.TEXT) {
-                            Text(q.text.orEmpty(), style = MaterialTheme.typography.titleMedium)
-                        } else {
-                            val bmp = remember(q.imageBase64) { decodeImage(q.imageBase64.orEmpty()) }
-                            Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AssistChip(onClick = { }, label = { Text("权重: ${q.weight}") })
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { onDelete(q) }) { Text("删除") }
-                        }
-                    }
-                }
+            when (currentTab) {
+                MainTab.TAG -> TagScreen()
+                MainTab.CHARACTER -> CharacterScreen()
+                MainTab.RESOURCE -> ResourceScreen()
+                MainTab.EXECUTION -> ExecutionScreen()
             }
         }
     }
