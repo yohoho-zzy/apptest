@@ -1,6 +1,7 @@
 package com.example.quotepicker.ui.components
 
 import android.net.Uri
+import android.speech.tts.TextToSpeech
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -54,6 +56,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import java.util.Locale
+
+data class MagicDramaSettings(
+    val defaultDelayMs: Long = 1000L,
+    val speechRate: Float = 1.0f,
+    val speechPitch: Float = 1.0f
+)
 
 private sealed interface DramaCommand {
     data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
@@ -81,6 +90,7 @@ fun MagicDramaScreen(
     title: String,
     script: String,
     boundCharacters: List<CharacterEntity>,
+    settings: MagicDramaSettings,
     vm: ResourceViewModel,
     onClose: () -> Unit
 ) {
@@ -94,15 +104,24 @@ fun MagicDramaScreen(
 
     val parsed = remember(script) { parseDramaScript(script) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var ttsReady by remember { mutableStateOf(false) }
+    val tts = remember {
+        TextToSpeech(context) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
             countdownJob?.cancel()
             pendingBranch?.cancel()
+            tts.stop()
+            tts.shutdown()
         }
     }
 
-    LaunchedEffect(script) {
+    LaunchedEffect(script, settings.defaultDelayMs, settings.speechRate, settings.speechPitch) {
         messages.clear()
         currentMedia = null
         countdownSeconds = null
@@ -110,18 +129,29 @@ fun MagicDramaScreen(
         pendingBranch = null
         countdownJob?.cancel()
         countdownJob = null
+        tts.language = Locale.CHINA
+        tts.setSpeechRate(settings.speechRate)
+        tts.setPitch(settings.speechPitch)
 
         val queue = ArrayDeque(parsed.main)
         while (queue.isNotEmpty()) {
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
-                    messages += DramaMessage.Narration(text = renderRandomToken(cmd.text), important = cmd.important)
-                    delay(cmd.delayMs)
+                    val text = renderRandomToken(cmd.text)
+                    messages += DramaMessage.Narration(text = text, important = cmd.important)
+                    if (ttsReady) {
+                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration_${messages.size}")
+                    }
+                    delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
-                    messages += DramaMessage.Role(role = role, text = cmd.text.replace("nn", "\n"))
-                    delay(cmd.delayMs)
+                    val text = cmd.text.replace("nn", "\n")
+                    messages += DramaMessage.Role(role = role, text = text)
+                    if (ttsReady) {
+                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "role_${messages.size}")
+                    }
+                    delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
                 is DramaCommand.ShowImage -> currentMedia = DramaMedia.Image(cmd.source)
                 is DramaCommand.ShowVideo -> currentMedia = DramaMedia.Video(cmd.source)
@@ -157,14 +187,14 @@ fun MagicDramaScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color(0xFFF5F7FB))
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .weight(3f)
                     .fillMaxWidth()
-                    .background(Color(0xFF111111))
+                    .background(Color(0xFFE8EEFF))
             ) {
                 DramaMediaArea(media = currentMedia, vm = vm)
                 countdownSeconds?.let { left ->
@@ -172,7 +202,7 @@ fun MagicDramaScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(12.dp)
-                            .background(Color(0xAA000000), RoundedCornerShape(8.dp))
+                            .background(Color(0xCC2E3A59), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(text = "倒数 ${left}s", color = Color.White, fontWeight = FontWeight.Bold)
@@ -183,10 +213,10 @@ fun MagicDramaScreen(
                 modifier = Modifier
                     .weight(2f)
                     .fillMaxWidth()
-                    .background(Color(0xFF181818))
+                    .background(Color(0xFFFDF7EA))
                     .padding(10.dp)
             ) {
-                Text(text = title, color = Color(0xFFD0B3FF), style = MaterialTheme.typography.labelMedium)
+                Text(text = title, color = Color(0xFF2D3561), style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn(
                     modifier = Modifier.weight(1f),
@@ -218,7 +248,7 @@ fun MagicDramaScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp)
-                    .background(Color(0x66000000), CircleShape)
+                    .background(Color(0xAA2E3A59), CircleShape)
             ) {
                 Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
             }
@@ -285,9 +315,9 @@ private fun NarrationBubble(message: DramaMessage.Narration) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
             text = message.text,
-            color = if (message.important) Color(0xFFFF4FC3) else Color.White,
+            color = if (message.important) Color(0xFFB33985) else Color(0xFF2B2F3A),
             modifier = Modifier
-                .background(Color.Black, RoundedCornerShape(10.dp))
+                .background(Color(0xFFEAF1FF), RoundedCornerShape(10.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
@@ -306,16 +336,16 @@ private fun RoleBubble(message: DramaMessage.Role) {
                 .border(1.dp, Color(0xFFAAAAAA), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = message.role.take(4), color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text(text = message.role.take(4), color = Color(0xFF2B2F3A), style = MaterialTheme.typography.labelSmall)
         }
         Spacer(modifier = Modifier.width(8.dp))
         Column(
             modifier = Modifier
-                .background(Color(0xFF2A2A2A), RoundedCornerShape(10.dp))
+                .background(Color(0xFFFFFFFF), RoundedCornerShape(10.dp))
                 .padding(8.dp)
         ) {
-            Text(text = message.role, color = Color(0xFFBDBDBD), style = MaterialTheme.typography.labelSmall)
-            Text(text = message.text, color = Color.White)
+            Text(text = message.role, color = Color(0xFF5C647A), style = MaterialTheme.typography.labelSmall)
+            Text(text = message.text, color = Color(0xFF1F2433))
         }
     }
 }
@@ -383,7 +413,7 @@ private fun parseDelayText(raw: String): Pair<String, Long> {
         val ms = raw.substring(idx + 1).trim().toLongOrNull()
         if (ms != null) return text to ms
     }
-    return raw to 1000L
+    return raw to 0L
 }
 
 private fun resolveRoleName(input: String, boundCharacters: List<CharacterEntity>): String {

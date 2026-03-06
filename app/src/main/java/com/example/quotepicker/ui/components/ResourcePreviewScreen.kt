@@ -41,6 +41,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -272,22 +273,58 @@ fun ResourcePreviewScreen(
                                 val quoteText = liveResource.resource.quoteText.orEmpty()
                                 val isMagicDrama = liveResource.resource.title.contains("魔剧")
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
+                                var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("1000") }
+                                var speechRateInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
+                                var speechPitchInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
                                 if (showMagicDrama) {
                                     MagicDramaScreen(
                                         title = liveResource.resource.title,
                                         script = quoteText,
                                         boundCharacters = liveResource.characters,
+                                        settings = MagicDramaSettings(
+                                            defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
+                                            speechRate = speechRateInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f,
+                                            speechPitch = speechPitchInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
+                                        ),
                                         vm = vm,
                                         onClose = { showMagicDrama = false }
                                     )
                                 } else if (isMagicDrama) {
                                     Column(
                                         modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.Center,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         TextButton(onClick = { showMagicDrama = true }) {
                                             Text("开始魔剧")
+                                        }
+                                        Text(
+                                            text = "播放设置（默认值可编辑）",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color(0xFF5F6280)
+                                        )
+                                        OutlinedTextField(
+                                            value = defaultDelayInput,
+                                            onValueChange = { defaultDelayInput = it },
+                                            singleLine = true,
+                                            label = { Text("文本默认停留毫秒(300-10000)") },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(
+                                                value = speechRateInput,
+                                                onValueChange = { speechRateInput = it },
+                                                singleLine = true,
+                                                label = { Text("语速0.5-2") },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            OutlinedTextField(
+                                                value = speechPitchInput,
+                                                onValueChange = { speechPitchInput = it },
+                                                singleLine = true,
+                                                label = { Text("音调0.5-2") },
+                                                modifier = Modifier.weight(1f)
+                                            )
                                         }
                                     }
                                 } else {
