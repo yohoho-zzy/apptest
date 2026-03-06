@@ -270,14 +270,36 @@ fun ResourcePreviewScreen(
                         when (liveResource.resource.type) {
                             ResourceType.TEXT -> {
                                 val quoteText = liveResource.resource.quoteText.orEmpty()
-                                if (quoteText.isNotBlank()) {
-                                    PreviewTextWithInlineFile(
-                                        text = quoteText,
+                                val isMagicDrama = liveResource.resource.title.contains("魔剧")
+                                var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
+                                if (showMagicDrama) {
+                                    MagicDramaScreen(
+                                        title = liveResource.resource.title,
+                                        script = quoteText,
+                                        boundCharacters = liveResource.characters,
                                         vm = vm,
-                                        onEventSequence = handleEventSequence
+                                        onClose = { showMagicDrama = false }
                                     )
+                                } else if (isMagicDrama) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        TextButton(onClick = { showMagicDrama = true }) {
+                                            Text("开始魔剧")
+                                        }
+                                    }
+                                } else {
+                                    if (quoteText.isNotBlank()) {
+                                        PreviewTextWithInlineFile(
+                                            text = quoteText,
+                                            vm = vm,
+                                            onEventSequence = handleEventSequence
+                                        )
+                                    }
+                                    QuoteImagePager(images = quoteImages)
                                 }
-                                QuoteImagePager(images = quoteImages)
                             }
                             ResourceType.IMAGE -> {
                                 if (quoteImages.isNotEmpty()) {
