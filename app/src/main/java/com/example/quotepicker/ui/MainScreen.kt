@@ -1,58 +1,51 @@
 package com.example.quotepicker.ui
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.Icon
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.vector.ImageVector
+
+private enum class MainTab(val title: String, val icon: ImageVector) {
+    TAG("标签", Icons.Default.LocalOffer),
+    CHARACTER("角色", Icons.Default.Person),
+    RESOURCE("资源", Icons.Default.Folder),
+    EXECUTION("执行", Icons.Default.Casino)
+}
 
 @Composable
 fun MainScreen() {
-    var currentTab by remember { mutableIntStateOf(0) }
+    var currentTab by remember { mutableStateOf(MainTab.TAG) }
+    val tabs = remember { MainTab.values().toList() }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    selected = currentTab == 0,
-                    onClick = { currentTab = 0 },
-                    icon = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
-                    label = { Text("标签") }
-                )
-                NavigationBarItem(
-                    selected = currentTab == 1,
-                    onClick = { currentTab = 1 },
-                    icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                    label = { Text("角色") }
-                )
-                NavigationBarItem(
-                    selected = currentTab == 2,
-                    onClick = { currentTab = 2 },
-                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
-                    label = { Text("资源") }
-                )
-                NavigationBarItem(
-                    selected = currentTab == 3,
-                    onClick = { currentTab = 3 },
-                    icon = { Icon(Icons.Default.Casino, contentDescription = null) },
-                    label = { Text("执行") }
-                )
+                tabs.forEach { tab ->
+                    NavigationBarItem(
+                        selected = currentTab == tab,
+                        onClick = { currentTab = tab },
+                        icon = { Icon(tab.icon, contentDescription = null) },
+                        label = { Text(tab.title) }
+                    )
+                }
             }
         }
     ) { inner ->
@@ -61,10 +54,10 @@ fun MainScreen() {
             modifier = Modifier.padding(inner)
         ) {
             when (currentTab) {
-                0 -> TagScreen()
-                1 -> CharacterScreen()
-                2 -> ResourceScreen()
-                else -> ExecutionScreen()
+                MainTab.TAG -> TagScreen()
+                MainTab.CHARACTER -> CharacterScreen()
+                MainTab.RESOURCE -> ResourceScreen()
+                MainTab.EXECUTION -> ExecutionScreen()
             }
         }
     }
