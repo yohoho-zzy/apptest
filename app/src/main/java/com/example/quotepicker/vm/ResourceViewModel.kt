@@ -19,6 +19,7 @@ import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
+import com.example.quotepicker.data.TextResourceUsageHistoryEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.ImageCompression
 import com.example.quotepicker.util.StoragePaths
@@ -335,6 +336,73 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+
+    fun listResourceUsageHistory(resourceCode: String, onResult: (List<TextResourceUsageHistoryEntity>) -> Unit) =
+        viewModelScope.launch {
+            onResult(repo.listUsageByResourceCode(resourceCode))
+        }
+
+    private fun extractReferencedResourceCodes(text: String): Set<String> {
+        val refs = mutableSetOf<String>()
+        Regex("""\+资源:([^\n\r]+)""").findAll(text).forEach { m ->
+            val raw = m.groupValues.getOrNull(1).orEmpty()
+            raw.split(',', '&').map { it.trim() }.filter { it.isNotBlank() }.forEach { token ->
+                parseIndexedResourceRef(token)?.let { refs.add(it.resourceCode) }
+            }
+        }
+        Regex("""@[^@]+@\(([^)]+)\)""").findAll(text).forEach { m ->
+            val info = m.groupValues.getOrNull(1).orEmpty().trim()
+            parseIndexedResourceRef(info)?.let { refs.add(it.resourceCode) }
+        }
+        return refs
+    }
+
+    private suspend fun refreshTextUsageHistory(resource: ResourceEntity, text: String) {
+        if (resource.type != ResourceType.TEXT && resource.type != ResourceType.SCENE) return
+        val refs = extractReferencedResourceCodes(text)
+        repo.replaceTextResourceUsageHistory(resource.id, resource.title, refs)
+    }
+
+    private fun remapIndexedRefByMovedItem(text: String, resourceCode: String, fromIndex: Int, toIndex: Int): String {
+        if (resourceCode.isBlank() || fromIndex == toIndex || fromIndex <= 0 || toIndex <= 0) return text
+        val regex = Regex("""\b""" + Regex.escape(resourceCode) + """\.(\d+)\b""")
+        return regex.replace(text) { match ->
+            val current = match.groupValues[1].toIntOrNull() ?: return@replace match.value
+            val next = when {
+                current == fromIndex -> toIndex
+                fromIndex < toIndex && current in (fromIndex + 1)..toIndex -> current - 1
+                fromIndex > toIndex && current in toIndex until fromIndex -> current + 1
+                else -> current
+            }
+            "${resourceCode}.${next}"
+        }
+    }
+
+    private suspend fun remapTextReferencesForMovedMedia(resource: ResourceEntity, oldPaths: List<String>, newPaths: List<String>) {
+        val code = resource.resourceCode ?: return
+        if (oldPaths == newPaths) return
+        val textResources = allResources.value.map { it.resource }.filter { it.type == ResourceType.TEXT || it.type == ResourceType.SCENE }
+        textResources.forEach { textRes ->
+            val oldText = when (textRes.type) {
+                ResourceType.TEXT -> textRes.quoteText.orEmpty()
+                ResourceType.SCENE -> textRes.sceneJson.orEmpty()
+                else -> ""
+            }
+            var updatedText = oldText
+            oldPaths.forEachIndexed { oldIdx, oldPath ->
+                val newIdx = newPaths.indexOf(oldPath)
+                if (newIdx >= 0 && newIdx != oldIdx) {
+                    updatedText = remapIndexedRefByMovedItem(updatedText, code, oldIdx + 1, newIdx + 1)
+                }
+            }
+            if (updatedText != oldText) {
+                val patched = if (textRes.type == ResourceType.TEXT) textRes.copy(quoteText = updatedText) else textRes.copy(sceneJson = updatedText)
+                repo.updateResource(patched)
+                refreshTextUsageHistory(patched, updatedText)
+            }
+        }
+    }
+
     fun moveResourceToGroup(resource: ResourceEntity, newTitle: String, newCreatedAt: Long) =
         viewModelScope.launch {
             repo.updateResource(
@@ -462,7 +530,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch {
         if (characterIds.isEmpty()) return@launch
-        repo.updateResource(resource.copy(title = title, quoteText = text))
+        val updated = resource.copy(title = title, quoteText = text)
+        repo.updateResource(updated)
+        refreshTextUsageHistory(updated, text)
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -476,9 +546,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch {
         if (characterIds.isEmpty()) return@launch
-        repo.updateResource(
-            resource.copy(title = title, quoteText = description, sceneJson = sceneJson)
-        )
+        val updated = resource.copy(title = title, quoteText = description, sceneJson = sceneJson)
+        repo.updateResource(updated)
+        refreshTextUsageHistory(updated, sceneJson)
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -491,10 +561,13 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
+        val oldPaths = parseImageSourceList(resource.contentUriOrPath, resource.quoteImageBase64)
         val resolved = resolveImageItems(items)
         if (resolved.isEmpty()) return@launch
         val payload = org.json.JSONArray(resolved).toString()
-        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload, quoteImageBase64 = null))
+        val updated = resource.copy(title = title, contentUriOrPath = payload, quoteImageBase64 = null)
+        repo.updateResource(updated)
+        remapTextReferencesForMovedMedia(updated, oldPaths, parseImageSourceList(updated.contentUriOrPath, updated.quoteImageBase64))
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
@@ -507,10 +580,13 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
+        val oldPaths = parseSimplePathList(resource.contentUriOrPath)
         val newUris = resolveVideoItems(items)
         if (newUris.isEmpty()) return@launch
         val payload = org.json.JSONArray(newUris).toString()
-        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload))
+        val updated = resource.copy(title = title, contentUriOrPath = payload)
+        repo.updateResource(updated)
+        remapTextReferencesForMovedMedia(updated, oldPaths, parseSimplePathList(updated.contentUriOrPath))
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }

@@ -90,6 +90,19 @@ data class ExecutionResourceEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(
+    tableName = "text_resource_usage_history",
+    indices = [Index(value = ["resourceCode"]), Index(value = ["textResourceId"])]
+)
+data class TextResourceUsageHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val textResourceId: Long,
+    val textTitle: String,
+    val resourceCode: String,
+    val fileInfo: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "resources")
 data class ResourceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
