@@ -179,7 +179,7 @@ fun CharacterScreen(
                         )
                     }
                     if (transferState.mode == TransferMode.EXPORT && outputBytes != null) {
-                        Text("文件大小：${formatBytes(outputBytes)}")
+                        Text("已写入：${formatBytes(outputBytes)}")
                     }
                     transferState.progress?.let { progress ->
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
