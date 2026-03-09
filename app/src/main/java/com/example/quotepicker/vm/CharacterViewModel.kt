@@ -152,30 +152,15 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     outputBytes = bytesWritten
                     updateProgress()
                 }
-                openEncryptedBackupOutput(countingOutput).use { cipherOutput ->
-                    ZipOutputStream(cipherOutput).use { zip ->
-                        zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
-                        writeChunked(zip, snapshotBytes) { written ->
-                            processedBytes += written
-                            updateProgress()
-                        }
-                        zip.closeEntry()
-                        exportPackage.mediaSources.forEach { source ->
-                            val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
-                            stream.use { input ->
-                                zip.putNextEntry(ZipEntry("media/${source.fileName}"))
-                                writeStreamChunked(input, zip) { written ->
-                                    processedBytes += written
-                                    updateProgress()
-                                }
-                                zip.closeEntry()
-                            }
-                        }
+                writeEncryptedZipBackup(
+                    output = countingOutput,
+                    snapshotBytes = snapshotBytes,
+                    mediaSources = exportPackage.mediaSources,
+                    onChunkWritten = { written ->
+                        processedBytes += written
+                        updateProgress()
                     }
-                    zipBuffer.toByteArray()
-                }
-                val encrypted = encryptBackupPayload(zipBytes)
-                writeChunked(countingOutput, encrypted) { }
+                )
             }
             updateProgress(force = true)
         } catch (t: Throwable) {
@@ -414,6 +399,29 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+
+    private fun writeEncryptedZipBackup(
+        output: OutputStream,
+        snapshotBytes: ByteArray,
+        mediaSources: List<Repository.MediaExportSource>,
+        onChunkWritten: (Int) -> Unit
+    ) {
+        openEncryptedBackupOutput(output).use { cipherOutput ->
+            ZipOutputStream(cipherOutput).use { zip ->
+                zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+                writeChunked(zip, snapshotBytes, onChunkWritten)
+                zip.closeEntry()
+                mediaSources.forEach { source ->
+                    val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
+                    stream.use { input ->
+                        zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                        writeStreamChunked(input, zip, onChunkWritten)
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
+    }
     private fun openEncryptedBackupOutput(output: OutputStream): OutputStream {
         val iv = ByteArray(GCM_IV_LENGTH)
         SecureRandom().nextBytes(iv)
