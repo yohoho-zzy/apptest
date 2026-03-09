@@ -502,7 +502,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun createCipher(mode: Int, iv: ByteArray): Cipher {
+    private fun createCipher(mode: Int, iv: ByteArray, version: Byte): Cipher {
         val key = SecretKeySpec(BACKUP_AES_KEY, "AES")
         return Cipher.getInstance("AES/CTR/NoPadding").apply {
             init(mode, key, IvParameterSpec(iv))
