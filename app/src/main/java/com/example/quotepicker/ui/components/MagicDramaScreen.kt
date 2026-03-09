@@ -375,7 +375,7 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = true)
         }
-        key in setOf("资源", "资源组", "视频", "图片", "视频切换", "图片切换", "切换视频", "切换图片", "图片组", "视频组", "轮播图片", "轮播视频") -> DramaCommand.ShowResource(value)
+        key in setOf("资源", "视频", "图片") -> DramaCommand.ShowResource(value)
         key == "按钮" -> {
             val options = value.split("-")
                 .mapNotNull { item ->
