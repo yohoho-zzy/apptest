@@ -2,6 +2,7 @@ package com.example.quotepicker.vm
 
 import android.app.Application
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.BackupSnapshot
@@ -13,20 +14,21 @@ import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.security.SecureRandom
+import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
-import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.Mac
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +60,11 @@ data class TransferState(
 enum class TransferMode {
     IMPORT,
     EXPORT
+}
+
+enum class ExportFormat {
+    ENCRYPTED,
+    ZIP
 }
 
 class CharacterViewModel(app: Application) : AndroidViewModel(app) {
@@ -110,7 +117,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
     }
 
-    fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+    fun exportSnapshot(uri: Uri, format: ExportFormat) = viewModelScope.launch(Dispatchers.IO) {
         _transferState.update {
             it.copy(
                 inProgress = true,
@@ -156,15 +163,26 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     outputBytes = bytesWritten
                     updateProgress()
                 }
-                writeEncryptedZipBackup(
-                    output = countingOutput,
-                    snapshotBytes = snapshotBytes,
-                    mediaSources = exportPackage.mediaSources,
-                    onChunkWritten = { written ->
-                        processedBytes += written
-                        updateProgress()
-                    }
-                )
+                when (format) {
+                    ExportFormat.ENCRYPTED -> writeEncryptedZipBackup(
+                        output = countingOutput,
+                        snapshotBytes = snapshotBytes,
+                        mediaSources = exportPackage.mediaSources,
+                        onChunkWritten = { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                    )
+                    ExportFormat.ZIP -> writePlainZipBackup(
+                        output = countingOutput,
+                        snapshotBytes = snapshotBytes,
+                        mediaSources = exportPackage.mediaSources,
+                        onChunkWritten = { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                    )
+                }
             }
             updateProgress(force = true)
         } catch (t: Throwable) {
@@ -224,8 +242,8 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     processedBytes = bytesRead
                     updateProgress()
                 }
-                val payloadInput = openDecodedBackupInput(countingInput)
-                val (detectedInput, isZip) = detectZipInput(payloadInput)
+                val backupInput = openBackupInput(uri, countingInput)
+                val (detectedInput, isZip) = detectZipInput(backupInput)
                 if (isZip) {
                     ZipInputStream(detectedInput).use { zip ->
                         var entry = zip.nextEntry
@@ -280,14 +298,15 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val BACKUP_JSON_NAME = "backup.json"
         val BACKUP_MAGIC = byteArrayOf('B'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), '1'.code.toByte())
-        const val BACKUP_VERSION: Byte = 1
-        const val GCM_TAG_BITS = 128
-        const val GCM_IV_LENGTH = 12
+        const val BACKUP_VERSION: Byte = 2
+        const val CTR_IV_LENGTH = 16
+        const val HMAC_SHA256_LENGTH = 32
         const val ZIP_MAGIC_P: Byte = 0x50
         const val ZIP_MAGIC_K: Byte = 0x4B
         const val PROGRESS_UPDATE_BYTES = 256 * 1024
         const val MAX_ZERO_READ_RETRIES = 1024
         val BACKUP_AES_KEY = "QuotePickerBackupAES256KeyMaterial!".toByteArray(Charset.forName("UTF-8")).copyOf(32)
+        val BACKUP_HMAC_KEY = "QuotePickerBackupHmac256KeyMaterial".toByteArray(Charset.forName("UTF-8")).copyOf(32)
     }
 
     private class CountingOutputStream(
@@ -421,8 +440,8 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         mediaSources: List<Repository.MediaExportSource>,
         onChunkWritten: (Int) -> Unit
     ) {
-        openEncryptedBackupOutput(output).use { cipherOutput ->
-            ZipOutputStream(cipherOutput).use { zip ->
+        openEncryptedBackupOutput(output).use { encryptedOutput ->
+            ZipOutputStream(encryptedOutput).use { zip ->
                 zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
                 writeChunked(zip, snapshotBytes, onChunkWritten)
                 zip.closeEntry()
@@ -441,44 +460,129 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+    private fun writePlainZipBackup(
+        output: OutputStream,
+        snapshotBytes: ByteArray,
+        mediaSources: List<Repository.MediaExportSource>,
+        onChunkWritten: (Int) -> Unit
+    ) {
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+            writeChunked(zip, snapshotBytes, onChunkWritten)
+            zip.closeEntry()
+            mediaSources.forEach { source ->
+                val stream = repo.openMediaStream(source.originalPath)
+                    ?: throw IOException("Failed to open media stream: ${source.originalPath}")
+                stream.use { input ->
+                    zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                    try {
+                        writeStreamChunked(input, zip, onChunkWritten)
+                    } finally {
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
+    }
+
     private fun openEncryptedBackupOutput(output: OutputStream): OutputStream {
-        val iv = ByteArray(GCM_IV_LENGTH)
+        val iv = ByteArray(CTR_IV_LENGTH)
         SecureRandom().nextBytes(iv)
         output.write(BACKUP_MAGIC)
         output.write(BACKUP_VERSION.toInt())
         output.write(iv)
-        return CipherOutputStream(output, createCipher(Cipher.ENCRYPT_MODE, iv))
+
+        val mac = createHmac()
+        val macOutput = HmacOutputStream(output, mac)
+        val cipher = createCipher(Cipher.ENCRYPT_MODE, iv)
+        val nonClosingMacOutput = NonClosingOutputStream(macOutput)
+        return FinalizingOutputStream(CipherOutputStream(nonClosingMacOutput, cipher)) {
+            output.write(mac.doFinal())
+            output.flush()
+        }
     }
 
     private fun createCipher(mode: Int, iv: ByteArray): Cipher {
         val key = SecretKeySpec(BACKUP_AES_KEY, "AES")
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(mode, key, GCMParameterSpec(GCM_TAG_BITS, iv))
-        return cipher
+        return Cipher.getInstance("AES/CTR/NoPadding").apply {
+            init(mode, key, IvParameterSpec(iv))
+        }
     }
 
-    private fun openDecodedBackupInput(input: InputStream): InputStream {
+    private fun createHmac(): Mac {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(BACKUP_HMAC_KEY, "HmacSHA256"))
+        return mac
+    }
+
+    private fun openBackupInput(uri: Uri, input: InputStream): InputStream {
+        return if (isEncryptedBackup(uri)) {
+            openEncryptedBackupInput(input)
+        } else {
+            input
+        }
+    }
+
+    private fun isEncryptedBackup(uri: Uri): Boolean {
+        val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: return true
+        val lower = name.lowercase()
+        return lower.endsWith(".backup.dat") || lower.endsWith(".dat")
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        val resolver = getApplication<Application>().contentResolver
+        return resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+        }
+    }
+
+    private fun openEncryptedBackupInput(input: InputStream): InputStream {
         val prefixLength = BACKUP_MAGIC.size + 1
         val pushback = PushbackInputStream(input, prefixLength)
         val prefix = ByteArray(prefixLength)
         val read = pushback.read(prefix)
-        if (read < 0) return pushback
-        val actual = prefix.copyOf(read)
-        pushback.unread(actual)
-        if (read < prefixLength) return pushback
-        if (!actual.copyOf(BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) return pushback
-        val version = actual[BACKUP_MAGIC.size]
+        require(read == prefixLength) { "Invalid encrypted backup header" }
+        if (!prefix.copyOf(BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) {
+            throw IllegalArgumentException("Invalid encrypted backup magic")
+        }
+        val version = prefix[BACKUP_MAGIC.size]
         require(version == BACKUP_VERSION) { "Unsupported backup version: $version" }
 
-        val headerBuffer = ByteArray(prefixLength + GCM_IV_LENGTH)
+        val iv = ByteArray(CTR_IV_LENGTH)
         var offset = 0
-        while (offset < headerBuffer.size) {
-            val count = pushback.read(headerBuffer, offset, headerBuffer.size - offset)
+        while (offset < iv.size) {
+            val count = pushback.read(iv, offset, iv.size - offset)
             require(count > 0) { "Invalid encrypted backup header" }
             offset += count
         }
-        val iv = headerBuffer.copyOfRange(prefixLength, headerBuffer.size)
-        return CipherInputStream(pushback, createCipher(Cipher.DECRYPT_MODE, iv))
+
+        val tempCipherFile = File.createTempFile("backup_cipher_", ".bin", getApplication<Application>().cacheDir)
+        val mac = createHmac()
+        val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
+        var pendingTail = ByteArray(0)
+        tempCipherFile.outputStream().use { cipherOutput ->
+            while (true) {
+                val count = pushback.read(buffer)
+                if (count < 0) break
+                val combined = ByteArray(pendingTail.size + count)
+                pendingTail.copyInto(combined, 0)
+                buffer.copyInto(combined, pendingTail.size, endIndex = count)
+                if (combined.size <= HMAC_SHA256_LENGTH) {
+                    pendingTail = combined
+                } else {
+                    val cipherLength = combined.size - HMAC_SHA256_LENGTH
+                    cipherOutput.write(combined, 0, cipherLength)
+                    mac.update(combined, 0, cipherLength)
+                    pendingTail = combined.copyOfRange(cipherLength, combined.size)
+                }
+            }
+        }
+        require(pendingTail.size == HMAC_SHA256_LENGTH) { "Encrypted backup is truncated" }
+        val computedHmac = mac.doFinal()
+        require(MessageDigest.isEqual(pendingTail, computedHmac)) { "Encrypted backup integrity check failed" }
+        val cipherStream = CipherInputStream(tempCipherFile.inputStream(), createCipher(Cipher.DECRYPT_MODE, iv))
+        return DeletingInputStream(cipherStream, tempCipherFile)
     }
 
     private fun detectZipInput(input: InputStream): Pair<InputStream, Boolean> {
@@ -490,5 +594,91 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         }
         val isZip = read == 2 && header[0] == ZIP_MAGIC_P && header[1] == ZIP_MAGIC_K
         return pushback to isZip
+    }
+}
+
+
+private class NonClosingOutputStream(
+    private val delegate: OutputStream
+) : OutputStream() {
+    override fun write(b: Int) {
+        delegate.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        delegate.write(b, off, len)
+    }
+
+    override fun flush() {
+        delegate.flush()
+    }
+
+    override fun close() {
+        flush()
+    }
+}
+
+private class DeletingInputStream(
+    private val delegate: InputStream,
+    private val tempFile: File
+) : InputStream() {
+    override fun read(): Int = delegate.read()
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int = delegate.read(b, off, len)
+
+    override fun close() {
+        try {
+            delegate.close()
+        } finally {
+            tempFile.delete()
+        }
+    }
+}
+private class HmacOutputStream(
+    private val delegate: OutputStream,
+    private val mac: Mac
+) : OutputStream() {
+    override fun write(b: Int) {
+        mac.update(b.toByte())
+        delegate.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        mac.update(b, off, len)
+        delegate.write(b, off, len)
+    }
+
+    override fun flush() {
+        delegate.flush()
+    }
+
+    override fun close() {
+        delegate.close()
+    }
+}
+
+private class FinalizingOutputStream(
+    private val delegate: OutputStream,
+    private val onClose: () -> Unit
+) : OutputStream() {
+    private var closed = false
+
+    override fun write(b: Int) {
+        delegate.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        delegate.write(b, off, len)
+    }
+
+    override fun flush() {
+        delegate.flush()
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        delegate.close()
+        onClose()
     }
 }

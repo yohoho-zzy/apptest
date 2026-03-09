@@ -89,6 +89,7 @@ import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.ui.components.isPrefixGroupingCategory
 import com.example.quotepicker.ui.components.splitTagsByPrefix
 import com.example.quotepicker.vm.CharacterViewModel
+import com.example.quotepicker.vm.ExportFormat
 import com.example.quotepicker.vm.TransferMode
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
@@ -124,6 +125,7 @@ fun CharacterScreen(
     val pagerState = rememberPagerState(pageCount = { 3 })
     val pagerScope = rememberCoroutineScope()
     val context = LocalContext.current
+    var exportFormat by remember { mutableStateOf(ExportFormat.ENCRYPTED) }
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             vm.importSnapshot(uri)
@@ -131,7 +133,7 @@ fun CharacterScreen(
     }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) {
-            vm.exportSnapshot(uri)
+            vm.exportSnapshot(uri, exportFormat)
         }
     }
 
@@ -209,8 +211,17 @@ fun CharacterScreen(
                             TextButton(onClick = { importPicker.launch(arrayOf("application/octet-stream", "application/zip", "application/json")) }) {
                                 Text("导入")
                             }
-                            TextButton(onClick = { exportPicker.launch("quote_backup.backup.dat") }) {
-                                Text("导出")
+                            TextButton(onClick = {
+                                exportFormat = ExportFormat.ENCRYPTED
+                                exportPicker.launch("quote_backup.backup.dat")
+                            }) {
+                                Text("导出(加密)")
+                            }
+                            TextButton(onClick = {
+                                exportFormat = ExportFormat.ZIP
+                                exportPicker.launch("quote_backup.zip")
+                            }) {
+                                Text("导出(zip)")
                             }
                         }
                     }
