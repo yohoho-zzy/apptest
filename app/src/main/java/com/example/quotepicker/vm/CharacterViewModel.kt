@@ -526,7 +526,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun isEncryptedBackup(uri: Uri): Boolean {
         val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: return true
         val lower = name.lowercase()
-        return lower.endsWith(".backup.dat") || lower.endsWith(".dat")
+        return lower.endsWith(".backup.dat")
     }
 
     private fun queryDisplayName(uri: Uri): String? {
