@@ -81,7 +81,7 @@ class Repository private constructor(context: Context) {
         clearManagedMediaDirectories()
         val mediaMapping = restoreMedia(snapshot.media, mediaPayloads)
         val restoredResources = snapshot.resources.map { resource ->
-            when (resource.type) {
+            val patched = when (resource.type) {
                 ResourceType.IMAGE,
                 ResourceType.VIDEO,
                 ResourceType.SOUND -> resource.copy(
@@ -92,6 +92,7 @@ class Repository private constructor(context: Context) {
                 )
                 else -> resource
             }
+            ensureResourceCode(patched)
         }
         responseRecordDao.deleteAll()
         executionSettingsDao.deleteAll()
@@ -180,7 +181,8 @@ class Repository private constructor(context: Context) {
     }
 
     suspend fun addResource(resource: ResourceEntity, tagIds: List<Long>, characterIds: List<Long>): Long {
-        val id = resourceDao.insert(resource)
+        val prepared = ensureResourceCode(resource)
+        val id = resourceDao.insert(prepared)
         updateResourceTags(id, tagIds)
         updateResourceCharacters(id, characterIds)
         return id
@@ -231,12 +233,12 @@ class Repository private constructor(context: Context) {
         )
         val toInsert = seeds.take(minCount - existingCount)
         if (toInsert.isNotEmpty()) {
-            resourceDao.insertAll(toInsert)
+            resourceDao.insertAll(toInsert.map { ensureResourceCode(it) })
         }
     }
 
     suspend fun updateResource(resource: ResourceEntity) =
-        resourceDao.update(resource.copy(updatedAt = System.currentTimeMillis()))
+        resourceDao.update(ensureResourceCode(resource).copy(updatedAt = System.currentTimeMillis()))
 
     suspend fun deleteResource(resource: ResourceEntity) = resourceDao.delete(resource)
 
@@ -258,6 +260,29 @@ class Repository private constructor(context: Context) {
     suspend fun resourceIdsForTags(tagIds: List<Long>) = crossRefDao.resourceIdsForTags(tagIds)
 
 
+
+
+    private suspend fun ensureResourceCode(resource: ResourceEntity): ResourceEntity {
+        if (!resource.resourceCode.isNullOrBlank()) return resource
+        return resource.copy(resourceCode = nextReusableResourceCode(resource.type))
+    }
+
+    private suspend fun nextReusableResourceCode(type: ResourceType): String {
+        val prefix = when (type) {
+            ResourceType.IMAGE -> "i"
+            ResourceType.VIDEO -> "v"
+            ResourceType.SOUND -> "s"
+            ResourceType.TEXT -> "t"
+            ResourceType.SCENE -> "c"
+            ResourceType.FLOW -> "f"
+        }
+        val used = resourceDao.listCodesByType(type).mapNotNull { code ->
+            if (code.startsWith(prefix)) code.removePrefix(prefix).toIntOrNull() else null
+        }.toSet()
+        var candidate = 1
+        while (used.contains(candidate)) candidate++
+        return prefix + candidate.toString().padStart(4, '0')
+    }
     suspend fun addExecutionResource(
         resourceId: Long,
         characterId: Long,

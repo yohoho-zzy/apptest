@@ -130,7 +130,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var filterGroupDialog by remember { mutableStateOf(false) }
     var manageScreen by remember { mutableStateOf(false) }
     var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
-    var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var groupLevel1Selected by remember { mutableStateOf(true) }
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
@@ -144,15 +143,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupKeyword by remember { mutableStateOf("") }
     var groupKeywordDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val target = restoreTarget
-        if (uri != null && target != null) {
-            coroutineScope.launch {
-                vm.restoreMediaToDirectory(target.path, target.type, uri)
-            }
-        }
-        restoreTarget = null
-    }
 
     if (manageScreen) {
         ManageStorageScreen(
@@ -163,8 +153,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             characters = ui.characters,
             onBack = { manageScreen = false },
             onRestore = { item ->
-                restoreTarget = item
-                restorePicker.launch(null)
+                coroutineScope.launch(Dispatchers.IO) { vm.restoreMediaToDefaultDirectory(item.path, item.type) }
             },
             onRefresh = {
                 manageItems = vm.listStoredMedia()
@@ -654,7 +643,7 @@ private fun ManageStorageScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    var actionTarget by remember { mutableStateOf<Pair<StoredMediaItem, String?>?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var selectedType by remember { mutableStateOf(ResourceType.IMAGE) }
     var selectedCharacterId by remember { mutableStateOf<Long?>(null) }
@@ -733,7 +722,9 @@ private fun ManageStorageScreen(
                                 StorageMediaRow(
                                     item = item,
                                     vm = vm,
-                                    onLongPress = { actionTarget = item }
+                                    onLongPress = { pressed ->
+                                        actionTarget = pressed to findResourceCodeByPath(resources, pressed)
+                                    }
                                 )
                             }
                         }
@@ -752,19 +743,21 @@ private fun ManageStorageScreen(
         )
     }
 
-    actionTarget?.let { target ->
+    actionTarget?.let { pair ->
+        val target = pair.first
+        val targetCode = pair.second
         ModalBottomSheet(onDismissRequest = { actionTarget = null }) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(onClick = {
-                    copyFileInfo(target, clipboard, context)
+                    copyResourceCode(targetCode, clipboard, context)
                     actionTarget = null
                 }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("复制文件信息")
+                    Text("复制资源ID")
                 }
                 TextButton(onClick = {
                     actionTarget = null
@@ -978,14 +971,26 @@ private fun buildStoredMediaGroups(
     )
 }
 
-private fun copyFileInfo(
-    item: StoredMediaItem,
+private fun copyResourceCode(
+    code: String?,
     clipboard: androidx.compose.ui.platform.ClipboardManager,
     context: android.content.Context
 ) {
-    val info = encodeResourceFileInfo(item.type, Uri.parse(item.path))
-    clipboard.setText(AnnotatedString(info))
-    Toast.makeText(context, "文件信息已复制", Toast.LENGTH_SHORT).show()
+    if (code.isNullOrBlank()) return
+    clipboard.setText(AnnotatedString(code))
+    Toast.makeText(context, "资源ID已复制", Toast.LENGTH_SHORT).show()
+}
+
+private fun findResourceCodeByPath(resources: List<ResourceWithTagsCharacters>, item: StoredMediaItem): String? {
+    return resources.firstNotNullOfOrNull { res ->
+        val matched = when (item.type) {
+            ResourceType.IMAGE -> parseImageItems(res.resource.contentUriOrPath, res.resource.quoteImageBase64).any { it.path == item.path }
+            ResourceType.VIDEO -> parseVideoItems(res.resource.contentUriOrPath).any { it.path == item.path }
+            ResourceType.SOUND -> parseSoundItems(res.resource.contentUriOrPath).any { it.path == item.path }
+            else -> false
+        }
+        if (matched) res.resource.resourceCode else null
+    }
 }
 
 private sealed class CreateMode {

@@ -614,6 +614,29 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault(false)
     }
 
+
+
+    fun restoreMediaToDefaultDirectory(path: String, type: ResourceType): Boolean {
+        val sourceUri = Uri.parse(path)
+        val sourcePath = sourceUri.path ?: return false
+        val sourceFile = File(sourcePath)
+        if (!sourceFile.exists()) return false
+        val baseDir = File("/111rensheng/zy/file").apply { mkdirs() }
+        val ext = when (type) {
+            ResourceType.IMAGE -> "jpg"
+            ResourceType.VIDEO -> "mp4"
+            ResourceType.SOUND -> "mp3"
+            else -> "dat"
+        }
+        val safeName = sourceFile.nameWithoutExtension.replace(".bat", "", ignoreCase = true)
+        val target = File(baseDir, "${safeName}.${ext}")
+        return runCatching {
+            sourceFile.inputStream().use { input ->
+                target.outputStream().use { out -> input.copyTo(out) }
+            }
+            true
+        }.getOrDefault(false)
+    }
     fun deleteStoredMedia(item: StoredMediaItem): Boolean {
         val uri = Uri.parse(item.path)
         val path = uri.path ?: return false
