@@ -27,43 +27,20 @@ fun encodeResourceFileInfo(type: ResourceType, uri: Uri, resourceId: Long? = nul
 
 fun decodeResourceFileInfo(raw: String): ResourceFileInfo? {
     val trimmed = raw.trim()
-    val codeOnly = Regex("^([ivstcf])\\d{4,}$").find(trimmed)
-    if (codeOnly != null) {
-        val type = when (codeOnly.groupValues[1]) {
-            "i" -> ResourceType.IMAGE
-            "v" -> ResourceType.VIDEO
-            "s" -> ResourceType.SOUND
-            "t" -> ResourceType.TEXT
-            "c" -> ResourceType.SCENE
-            "f" -> ResourceType.FLOW
+    val indexedCode = Regex("^([ivstcf]\\d{4,})\\.(\\d+)$").find(trimmed)
+    if (indexedCode != null) {
+        val code = indexedCode.groupValues[1]
+        val type = when (code.firstOrNull()) {
+            'i' -> ResourceType.IMAGE
+            'v' -> ResourceType.VIDEO
+            's' -> ResourceType.SOUND
+            't' -> ResourceType.TEXT
+            'c' -> ResourceType.SCENE
+            'f' -> ResourceType.FLOW
             else -> return null
         }
-        return ResourceFileInfo(type = type, name = trimmed, resourceId = null)
+        val index = indexedCode.groupValues[2].toLongOrNull()?.takeIf { it > 0 } ?: return null
+        return ResourceFileInfo(type = type, name = code, resourceId = index)
     }
-    val compact = Regex("^([ivstc]),([^,]+?)(?:,(\\d+))?$").find(trimmed)
-    val legacy = Regex("type=([A-Z]+);uri=(.+)").find(trimmed)
-    val (type, encodedValue, resourceId) = when {
-        compact != null -> {
-            val mappedType = when (compact.groupValues[1]) {
-                "i" -> ResourceType.IMAGE
-                "v" -> ResourceType.VIDEO
-                "s" -> ResourceType.SOUND
-                "t" -> ResourceType.TEXT
-                "c" -> ResourceType.SCENE
-                else -> null
-            } ?: return null
-            Triple(mappedType, compact.groupValues[2], compact.groupValues.getOrNull(3)?.toLongOrNull())
-        }
-        legacy != null -> {
-            val legacyType = runCatching { ResourceType.valueOf(legacy.groupValues[1]) }.getOrNull() ?: return null
-            val uri = Uri.parse(Uri.decode(legacy.groupValues[2]))
-            val name = uri.lastPathSegment?.takeIf { it.isNotBlank() }
-                ?: uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                ?: uri.toString()
-            Triple(legacyType, Uri.encode(name), null)
-        }
-        else -> return null
-    }
-    val nameValue = Uri.decode(encodedValue)
-    return ResourceFileInfo(type = type, name = nameValue, resourceId = resourceId)
+    return null
 }

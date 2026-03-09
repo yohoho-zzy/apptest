@@ -376,7 +376,7 @@ fun ResourcePreviewScreen(
                             }
                             ResourceType.VIDEO -> {
                                 if (mediaUris.isNotEmpty()) {
-                                    MediaPreviewPager(uris = mediaUris)
+                                    MediaPreviewPager(uris = mediaUris, resourceCode = liveResource.resource.resourceCode)
                                 } else if (mediaLoadFailed) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text("视频加载失败")
@@ -450,7 +450,7 @@ fun ResourcePreviewScreen(
                                                         ResourceType.IMAGE -> QuoteImagePager(images = item.images)
                                                         ResourceType.VIDEO -> {
                                                             if (item.mediaUris.isNotEmpty()) {
-                                                                MediaPreviewPager(uris = item.mediaUris)
+                                                                MediaPreviewPager(uris = item.mediaUris, resourceCode = null)
                                                             } else if (item.mediaFailed) {
                                                                 Text("视频加载失败")
                                                             } else {
@@ -534,7 +534,7 @@ private fun MediaPreview(uri: Uri, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MediaPreviewPager(uris: List<Uri>) {
+private fun MediaPreviewPager(uris: List<Uri>, resourceCode: String?) {
     val pagerState = rememberPagerState(pageCount = { uris.size })
     var fullScreenUri by remember { mutableStateOf<Uri?>(null) }
     if (fullScreenUri != null) {
@@ -550,8 +550,14 @@ private fun MediaPreviewPager(uris: List<Uri>) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.weight(1f)) {
+                val currentIndex = pagerState.currentPage + 1
+                val currentCode = indexedResourceFileId(resourceCode, pagerState.currentPage)
                 Text(
-                    text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
+                    text = if (currentCode.isNullOrBlank()) {
+                        "视频 $currentIndex/${uris.size}"
+                    } else {
+                        "视频 $currentIndex/${uris.size} $currentCode"
+                    },
                     style = MaterialTheme.typography.labelSmall
                 )
             }
@@ -659,17 +665,21 @@ private fun parseImagePayloadEntries(payload: String): List<ImagePayloadEntry> {
 private fun decodeImageSources(payload: String?, vm: ResourceViewModel, resourceCode: String?): List<ImagePreviewItem> {
     if (payload.isNullOrBlank()) return emptyList()
     val items = parseImagePayloadEntries(payload)
-    return items.mapNotNull { entry ->
+    return items.mapIndexedNotNull { index, entry ->
         decodeImageSource(entry.image, vm)?.let { bitmap ->
-            val fileCode = runCatching { encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(entry.image)) }.getOrNull()
             ImagePreviewItem(
                 bitmap = bitmap,
                 motionVideoUri = entry.motionVideo?.let(Uri::parse),
-                resourceCode = fileCode ?: resourceCode,
+                resourceCode = indexedResourceFileId(resourceCode, index),
                 sizeMbText = formatSizeMb(entry.image)
             )
         }
     }
+}
+
+private fun indexedResourceFileId(resourceCode: String?, index: Int): String? {
+    if (resourceCode.isNullOrBlank() || index < 0) return null
+    return "$resourceCode.${index + 1}"
 }
 
 private fun decodeImageSource(item: String, vm: ResourceViewModel): android.graphics.Bitmap? {
@@ -1235,6 +1245,7 @@ private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel, resourceC
             }
         }
     }.getOrElse { listOf(payload) }
-    return base64List.mapNotNull { vm.decodeBase64ToBitmap(it) }
-        .map { ImagePreviewItem(it, resourceCode = resourceCode) }
+    return base64List.mapIndexedNotNull { index, item ->
+        vm.decodeBase64ToBitmap(item)?.let { ImagePreviewItem(it, resourceCode = indexedResourceFileId(resourceCode, index)) }
+    }
 }
