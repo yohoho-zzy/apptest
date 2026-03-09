@@ -278,7 +278,7 @@ fun ResourcePreviewScreen(
                                 val quoteText = liveResource.resource.quoteText.orEmpty()
                                 val isMagicDrama = liveResource.resource.title.contains("魔剧")
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
-                                var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("1000") }
+                                var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var enableSpeech by remember(liveResource.resource.id) { mutableStateOf(true) }
                                 var speechRateInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
