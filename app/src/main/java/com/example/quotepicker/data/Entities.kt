@@ -99,6 +99,7 @@ data class ResourceEntity(
     val quoteText: String? = null,
     val quoteImageBase64: String? = null,
     val sceneJson: String? = null,
+    val resourceCode: String? = null,
     val markState: ResourceMarkState = ResourceMarkState.NONE,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()

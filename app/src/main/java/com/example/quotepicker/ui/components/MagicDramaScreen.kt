@@ -61,6 +61,7 @@ import java.util.Locale
 
 data class MagicDramaSettings(
     val defaultDelayMs: Long = 1000L,
+    val imageIntervalMs: Long = 3000L,
     val enableSpeech: Boolean = true,
     val speechRate: Float = 1.0f,
     val speechPitch: Float = 1.0f
@@ -69,10 +70,8 @@ data class MagicDramaSettings(
 private sealed interface DramaCommand {
     data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
     data class RoleLine(val roleKey: String, val text: String, val delayMs: Long) : DramaCommand
-    data class ShowVideo(val source: String) : DramaCommand
-    data class ShowImage(val source: String) : DramaCommand
-    data class ShowImageGroup(val source: String) : DramaCommand
-    data class ShowVideoGroup(val source: String) : DramaCommand
+    data class ShowResource(val source: String) : DramaCommand
+    data class ShowResourceGroup(val source: String) : DramaCommand
     data class ShowButtons(val options: List<DramaButtonOption>) : DramaCommand
     data class Countdown(val seconds: Int) : DramaCommand
 }
@@ -85,10 +84,8 @@ private sealed interface DramaMessage {
 }
 
 private sealed interface DramaMedia {
-    data class Image(val source: String) : DramaMedia
-    data class Video(val source: String) : DramaMedia
-    data class ImageGroup(val source: String) : DramaMedia
-    data class VideoGroup(val source: String) : DramaMedia
+    data class Resource(val source: String) : DramaMedia
+    data class ResourceGroup(val source: String) : DramaMedia
 }
 
 @Composable
@@ -163,10 +160,8 @@ fun MagicDramaScreen(
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
-                is DramaCommand.ShowImage -> currentMedia = DramaMedia.Image(cmd.source)
-                is DramaCommand.ShowVideo -> currentMedia = DramaMedia.Video(cmd.source)
-                is DramaCommand.ShowImageGroup -> currentMedia = DramaMedia.ImageGroup(cmd.source)
-                is DramaCommand.ShowVideoGroup -> currentMedia = DramaMedia.VideoGroup(cmd.source)
+                is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
+                is DramaCommand.ShowResourceGroup -> currentMedia = DramaMedia.ResourceGroup(cmd.source)
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
                     countdownJob = coroutineScope.launch {
@@ -208,7 +203,7 @@ fun MagicDramaScreen(
                     .fillMaxWidth()
                     .background(Color(0xFFE8EEFF))
             ) {
-                DramaMediaArea(media = currentMedia, vm = vm)
+                DramaMediaArea(media = currentMedia, vm = vm, settings = settings)
                 countdownSeconds?.let { left ->
                     Box(
                         modifier = Modifier
@@ -383,10 +378,8 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = true)
         }
-        key in setOf("视频", "视频切换", "切换视频") -> DramaCommand.ShowVideo(value)
-        key in setOf("图片", "图片切换", "切换图片") -> DramaCommand.ShowImage(value)
-        key in setOf("图片组", "轮播图片") -> DramaCommand.ShowImageGroup(value)
-        key in setOf("视频组", "轮播视频") -> DramaCommand.ShowVideoGroup(value)
+        key in setOf("资源", "视频", "图片", "视频切换", "图片切换", "切换视频", "切换图片") -> DramaCommand.ShowResource(value)
+        key in setOf("资源组", "图片组", "视频组", "轮播图片", "轮播视频") -> DramaCommand.ShowResourceGroup(value)
         key == "按钮" -> {
             val options = value.split("-")
                 .mapNotNull { item ->
@@ -446,76 +439,49 @@ private fun decodeImageSource(source: String, vm: ResourceViewModel): android.gr
 }
 
 @Composable
-private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel) {
+private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel, settings: MagicDramaSettings) {
     when (media) {
-        is DramaMedia.Image -> {
-            val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
-            if (bitmap != null) {
-                androidx.compose.foundation.Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "资源图片",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
+        is DramaMedia.Resource -> {
+            val uri = remember(media.source, vm.allResources.value) { vm.resolveMediaUriByCodeOrPath(media.source) }
+            val isVideo = uri != null && vm.isVideoUri(uri)
+            if (uri == null) {
+                val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
+                if (bitmap != null) {
+                    androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                }
+            } else if (isVideo) {
+                LoopVideo(uri = uri)
+            } else {
+                val bitmap = remember(uri) { vm.decodeUriToBitmap(uri) }
+                if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
             }
         }
-        is DramaMedia.Video -> {
-            val resolved = remember(media.source, vm.allResources.value) {
-                decodeResourceFileInfo(media.source)?.takeIf { it.type == ResourceType.VIDEO }
-                    ?.let { vm.resolveMediaUri(ResourceType.VIDEO, it.name, it.resourceId) }
-                    ?: Uri.parse(media.source)
-            }
-            LoopVideo(uri = resolved)
-        }
-        is DramaMedia.ImageGroup -> ImageCarousel(source = media.source, vm = vm)
-        is DramaMedia.VideoGroup -> VideoCarousel(source = media.source, vm = vm)
+        is DramaMedia.ResourceGroup -> ResourceCarousel(source = media.source, vm = vm, intervalMs = settings.imageIntervalMs)
         null -> Box(modifier = Modifier.fillMaxSize())
     }
 }
 
 @Composable
-private fun ImageCarousel(source: String, vm: ResourceViewModel) {
-    val imageSources = remember(source, vm.allResources.value) {
-        parseMediaGroupSource(source, ResourceType.IMAGE, vm)
-    }
+private fun ResourceCarousel(source: String, vm: ResourceViewModel, intervalMs: Long) {
+    val items = remember(source, vm.allResources.value) { vm.resolveMixedGroupSources(source) }
     var index by remember(source) { mutableStateOf(0) }
-    val current = imageSources.getOrNull(index)
-    LaunchedEffect(imageSources) { index = 0 }
-    LaunchedEffect(imageSources, index) {
-        if (imageSources.size > 1) {
-            delay(2500)
-            index = (index + 1) % imageSources.size
+    val current = items.getOrNull(index)
+    LaunchedEffect(items) { index = 0 }
+    LaunchedEffect(items, index, intervalMs) {
+        if (items.size > 1 && current?.type == ResourceType.IMAGE) {
+            delay(intervalMs.coerceIn(300L, 10000L))
+            index = (index + 1) % items.size
         }
     }
-    val bitmap = remember(current) { current?.let { decodeImageSource(it, vm) } }
-    if (bitmap != null) {
-        androidx.compose.foundation.Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "资源图片组",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
+    when (current?.type) {
+        ResourceType.VIDEO -> LoopVideo(uri = Uri.parse(current.path), onCompleted = {
+            if (items.size > 1) index = (index + 1) % items.size
+        })
+        ResourceType.IMAGE -> {
+            val bitmap = remember(current.path) { vm.decodeUriToBitmap(Uri.parse(current.path)) }
+            if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片组", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        }
+        else -> Unit
     }
 }
 
-@Composable
-private fun VideoCarousel(source: String, vm: ResourceViewModel) {
-    val videoSources = remember(source, vm.allResources.value) {
-        parseMediaGroupSource(source, ResourceType.VIDEO, vm)
-    }
-    var index by remember(source) { mutableStateOf(0) }
-    val current = videoSources.getOrNull(index)
-    LaunchedEffect(videoSources) { index = 0 }
-    LoopVideo(
-        uri = Uri.parse(current.orEmpty()),
-        onCompleted = {
-            if (videoSources.size > 1) {
-                index = (index + 1) % videoSources.size
-            }
-        }
-    )
-}
-
-private fun parseMediaGroupSource(source: String, type: ResourceType, vm: ResourceViewModel): List<String> {
-    return vm.resolveMediaGroupSources(type, source)
-}

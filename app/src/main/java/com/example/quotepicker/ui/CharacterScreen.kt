@@ -95,6 +95,7 @@ import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.launch
 import android.widget.Toast
 import java.util.Locale
+import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -126,16 +127,7 @@ fun CharacterScreen(
     val pagerScope = rememberCoroutineScope()
     val context = LocalContext.current
     var exportFormat by remember { mutableStateOf(ExportFormat.ENCRYPTED) }
-    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            vm.importSnapshot(uri)
-        }
-    }
-    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri != null) {
-            vm.exportSnapshot(uri, exportFormat)
-        }
-    }
+    var importDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedId) {
         selectedTagIds = emptySet()
@@ -192,6 +184,30 @@ fun CharacterScreen(
         )
     }
 
+
+    if (importDialog) {
+        val files = remember { File("/111rensheng/zy/sys").apply { mkdirs() }.listFiles()?.sortedByDescending { it.lastModified() }?.toList().orEmpty() }
+        AlertDialog(
+            onDismissRequest = { importDialog = false },
+            title = { Text("选择导入文件(/111rensheng/zy/sys)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (files.isEmpty()) {
+                        Text("目录下暂无文件")
+                    } else {
+                        files.take(20).forEach { file ->
+                            TextButton(onClick = {
+                                importDialog = false
+                                vm.importSnapshot(Uri.fromFile(file))
+                            }) { Text(file.name) }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { importDialog = false }) { Text("关闭") } }
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier,
@@ -208,18 +224,22 @@ fun CharacterScreen(
                 actions = {
                     if (selected == null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { importPicker.launch(arrayOf("application/octet-stream", "application/zip", "application/json")) }) {
+                            TextButton(onClick = { importDialog = true }) {
                                 Text("导入")
                             }
                             TextButton(onClick = {
                                 exportFormat = ExportFormat.ENCRYPTED
-                                exportPicker.launch("quote.backup.dat")
+                                val dir = File("/111rensheng/zy/sys").apply { mkdirs() }
+                                vm.exportSnapshot(Uri.fromFile(File(dir, "quote.backup.dat")), exportFormat)
+                                Toast.makeText(context, "已导出到/111rensheng/zy/sys", Toast.LENGTH_SHORT).show()
                             }) {
                                 Text("导出※")
                             }
                             TextButton(onClick = {
                                 exportFormat = ExportFormat.ZIP
-                                exportPicker.launch("quote.bin")
+                                val dir = File("/111rensheng/zy/sys").apply { mkdirs() }
+                                vm.exportSnapshot(Uri.fromFile(File(dir, "quote.bin")), exportFormat)
+                                Toast.makeText(context, "已导出到/111rensheng/zy/sys", Toast.LENGTH_SHORT).show()
                             }) {
                                 Text("导出包")
                             }

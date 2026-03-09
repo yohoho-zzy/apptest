@@ -83,7 +83,9 @@ private data class SceneMessage(val speaker: String, val content: String)
 
 private data class ImagePreviewItem(
     val bitmap: android.graphics.Bitmap,
-    val motionVideoUri: Uri? = null
+    val motionVideoUri: Uri? = null,
+    val resourceCode: String? = null,
+    val sizeMbText: String = "0.0M"
 )
 
 private data class FlowPreviewItem(
@@ -130,9 +132,9 @@ fun ResourcePreviewScreen(
         mediaLoadFailed = false
         flowItems = emptyList()
         if (res.type == ResourceType.IMAGE) {
-            quoteImages = decodeImageSources(res.contentUriOrPath ?: res.quoteImageBase64, vm)
+            quoteImages = decodeImageSources(res.contentUriOrPath ?: res.quoteImageBase64, vm, res.resourceCode)
         } else if (res.type == ResourceType.TEXT) {
-            quoteImages = decodeQuoteImages(res.quoteImageBase64, vm)
+            quoteImages = decodeQuoteImages(res.quoteImageBase64, vm, res.resourceCode)
         } else if (res.type == ResourceType.FLOW) {
             flowItems = parseFlowItems(res.sceneJson.orEmpty(), vm, allResources)
         }
@@ -275,6 +277,7 @@ fun ResourcePreviewScreen(
                                 val isMagicDrama = liveResource.resource.title.contains("魔剧")
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("1000") }
+                                var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var enableSpeech by remember(liveResource.resource.id) { mutableStateOf(true) }
                                 var speechRateInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
                                 var speechPitchInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
@@ -285,6 +288,7 @@ fun ResourcePreviewScreen(
                                         boundCharacters = liveResource.characters,
                                         settings = MagicDramaSettings(
                                             defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
+                                            imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L,
                                             enableSpeech = enableSpeech,
                                             speechRate = speechRateInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f,
                                             speechPitch = speechPitchInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
@@ -322,6 +326,13 @@ fun ResourcePreviewScreen(
                                             onValueChange = { defaultDelayInput = it },
                                             singleLine = true,
                                             label = { Text("文本默认停留毫秒(300-10000)") },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = imageIntervalInput,
+                                            onValueChange = { imageIntervalInput = it },
+                                            singleLine = true,
+                                            label = { Text("图片轮播毫秒(300-10000)") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         if (enableSpeech) {
@@ -556,6 +567,15 @@ private data class ImagePayloadEntry(
     val motionVideo: String? = null
 )
 
+private fun formatSizeMb(path: String): String {
+    val size = runCatching {
+        val uri = Uri.parse(path)
+        val file = uri.path?.let(::java.io.File)
+        file?.takeIf { it.exists() }?.length() ?: 0L
+    }.getOrDefault(0L)
+    return String.format(java.util.Locale.US, "%.1fM", size.toDouble() / (1024 * 1024))
+}
+
 private fun parseMediaPaths(raw: String): List<String> {
     val trimmed = raw.trim()
     if (trimmed.startsWith("[")) {
@@ -635,12 +655,12 @@ private fun parseImagePayloadEntries(payload: String): List<ImagePayloadEntry> {
     }
 }
 
-private fun decodeImageSources(payload: String?, vm: ResourceViewModel): List<ImagePreviewItem> {
+private fun decodeImageSources(payload: String?, vm: ResourceViewModel, resourceCode: String?): List<ImagePreviewItem> {
     if (payload.isNullOrBlank()) return emptyList()
     val items = parseImagePayloadEntries(payload)
     return items.mapNotNull { entry ->
         decodeImageSource(entry.image, vm)?.let { bitmap ->
-            ImagePreviewItem(bitmap = bitmap, motionVideoUri = entry.motionVideo?.let(Uri::parse))
+            ImagePreviewItem(bitmap = bitmap, motionVideoUri = entry.motionVideo?.let(Uri::parse), resourceCode = resourceCode, sizeMbText = formatSizeMb(entry.image))
         }
     }
 }
@@ -869,14 +889,14 @@ private suspend fun parseFlowItems(
                                         val motion = entry.optString("motionVideo")
                                         if (image.isNotBlank()) {
                                             decodeImageSource(image, vm)?.let {
-                                                add(ImagePreviewItem(it, motion.ifBlank { null }?.let(Uri::parse)))
+                                                add(ImagePreviewItem(it, motion.ifBlank { null }?.let(Uri::parse), sizeMbText = formatSizeMb(image)))
                                             }
                                         }
                                     }
                                     else -> {
                                         val item = entry.toString()
                                         if (item.isNotBlank()) {
-                                            decodeImageSource(item, vm)?.let { add(ImagePreviewItem(it)) }
+                                            decodeImageSource(item, vm)?.let { add(ImagePreviewItem(it, sizeMbText = formatSizeMb(item))) }
                                         }
                                     }
                                 }
@@ -1040,8 +1060,9 @@ private fun QuoteImagePager(images: List<ImagePreviewItem>) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val current = images[pagerState.currentPage]
             Text(
-                text = "${pagerState.currentPage + 1}/${images.size}",
+                text = "${pagerState.currentPage + 1}/${images.size} ${current.resourceCode.orEmpty()} (${current.sizeMbText})",
                 style = MaterialTheme.typography.labelSmall
             )
             val motionUri = images[pagerState.currentPage].motionVideoUri
@@ -1192,7 +1213,7 @@ private fun FullScreenVideoDialog(uri: Uri, onDismiss: () -> Unit) {
     }
 }
 
-private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<ImagePreviewItem> {
+private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel, resourceCode: String?): List<ImagePreviewItem> {
     if (payload.isNullOrBlank()) return emptyList()
     val base64List = runCatching {
         val array = JSONArray(payload)
@@ -1204,5 +1225,5 @@ private fun decodeQuoteImages(payload: String?, vm: ResourceViewModel): List<Ima
         }
     }.getOrElse { listOf(payload) }
     return base64List.mapNotNull { vm.decodeBase64ToBitmap(it) }
-        .map { ImagePreviewItem(it) }
+        .map { ImagePreviewItem(it, resourceCode = resourceCode) }
 }

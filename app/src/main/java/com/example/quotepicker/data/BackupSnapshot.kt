@@ -100,6 +100,7 @@ private fun resourceToJson(resource: ResourceEntity): JSONObject =
         .put("quoteText", resource.quoteText)
         .put("quoteImageBase64", resource.quoteImageBase64)
         .put("sceneJson", resource.sceneJson)
+        .put("resourceCode", resource.resourceCode)
         .put("createdAt", resource.createdAt)
         .put("updatedAt", resource.updatedAt)
 
@@ -199,6 +200,7 @@ private fun resourceFromJson(obj: JSONObject): ResourceEntity =
         quoteText = readNullableString(obj, "quoteText"),
         quoteImageBase64 = readNullableString(obj, "quoteImageBase64"),
         sceneJson = readNullableString(obj, "sceneJson"),
+        resourceCode = readNullableString(obj, "resourceCode"),
         createdAt = obj.getLong("createdAt"),
         updatedAt = obj.getLong("updatedAt")
     )

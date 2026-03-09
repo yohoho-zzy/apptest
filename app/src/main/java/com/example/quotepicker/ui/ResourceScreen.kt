@@ -130,7 +130,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var filterGroupDialog by remember { mutableStateOf(false) }
     var manageScreen by remember { mutableStateOf(false) }
     var manageItems by remember { mutableStateOf<List<StoredMediaItem>>(emptyList()) }
-    var restoreTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var groupLevel1Selected by remember { mutableStateOf(true) }
     var groupLevel2Selected by remember { mutableStateOf(false) }
     var groupLevel3Selected by remember { mutableStateOf(false) }
@@ -144,15 +143,6 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
     var groupKeyword by remember { mutableStateOf("") }
     var groupKeywordDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val target = restoreTarget
-        if (uri != null && target != null) {
-            coroutineScope.launch {
-                vm.restoreMediaToDirectory(target.path, target.type, uri)
-            }
-        }
-        restoreTarget = null
-    }
 
     if (manageScreen) {
         ManageStorageScreen(
@@ -163,8 +153,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
             characters = ui.characters,
             onBack = { manageScreen = false },
             onRestore = { item ->
-                restoreTarget = item
-                restorePicker.launch(null)
+                coroutineScope.launch(Dispatchers.IO) { vm.restoreMediaToDefaultDirectory(item.path, item.type) }
             },
             onRefresh = {
                 manageItems = vm.listStoredMedia()
@@ -654,7 +643,7 @@ private fun ManageStorageScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var actionTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
+    var actionTarget by remember { mutableStateOf<Pair<StoredMediaItem, String?>?>(null) }
     var deleteTarget by remember { mutableStateOf<StoredMediaItem?>(null) }
     var selectedType by remember { mutableStateOf(ResourceType.IMAGE) }
     var selectedCharacterId by remember { mutableStateOf<Long?>(null) }
@@ -733,7 +722,9 @@ private fun ManageStorageScreen(
                                 StorageMediaRow(
                                     item = item,
                                     vm = vm,
-                                    onLongPress = { actionTarget = item }
+                                    onLongPress = { pressed ->
+                                        actionTarget = pressed to findResourceCodeByPath(resources, pressed)
+                                    }
                                 )
                             }
                         }
@@ -752,19 +743,21 @@ private fun ManageStorageScreen(
         )
     }
 
-    actionTarget?.let { target ->
+    actionTarget?.let { pair ->
+        val target = pair.first
+        val targetCode = pair.second
         ModalBottomSheet(onDismissRequest = { actionTarget = null }) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(onClick = {
-                    copyFileInfo(target, clipboard, context)
+                    copyResourceCode(targetCode, clipboard, context)
                     actionTarget = null
                 }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("复制文件信息")
+                    Text("复制资源ID")
                 }
                 TextButton(onClick = {
                     actionTarget = null
@@ -978,14 +971,26 @@ private fun buildStoredMediaGroups(
     )
 }
 
-private fun copyFileInfo(
-    item: StoredMediaItem,
+private fun copyResourceCode(
+    code: String?,
     clipboard: androidx.compose.ui.platform.ClipboardManager,
     context: android.content.Context
 ) {
-    val info = encodeResourceFileInfo(item.type, Uri.parse(item.path))
-    clipboard.setText(AnnotatedString(info))
-    Toast.makeText(context, "文件信息已复制", Toast.LENGTH_SHORT).show()
+    if (code.isNullOrBlank()) return
+    clipboard.setText(AnnotatedString(code))
+    Toast.makeText(context, "资源ID已复制", Toast.LENGTH_SHORT).show()
+}
+
+private fun findResourceCodeByPath(resources: List<ResourceWithTagsCharacters>, item: StoredMediaItem): String? {
+    return resources.firstNotNullOfOrNull { res ->
+        val matched = when (item.type) {
+            ResourceType.IMAGE -> parseImageItems(res.resource.contentUriOrPath, res.resource.quoteImageBase64).any { it.path == item.path }
+            ResourceType.VIDEO -> parseVideoItems(res.resource.contentUriOrPath).any { it.path == item.path }
+            ResourceType.SOUND -> parseSoundItems(res.resource.contentUriOrPath).any { it.path == item.path }
+            else -> false
+        }
+        if (matched) res.resource.resourceCode else null
+    }
 }
 
 private sealed class CreateMode {
@@ -2347,7 +2352,7 @@ private fun ResourceEditScreen(
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     Text(
-                                        text = "图片 ${index + 1}",
+                                        text = item.path?.let { resource.resource.resourceCode ?: "图片" } ?: "新图片 ${index + 1}",
                                         modifier = Modifier.weight(1f)
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2429,7 +2434,7 @@ private fun ResourceEditScreen(
                                         }
                                     }
                                     Spacer(Modifier.width(12.dp))
-                                    val label = item.path?.let { "视频 ${index + 1}" } ?: "新视频 ${index + 1}"
+                                    val label = item.path?.let { resource.resource.resourceCode ?: "视频" } ?: "新视频 ${index + 1}"
                                     Text(text = label, modifier = Modifier.weight(1f))
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
@@ -3442,13 +3447,13 @@ private fun buildMagicDramaDefaultScript(
     return buildString {
         appendLine("+旁白:魔剧自动样例开始，包含所有常用case。-1200")
         appendLine("+重要:[[注意,提示]]：你可以直接编辑这些行。-1200")
-        imageSource?.let { appendLine("+图片:$it") }
+        imageSource?.let { appendLine("+资源:$it") }
         appendLine("+$roleA:收到，我先展示图片。nn如果你看到这句说明角色台词正常。-1600")
-        videoSource?.let { appendLine("+视频:$it") }
+        videoSource?.let { appendLine("+资源:$it") }
         appendLine("+$roleB:现在切到视频，准备倒计时。-1600")
-        imageGroupSource?.let { appendLine("+图片组:$it") }
+        imageGroupSource?.let { appendLine("+资源组:$it") }
         appendLine("+$roleA:这里是图片组轮播。-1200")
-        videoGroupSource?.let { appendLine("+视频组:$it") }
+        videoGroupSource?.let { appendLine("+资源组:$it") }
         appendLine("+$roleB:这里是视频组轮播。-1200")
         appendLine("+倒计时:5")
         appendLine("+按钮:继续%go-结束%end")
@@ -3464,7 +3469,7 @@ private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
@@ -3473,19 +3478,19 @@ private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): S
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {

@@ -112,6 +112,13 @@ interface ResourceDao {
     @Query("SELECT * FROM resources ORDER BY createdAt DESC")
     suspend fun listAll(): List<ResourceEntity>
 
+
+    @Query("SELECT resourceCode FROM resources WHERE type = :type AND resourceCode IS NOT NULL")
+    suspend fun listCodesByType(type: ResourceType): List<String>
+
+    @Query("SELECT * FROM resources WHERE resourceCode = :code LIMIT 1")
+    suspend fun findByCode(code: String): ResourceEntity?
+
     @Insert
     suspend fun insert(resource: ResourceEntity): Long
 
