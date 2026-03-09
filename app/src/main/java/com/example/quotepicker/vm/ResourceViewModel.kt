@@ -664,7 +664,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val sourcePath = sourceUri.path ?: return false
         val sourceFile = File(sourcePath)
         if (!sourceFile.exists()) return false
-        val baseDir = File("/111rensheng/zy/file").apply { mkdirs() }
+        val baseDir = File("/storage/emulated/0/111rensheng/zy/file").apply { mkdirs() }
         val originalExt = sourceFile.extension.lowercase()
         val ext = if (originalExt.isBlank() || originalExt == "bat") {
             when (type) {
