@@ -50,6 +50,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.CharacterEntity
+import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -70,6 +71,8 @@ private sealed interface DramaCommand {
     data class RoleLine(val roleKey: String, val text: String, val delayMs: Long) : DramaCommand
     data class ShowVideo(val source: String) : DramaCommand
     data class ShowImage(val source: String) : DramaCommand
+    data class ShowImageGroup(val source: String) : DramaCommand
+    data class ShowVideoGroup(val source: String) : DramaCommand
     data class ShowButtons(val options: List<DramaButtonOption>) : DramaCommand
     data class Countdown(val seconds: Int) : DramaCommand
 }
@@ -84,6 +87,8 @@ private sealed interface DramaMessage {
 private sealed interface DramaMedia {
     data class Image(val source: String) : DramaMedia
     data class Video(val source: String) : DramaMedia
+    data class ImageGroup(val source: String) : DramaMedia
+    data class VideoGroup(val source: String) : DramaMedia
 }
 
 @Composable
@@ -160,6 +165,8 @@ fun MagicDramaScreen(
                 }
                 is DramaCommand.ShowImage -> currentMedia = DramaMedia.Image(cmd.source)
                 is DramaCommand.ShowVideo -> currentMedia = DramaMedia.Video(cmd.source)
+                is DramaCommand.ShowImageGroup -> currentMedia = DramaMedia.ImageGroup(cmd.source)
+                is DramaCommand.ShowVideoGroup -> currentMedia = DramaMedia.VideoGroup(cmd.source)
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
                     countdownJob = coroutineScope.launch {
@@ -271,26 +278,7 @@ private suspend fun launchCountdown(total: Int, onTick: (Int?) -> Unit) {
 }
 
 @Composable
-private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel) {
-    when (media) {
-        is DramaMedia.Image -> {
-            val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
-            if (bitmap != null) {
-                androidx.compose.foundation.Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "资源图片",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
-        is DramaMedia.Video -> LoopVideo(uri = Uri.parse(media.source))
-        null -> Box(modifier = Modifier.fillMaxSize())
-    }
-}
-
-@Composable
-private fun LoopVideo(uri: Uri) {
+private fun LoopVideo(uri: Uri, onCompleted: (() -> Unit)? = null) {
     val holder = remember { mutableStateOf<VideoView?>(null) }
     DisposableEffect(Unit) {
         onDispose { holder.value?.stopPlayback() }
@@ -300,7 +288,9 @@ private fun LoopVideo(uri: Uri) {
             VideoView(context).apply {
                 setVideoURI(uri)
                 setOnPreparedListener { it.start() }
-                setOnCompletionListener { it.start() }
+                setOnCompletionListener {
+                    if (onCompleted != null) onCompleted() else it.start()
+                }
                 holder.value = this
             }
         },
@@ -395,6 +385,8 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
         }
         key in setOf("视频", "视频切换", "切换视频") -> DramaCommand.ShowVideo(value)
         key in setOf("图片", "图片切换", "切换图片") -> DramaCommand.ShowImage(value)
+        key in setOf("图片组", "轮播图片") -> DramaCommand.ShowImageGroup(value)
+        key in setOf("视频组", "轮播视频") -> DramaCommand.ShowVideoGroup(value)
         key == "按钮" -> {
             val options = value.split("-")
                 .mapNotNull { item ->
@@ -445,4 +437,72 @@ private fun decodeImageSource(source: String, vm: ResourceViewModel): android.gr
     }
     val uri = Uri.parse(trimmed)
     return if (uri.scheme != null) vm.decodeUriToBitmap(uri) else vm.decodeBase64ToBitmap(trimmed)
+}
+
+@Composable
+private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel) {
+    when (media) {
+        is DramaMedia.Image -> {
+            val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "资源图片",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+        is DramaMedia.Video -> LoopVideo(uri = Uri.parse(media.source))
+        is DramaMedia.ImageGroup -> ImageCarousel(source = media.source, vm = vm)
+        is DramaMedia.VideoGroup -> VideoCarousel(source = media.source, vm = vm)
+        null -> Box(modifier = Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun ImageCarousel(source: String, vm: ResourceViewModel) {
+    val imageSources = remember(source, vm.allResources.value) {
+        parseMediaGroupSource(source, ResourceType.IMAGE, vm)
+    }
+    var index by remember(source) { mutableStateOf(0) }
+    val current = imageSources.getOrNull(index)
+    LaunchedEffect(imageSources) { index = 0 }
+    LaunchedEffect(imageSources, index) {
+        if (imageSources.size > 1) {
+            delay(2500)
+            index = (index + 1) % imageSources.size
+        }
+    }
+    val bitmap = remember(current) { current?.let { decodeImageSource(it, vm) } }
+    if (bitmap != null) {
+        androidx.compose.foundation.Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "资源图片组",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
+    }
+}
+
+@Composable
+private fun VideoCarousel(source: String, vm: ResourceViewModel) {
+    val videoSources = remember(source, vm.allResources.value) {
+        parseMediaGroupSource(source, ResourceType.VIDEO, vm)
+    }
+    var index by remember(source) { mutableStateOf(0) }
+    val current = videoSources.getOrNull(index)
+    LaunchedEffect(videoSources) { index = 0 }
+    LoopVideo(
+        uri = Uri.parse(current.orEmpty()),
+        onCompleted = {
+            if (videoSources.size > 1) {
+                index = (index + 1) % videoSources.size
+            }
+        }
+    )
+}
+
+private fun parseMediaGroupSource(source: String, type: ResourceType, vm: ResourceViewModel): List<String> {
+    return vm.resolveMediaGroupSources(type, source)
 }

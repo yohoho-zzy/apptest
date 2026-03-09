@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class ResourceFilterState(
     val selectedType: ResourceType? = null,
@@ -150,6 +152,60 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateMarkStateFilter(state: ResourceMarkState?) {
         filters.value = filters.value.copy(selectedMarkState = state)
+    }
+
+    fun resolveMediaGroupSources(type: ResourceType, source: String): List<String> {
+        val candidate = source.trim()
+        if (candidate.isBlank()) return emptyList()
+        val resources = allResources.value.map { it.resource }
+        resources.firstOrNull { resource ->
+            resource.type == type && extractResourceMediaSources(resource).any { it == candidate }
+        }?.let { matched ->
+            val items = extractResourceMediaSources(matched)
+            if (items.isNotEmpty()) return items
+        }
+        return listOf(candidate)
+    }
+
+    private fun extractResourceMediaSources(resource: ResourceEntity): List<String> {
+        return when (resource.type) {
+            ResourceType.IMAGE -> parseImageSourceList(resource.contentUriOrPath, resource.quoteImageBase64)
+            ResourceType.VIDEO, ResourceType.SOUND -> parseSimplePathList(resource.contentUriOrPath)
+            else -> emptyList()
+        }
+    }
+
+    private fun parseSimplePathList(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val trimmed = raw.trim()
+        if (!trimmed.startsWith("[")) return listOf(trimmed)
+        return runCatching {
+            val array = JSONArray(trimmed)
+            List(array.length()) { idx -> array.optString(idx) }.filter { it.isNotBlank() }
+        }.getOrElse { listOf(trimmed) }
+    }
+
+    private fun parseImageSourceList(pathPayload: String?, base64Payload: String?): List<String> {
+        val payload = pathPayload?.takeIf { it.isNotBlank() } ?: base64Payload
+        if (payload.isNullOrBlank()) return emptyList()
+        val trimmed = payload.trim()
+        return when {
+            trimmed.startsWith("[") -> runCatching {
+                val array = JSONArray(trimmed)
+                buildList {
+                    for (i in 0 until array.length()) {
+                        when (val entry = array.get(i)) {
+                            is JSONObject -> entry.optString("image").takeIf { it.isNotBlank() }?.let(::add)
+                            else -> entry.toString().takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }
+            }.getOrElse { listOf(payload) }
+            trimmed.startsWith("{") -> runCatching {
+                JSONObject(trimmed).optString("image").takeIf { it.isNotBlank() }?.let(::listOf) ?: emptyList()
+            }.getOrElse { listOf(payload) }
+            else -> listOf(payload)
+        }
     }
 
     fun moveResourceToGroup(resource: ResourceEntity, newTitle: String, newCreatedAt: Long) =
