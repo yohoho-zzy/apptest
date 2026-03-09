@@ -393,8 +393,8 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = true)
         }
-        key == "视频" -> DramaCommand.ShowVideo(value)
-        key == "图片" -> DramaCommand.ShowImage(value)
+        key in setOf("视频", "视频切换", "切换视频") -> DramaCommand.ShowVideo(value)
+        key in setOf("图片", "图片切换", "切换图片") -> DramaCommand.ShowImage(value)
         key == "按钮" -> {
             val options = value.split("-")
                 .mapNotNull { item ->
@@ -403,7 +403,7 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
                 }
             if (options.isNotEmpty()) DramaCommand.ShowButtons(options) else null
         }
-        key == "倒数" -> value.toIntOrNull()?.let { DramaCommand.Countdown(it) }
+        key in setOf("倒数", "倒计时", "计时") -> value.toIntOrNull()?.let { DramaCommand.Countdown(it) }
         else -> {
             val (text, delay) = parseDelayText(value)
             DramaCommand.RoleLine(roleKey = key, text = text, delayMs = delay)
