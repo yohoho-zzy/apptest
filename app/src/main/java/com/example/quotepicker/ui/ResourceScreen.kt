@@ -3460,26 +3460,32 @@ private fun buildMagicDramaDefaultScript(
 
 private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
     val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource ?: return null
-    val sources = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
-        .mapNotNull { it.path ?: it.base64 }
-    return sources.firstOrNull()
+    val source = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
+        .mapNotNull { it.path }
+        .firstOrNull()
+        ?: return null
+    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
-    val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource
-    return parseImageItems(imageResource?.contentUriOrPath, imageResource?.quoteImageBase64)
+    val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource ?: return null
+    val source = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
+        .mapNotNull { it.path }
         .firstOrNull()
-        ?.let { it.path ?: it.base64 }
+        ?: return null
+    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
-    val videoPayload = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource?.contentUriOrPath
-    return parseVideoItems(videoPayload).firstOrNull()?.path
+    val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
+    val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
+    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
-    val videoPayload = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource?.contentUriOrPath
-    return parseVideoItems(videoPayload).firstOrNull()?.path
+    val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
+    val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
+    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {
