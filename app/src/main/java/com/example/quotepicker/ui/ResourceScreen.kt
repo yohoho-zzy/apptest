@@ -1657,6 +1657,7 @@ private fun ResourceCreateScreen(
 ) {
     var title by remember(mode, initialTitle) { mutableStateOf(initialTitle) }
     var textContent by remember { mutableStateOf("") }
+    var magicScriptAutoFilled by remember(mode) { mutableStateOf(false) }
     var description by remember { mutableStateOf("") }
     var sceneMessages by remember { mutableStateOf<List<SceneMessageDraft>>(emptyList()) }
     var flowItems by remember { mutableStateOf<List<FlowUpdateItem>>(emptyList()) }
@@ -1735,6 +1736,21 @@ private fun ResourceCreateScreen(
     val flowResources = remember(availableResources) {
         availableResources.filter { it.resource.type != ResourceType.FLOW }
     }
+    val magicDramaDefaultScript = remember(availableResources, characters) {
+        buildMagicDramaDefaultScript(availableResources, characters)
+    }
+
+    LaunchedEffect(mode, title) {
+        if (
+            mode == CreateMode.Text &&
+            title.contains("魔剧") &&
+            !magicScriptAutoFilled &&
+            textContent.isBlank()
+        ) {
+            textContent = magicDramaDefaultScript
+            magicScriptAutoFilled = true
+        }
+    }
 
     LaunchedEffect(availableResources) {
         if (mode == CreateMode.Flow) {
@@ -1809,7 +1825,12 @@ private fun ResourceCreateScreen(
         ) {
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = {
+                    title = it
+                    if (mode == CreateMode.Text && !it.contains("魔剧")) {
+                        magicScriptAutoFilled = false
+                    }
+                },
                 label = { Text(titleLabel) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -3404,6 +3425,43 @@ private fun FlowStepDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+
+private fun buildMagicDramaDefaultScript(
+    availableResources: List<ResourceWithTagsCharacters>,
+    characters: List<CharacterEntity>
+): String {
+    val roleA = characters.getOrNull(0)?.name ?: "角色A"
+    val roleB = characters.getOrNull(1)?.name ?: "角色B"
+    val imageSource = pickFirstImageSource(availableResources)
+    val videoSource = pickFirstVideoSource(availableResources)
+
+    return buildString {
+        appendLine("+旁白:魔剧自动样例开始，包含所有常用case。-1200")
+        appendLine("+重要:[[注意,提示]]：你可以直接编辑这些行。-1200")
+        imageSource?.let { appendLine("+图片:$it") }
+        appendLine("+$roleA:收到，我先展示图片。nn如果你看到这句说明角色台词正常。-1600")
+        videoSource?.let { appendLine("+视频:$it") }
+        appendLine("+$roleB:现在切到视频，准备倒计时。-1600")
+        appendLine("+倒计时:5")
+        appendLine("+按钮:继续%go-结束%end")
+        appendLine("+%go:旁白:你选择了继续分支。-1000")
+        appendLine("+%go:$roleA:继续剧情测试通过。-1200")
+        appendLine("+%end:旁白:你选择了结束分支，魔剧测试完成。-1000")
+    }.trim()
+}
+
+private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
+    val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource
+    return parseImageItems(imageResource?.contentUriOrPath, imageResource?.quoteImageBase64)
+        .firstOrNull()
+        ?.let { it.path ?: it.base64 }
+}
+
+private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
+    val videoPayload = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource?.contentUriOrPath
+    return parseVideoItems(videoPayload).firstOrNull()?.path
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {
