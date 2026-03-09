@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import java.io.IOException
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.security.SecureRandom
@@ -148,7 +149,9 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             _transferState.update { it.copy(totalBytes = totalBytes) }
-            resolver.openOutputStream(uri)?.use { output ->
+            val exportOutput = resolver.openOutputStream(uri)
+                ?: throw IOException("Unable to open output stream for export uri: $uri")
+            exportOutput.use { output ->
                 val countingOutput = CountingOutputStream(output) { bytesWritten ->
                     outputBytes = bytesWritten
                     updateProgress()
@@ -357,8 +360,10 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun readEntryBytes(zip: ZipInputStream, buffer: ByteArray): ByteArray {
         val output = ByteArrayOutputStream()
         var read = zip.read(buffer)
-        while (read > 0) {
-            output.write(buffer, 0, read)
+        while (read >= 0) {
+            if (read > 0) {
+                output.write(buffer, 0, read)
+            }
             read = zip.read(buffer)
         }
         return output.toByteArray()
@@ -367,8 +372,10 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun readEntryToFile(zip: ZipInputStream, target: File, buffer: ByteArray) {
         target.outputStream().use { output ->
             var read = zip.read(buffer)
-            while (read > 0) {
-                output.write(buffer, 0, read)
+            while (read >= 0) {
+                if (read > 0) {
+                    output.write(buffer, 0, read)
+                }
                 read = zip.read(buffer)
             }
         }
@@ -383,8 +390,10 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var read = input.read(buffer)
-        while (read > 0) {
-            output.write(buffer, 0, read)
+        while (read >= 0) {
+            if (read > 0) {
+                output.write(buffer, 0, read)
+            }
             read = input.read(buffer)
         }
         return output.toByteArray()
@@ -393,9 +402,11 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun writeStreamChunked(input: InputStream, output: OutputStream, onChunk: (Int) -> Unit) {
         val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
         var read = input.read(buffer)
-        while (read > 0) {
-            output.write(buffer, 0, read)
-            onChunk(read)
+        while (read >= 0) {
+            if (read > 0) {
+                output.write(buffer, 0, read)
+                onChunk(read)
+            }
             read = input.read(buffer)
         }
     }
@@ -414,10 +425,14 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                 zip.closeEntry()
                 mediaSources.forEach { source ->
                     val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
-                    stream.use { input ->
-                        zip.putNextEntry(ZipEntry("media/${source.fileName}"))
-                        writeStreamChunked(input, zip, onChunkWritten)
-                        zip.closeEntry()
+                    runCatching {
+                        stream.use { input ->
+                            zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                            writeStreamChunked(input, zip, onChunkWritten)
+                            zip.closeEntry()
+                        }
+                    }.onFailure {
+                        runCatching { zip.closeEntry() }
                     }
                 }
             }
