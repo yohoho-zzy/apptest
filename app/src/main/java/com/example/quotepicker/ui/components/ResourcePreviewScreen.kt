@@ -78,6 +78,8 @@ import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.ResourceViewModel
 import org.json.JSONArray
+import java.io.File
+import java.util.Locale
 
 private data class SceneMessage(val speaker: String, val content: String)
 
@@ -570,10 +572,11 @@ private data class ImagePayloadEntry(
 private fun formatSizeMb(path: String): String {
     val size = runCatching {
         val uri = Uri.parse(path)
-        val file = uri.path?.let(::java.io.File)
+        val file = uri.path?.let { File(it) }
         file?.takeIf { it.exists() }?.length() ?: 0L
     }.getOrDefault(0L)
-    return String.format(java.util.Locale.US, "%.1fM", size.toDouble() / (1024 * 1024))
+
+    return String.format(Locale.US, "%.1fM", size.toDouble() / (1024 * 1024))
 }
 
 private fun parseMediaPaths(raw: String): List<String> {
@@ -947,7 +950,7 @@ private suspend fun flowPreviewItemFromResource(
         ResourceType.IMAGE -> FlowPreviewItem(
             type = data.type,
             title = data.title,
-            images = decodeImageSources(data.contentUriOrPath ?: data.quoteImageBase64, vm)
+            images = decodeImageSources(data.contentUriOrPath ?: data.quoteImageBase64, vm, data.resourceCode)
         )
         ResourceType.VIDEO -> {
             val raw = data.contentUriOrPath

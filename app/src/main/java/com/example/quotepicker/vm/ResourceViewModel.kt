@@ -193,8 +193,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun resolveMixedGroupSources(source: String): List<ResolvedMediaItem> {
-        val ids = source.split(",", "，", " ", "
-", "	").map { it.trim() }.filter { it.isNotBlank() }
+        val ids = source.split("&").map { it.trim() }.filter { it.isNotBlank() }
         val resources = allResources.value.map { it.resource }
         if (ids.isEmpty()) return emptyList()
         if (ids.size == 1) {
