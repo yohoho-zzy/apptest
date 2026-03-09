@@ -2,6 +2,7 @@ package com.example.quotepicker.vm
 
 import android.app.Application
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.BackupSnapshot
@@ -28,7 +29,6 @@ import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +60,11 @@ data class TransferState(
 enum class TransferMode {
     IMPORT,
     EXPORT
+}
+
+enum class ExportFormat {
+    ENCRYPTED,
+    ZIP
 }
 
 class CharacterViewModel(app: Application) : AndroidViewModel(app) {
@@ -112,7 +117,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateExecutionSettings(current.copy(remainingValue = current.remainingValue - 1))
     }
 
-    fun exportSnapshot(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+    fun exportSnapshot(uri: Uri, format: ExportFormat) = viewModelScope.launch(Dispatchers.IO) {
         _transferState.update {
             it.copy(
                 inProgress = true,
@@ -158,15 +163,26 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     outputBytes = bytesWritten
                     updateProgress()
                 }
-                writeEncryptedZipBackup(
-                    output = countingOutput,
-                    snapshotBytes = snapshotBytes,
-                    mediaSources = exportPackage.mediaSources,
-                    onChunkWritten = { written ->
-                        processedBytes += written
-                        updateProgress()
-                    }
-                )
+                when (format) {
+                    ExportFormat.ENCRYPTED -> writeEncryptedZipBackup(
+                        output = countingOutput,
+                        snapshotBytes = snapshotBytes,
+                        mediaSources = exportPackage.mediaSources,
+                        onChunkWritten = { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                    )
+                    ExportFormat.ZIP -> writePlainZipBackup(
+                        output = countingOutput,
+                        snapshotBytes = snapshotBytes,
+                        mediaSources = exportPackage.mediaSources,
+                        onChunkWritten = { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                    )
+                }
             }
             updateProgress(force = true)
         } catch (t: Throwable) {
@@ -226,8 +242,8 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     processedBytes = bytesRead
                     updateProgress()
                 }
-                val payloadInput = openDecodedBackupInput(countingInput)
-                val (detectedInput, isZip) = detectZipInput(payloadInput)
+                val backupInput = openBackupInput(uri, countingInput)
+                val (detectedInput, isZip) = detectZipInput(backupInput)
                 if (isZip) {
                     ZipInputStream(detectedInput).use { zip ->
                         var entry = zip.nextEntry
@@ -282,11 +298,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val BACKUP_JSON_NAME = "backup.json"
         val BACKUP_MAGIC = byteArrayOf('B'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), '1'.code.toByte())
-        const val BACKUP_VERSION_GCM: Byte = 1
-        const val BACKUP_VERSION_CTR_HMAC: Byte = 2
-        const val BACKUP_VERSION: Byte = BACKUP_VERSION_CTR_HMAC
-        const val GCM_TAG_BITS = 128
-        const val GCM_IV_LENGTH = 12
+        const val BACKUP_VERSION: Byte = 2
         const val CTR_IV_LENGTH = 16
         const val HMAC_SHA256_LENGTH = 32
         const val ZIP_MAGIC_P: Byte = 0x50
@@ -448,6 +460,31 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+    private fun writePlainZipBackup(
+        output: OutputStream,
+        snapshotBytes: ByteArray,
+        mediaSources: List<Repository.MediaExportSource>,
+        onChunkWritten: (Int) -> Unit
+    ) {
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+            writeChunked(zip, snapshotBytes, onChunkWritten)
+            zip.closeEntry()
+            mediaSources.forEach { source ->
+                val stream = repo.openMediaStream(source.originalPath)
+                    ?: throw IOException("Failed to open media stream: ${source.originalPath}")
+                stream.use { input ->
+                    zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                    try {
+                        writeStreamChunked(input, zip, onChunkWritten)
+                    } finally {
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
+    }
+
     private fun openEncryptedBackupOutput(output: OutputStream): OutputStream {
         val iv = ByteArray(CTR_IV_LENGTH)
         SecureRandom().nextBytes(iv)
@@ -457,7 +494,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
 
         val mac = createHmac()
         val macOutput = HmacOutputStream(output, mac)
-        val cipher = createCipher(Cipher.ENCRYPT_MODE, iv, BACKUP_VERSION_CTR_HMAC)
+        val cipher = createCipher(Cipher.ENCRYPT_MODE, iv)
         val nonClosingMacOutput = NonClosingOutputStream(macOutput)
         return FinalizingOutputStream(CipherOutputStream(nonClosingMacOutput, cipher)) {
             output.write(mac.doFinal())
@@ -467,16 +504,9 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun createCipher(mode: Int, iv: ByteArray, version: Byte): Cipher {
         val key = SecretKeySpec(BACKUP_AES_KEY, "AES")
-        val cipher = when (version) {
-            BACKUP_VERSION_GCM -> Cipher.getInstance("AES/GCM/NoPadding")
-            BACKUP_VERSION_CTR_HMAC -> Cipher.getInstance("AES/CTR/NoPadding")
-            else -> throw IllegalArgumentException("Unsupported cipher version: $version")
+        return Cipher.getInstance("AES/CTR/NoPadding").apply {
+            init(mode, key, IvParameterSpec(iv))
         }
-        when (version) {
-            BACKUP_VERSION_GCM -> cipher.init(mode, key, GCMParameterSpec(GCM_TAG_BITS, iv))
-            BACKUP_VERSION_CTR_HMAC -> cipher.init(mode, key, IvParameterSpec(iv))
-        }
-        return cipher
     }
 
     private fun createHmac(): Mac {
@@ -485,60 +515,74 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         return mac
     }
 
-    private fun openDecodedBackupInput(input: InputStream): InputStream {
+    private fun openBackupInput(uri: Uri, input: InputStream): InputStream {
+        return if (isEncryptedBackup(uri)) {
+            openEncryptedBackupInput(input)
+        } else {
+            input
+        }
+    }
+
+    private fun isEncryptedBackup(uri: Uri): Boolean {
+        val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: return true
+        val lower = name.lowercase()
+        return lower.endsWith(".backup.dat") || lower.endsWith(".dat")
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        val resolver = getApplication<Application>().contentResolver
+        return resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+        }
+    }
+
+    private fun openEncryptedBackupInput(input: InputStream): InputStream {
         val prefixLength = BACKUP_MAGIC.size + 1
         val pushback = PushbackInputStream(input, prefixLength)
         val prefix = ByteArray(prefixLength)
         val read = pushback.read(prefix)
-        if (read < 0) return pushback
-        val actual = prefix.copyOf(read)
-        pushback.unread(actual)
-        if (read < prefixLength) return pushback
-        if (!actual.copyOf(BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) return pushback
-        val version = actual[BACKUP_MAGIC.size]
-        require(version == BACKUP_VERSION_GCM || version == BACKUP_VERSION_CTR_HMAC) {
-            "Unsupported backup version: $version"
+        require(read == prefixLength) { "Invalid encrypted backup header" }
+        if (!prefix.copyOf(BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) {
+            throw IllegalArgumentException("Invalid encrypted backup magic")
         }
+        val version = prefix[BACKUP_MAGIC.size]
+        require(version == BACKUP_VERSION) { "Unsupported backup version: $version" }
 
-        val ivLength = if (version == BACKUP_VERSION_GCM) GCM_IV_LENGTH else CTR_IV_LENGTH
-        val iv = ByteArray(ivLength)
+        val iv = ByteArray(CTR_IV_LENGTH)
         var offset = 0
-        while (offset < ivLength) {
-            val count = pushback.read(iv, offset, ivLength - offset)
+        while (offset < iv.size) {
+            val count = pushback.read(iv, offset, iv.size - offset)
             require(count > 0) { "Invalid encrypted backup header" }
             offset += count
         }
 
-        return if (version == BACKUP_VERSION_GCM) {
-            CipherInputStream(pushback, createCipher(Cipher.DECRYPT_MODE, iv, version))
-        } else {
-            val tempCipherFile = File.createTempFile("backup_cipher_", ".bin", getApplication<Application>().cacheDir)
-            val mac = createHmac()
-            val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
-            var pendingTail = ByteArray(0)
-            tempCipherFile.outputStream().use { cipherOutput ->
-                while (true) {
-                    val count = pushback.read(buffer)
-                    if (count < 0) break
-                    val combined = ByteArray(pendingTail.size + count)
-                    pendingTail.copyInto(combined, 0)
-                    buffer.copyInto(combined, pendingTail.size, endIndex = count)
-                    if (combined.size <= HMAC_SHA256_LENGTH) {
-                        pendingTail = combined
-                    } else {
-                        val cipherLength = combined.size - HMAC_SHA256_LENGTH
-                        cipherOutput.write(combined, 0, cipherLength)
-                        mac.update(combined, 0, cipherLength)
-                        pendingTail = combined.copyOfRange(cipherLength, combined.size)
-                    }
+        val tempCipherFile = File.createTempFile("backup_cipher_", ".bin", getApplication<Application>().cacheDir)
+        val mac = createHmac()
+        val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
+        var pendingTail = ByteArray(0)
+        tempCipherFile.outputStream().use { cipherOutput ->
+            while (true) {
+                val count = pushback.read(buffer)
+                if (count < 0) break
+                val combined = ByteArray(pendingTail.size + count)
+                pendingTail.copyInto(combined, 0)
+                buffer.copyInto(combined, pendingTail.size, endIndex = count)
+                if (combined.size <= HMAC_SHA256_LENGTH) {
+                    pendingTail = combined
+                } else {
+                    val cipherLength = combined.size - HMAC_SHA256_LENGTH
+                    cipherOutput.write(combined, 0, cipherLength)
+                    mac.update(combined, 0, cipherLength)
+                    pendingTail = combined.copyOfRange(cipherLength, combined.size)
                 }
             }
-            require(pendingTail.size == HMAC_SHA256_LENGTH) { "Encrypted backup is truncated" }
-            val computedHmac = mac.doFinal()
-            require(MessageDigest.isEqual(pendingTail, computedHmac)) { "Encrypted backup integrity check failed" }
-            val cipherStream = CipherInputStream(tempCipherFile.inputStream(), createCipher(Cipher.DECRYPT_MODE, iv, version))
-            DeletingInputStream(cipherStream, tempCipherFile)
         }
+        require(pendingTail.size == HMAC_SHA256_LENGTH) { "Encrypted backup is truncated" }
+        val computedHmac = mac.doFinal()
+        require(MessageDigest.isEqual(pendingTail, computedHmac)) { "Encrypted backup integrity check failed" }
+        val cipherStream = CipherInputStream(tempCipherFile.inputStream(), createCipher(Cipher.DECRYPT_MODE, iv))
+        return DeletingInputStream(cipherStream, tempCipherFile)
     }
 
     private fun detectZipInput(input: InputStream): Pair<InputStream, Boolean> {
