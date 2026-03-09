@@ -21,6 +21,7 @@ import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.data.CharacterEntity
 import com.example.quotepicker.util.ImageCompression
+import com.example.quotepicker.util.StoragePaths
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -664,7 +665,7 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val sourcePath = sourceUri.path ?: return false
         val sourceFile = File(sourcePath)
         if (!sourceFile.exists()) return false
-        val baseDir = File("/storage/emulated/0/111rensheng/zy/file").apply { mkdirs() }
+        val baseDir = StoragePaths.fileDir().apply { mkdirs() }
         val originalExt = sourceFile.extension.lowercase()
         val ext = if (originalExt.isBlank() || originalExt == "bat") {
             when (type) {

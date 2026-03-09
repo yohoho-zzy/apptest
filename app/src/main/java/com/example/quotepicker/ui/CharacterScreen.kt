@@ -97,6 +97,7 @@ import kotlinx.coroutines.launch
 import android.widget.Toast
 import java.util.Locale
 import java.io.File
+import com.example.quotepicker.util.StoragePaths
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -187,10 +188,10 @@ fun CharacterScreen(
 
 
     if (importDialog) {
-        val files = remember { File("/storage/emulated/0/111rensheng/zy/sys").apply { mkdirs() }.listFiles()?.sortedByDescending { it.lastModified() }?.toList().orEmpty() }
+        val files = remember { StoragePaths.sysDir().apply { mkdirs() }.listFiles()?.sortedByDescending { it.lastModified() }?.toList().orEmpty() }
         AlertDialog(
             onDismissRequest = { importDialog = false },
-            title = { Text("选择导入文件(/storage/emulated/0/111rensheng/zy/sys)") },
+            title = { Text("选择导入文件(${StoragePaths.sysDir().absolutePath})") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (files.isEmpty()) {
@@ -230,17 +231,17 @@ fun CharacterScreen(
                             }
                             TextButton(onClick = {
                                 exportFormat = ExportFormat.ENCRYPTED
-                                val dir = File("/storage/emulated/0/111rensheng/zy/sys").apply { mkdirs() }
+                                val dir = StoragePaths.sysDir().apply { mkdirs() }
                                 vm.exportSnapshot(Uri.fromFile(File(dir, "quote.backup.dat")), exportFormat)
-                                Toast.makeText(context, "已导出到/storage/emulated/0/111rensheng/zy/sys", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已导出到${StoragePaths.sysDir().absolutePath}", Toast.LENGTH_SHORT).show()
                             }) {
                                 Text("导出※")
                             }
                             TextButton(onClick = {
                                 exportFormat = ExportFormat.ZIP
-                                val dir = File("/storage/emulated/0/111rensheng/zy/sys").apply { mkdirs() }
+                                val dir = StoragePaths.sysDir().apply { mkdirs() }
                                 vm.exportSnapshot(Uri.fromFile(File(dir, "quote.bin")), exportFormat)
-                                Toast.makeText(context, "已导出到/storage/emulated/0/111rensheng/zy/sys", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已导出到${StoragePaths.sysDir().absolutePath}", Toast.LENGTH_SHORT).show()
                             }) {
                                 Text("导出包")
                             }
