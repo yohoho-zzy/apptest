@@ -71,7 +71,6 @@ private sealed interface DramaCommand {
     data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
     data class RoleLine(val roleKey: String, val text: String, val delayMs: Long) : DramaCommand
     data class ShowResource(val source: String) : DramaCommand
-    data class ShowResourceGroup(val source: String) : DramaCommand
     data class ShowButtons(val options: List<DramaButtonOption>) : DramaCommand
     data class Countdown(val seconds: Int) : DramaCommand
 }
@@ -85,7 +84,6 @@ private sealed interface DramaMessage {
 
 private sealed interface DramaMedia {
     data class Resource(val source: String) : DramaMedia
-    data class ResourceGroup(val source: String) : DramaMedia
 }
 
 @Composable
@@ -161,7 +159,6 @@ fun MagicDramaScreen(
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
                 is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
-                is DramaCommand.ShowResourceGroup -> currentMedia = DramaMedia.ResourceGroup(cmd.source)
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
                     countdownJob = coroutineScope.launch {
@@ -378,8 +375,7 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = true)
         }
-        key in setOf("资源", "视频", "图片", "视频切换", "图片切换", "切换视频", "切换图片") -> DramaCommand.ShowResource(value)
-        key in setOf("资源组", "图片组", "视频组", "轮播图片", "轮播视频") -> DramaCommand.ShowResourceGroup(value)
+        key in setOf("资源", "资源组", "视频", "图片", "视频切换", "图片切换", "切换视频", "切换图片", "图片组", "视频组", "轮播图片", "轮播视频") -> DramaCommand.ShowResource(value)
         key == "按钮" -> {
             val options = value.split("-")
                 .mapNotNull { item ->
@@ -442,21 +438,25 @@ private fun decodeImageSource(source: String, vm: ResourceViewModel): android.gr
 private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel, settings: MagicDramaSettings) {
     when (media) {
         is DramaMedia.Resource -> {
-            val uri = remember(media.source, vm.allResources.value) { vm.resolveMediaUriByCodeOrPath(media.source) }
-            val isVideo = uri != null && vm.isVideoUri(uri)
-            if (uri == null) {
-                val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
-                if (bitmap != null) {
-                    androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                }
-            } else if (isVideo) {
-                LoopVideo(uri = uri)
+            val playlist = remember(media.source, vm.allResources.value) { vm.resolveMixedGroupSources(media.source) }
+            if (playlist.size > 1) {
+                ResourceCarousel(source = media.source, vm = vm, intervalMs = settings.imageIntervalMs)
             } else {
-                val bitmap = remember(uri) { vm.decodeUriToBitmap(uri) }
-                if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                val uri = remember(media.source, vm.allResources.value) { vm.resolveMediaUriByCodeOrPath(media.source) }
+                val isVideo = uri != null && vm.isVideoUri(uri)
+                if (uri == null) {
+                    val bitmap = remember(media.source) { decodeImageSource(media.source, vm) }
+                    if (bitmap != null) {
+                        androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    }
+                } else if (isVideo) {
+                    LoopVideo(uri = uri)
+                } else {
+                    val bitmap = remember(uri) { vm.decodeUriToBitmap(uri) }
+                    if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "资源图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                }
             }
         }
-        is DramaMedia.ResourceGroup -> ResourceCarousel(source = media.source, vm = vm, intervalMs = settings.imageIntervalMs)
         null -> Box(modifier = Modifier.fillMaxSize())
     }
 }
@@ -484,4 +484,3 @@ private fun ResourceCarousel(source: String, vm: ResourceViewModel, intervalMs: 
         else -> Unit
     }
 }
-

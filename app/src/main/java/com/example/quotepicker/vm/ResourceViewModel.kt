@@ -165,8 +165,17 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val resources = allResources.value.map { it.resource }
             .filter { it.type == type }
             .filter { resourceId == null || it.id == resourceId }
+        parseIndexedResourceRef(targetName)?.let { ref ->
+            resources.firstOrNull { it.resourceCode.equals(ref.resourceCode, ignoreCase = true) }?.let { matchedResource ->
+                val items = extractResourceMediaSources(matchedResource)
+                val selected = ref.itemIndex?.let { idx -> items.getOrNull(idx - 1) } ?: items.firstOrNull()
+                if (!selected.isNullOrBlank()) return Uri.parse(selected)
+            }
+        }
         resources.firstOrNull { it.resourceCode.equals(targetName, ignoreCase = true) }?.let { matchedResource ->
-            extractResourceMediaSources(matchedResource).firstOrNull()?.let { return Uri.parse(it) }
+            val items = extractResourceMediaSources(matchedResource)
+            val selected = resourceId?.toInt()?.takeIf { it > 0 }?.let { idx -> items.getOrNull(idx - 1) } ?: items.firstOrNull()
+            if (!selected.isNullOrBlank()) return Uri.parse(selected)
         }
         resources.forEach { resource ->
             val matched = extractResourceMediaSources(resource).firstOrNull { source ->
@@ -185,28 +194,28 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun resolveMediaUriByCodeOrPath(codeOrPath: String): Uri? {
         val value = codeOrPath.trim()
         if (value.isBlank()) return null
-        val byCode = allResources.value.map { it.resource }
-            .firstOrNull { it.resourceCode.equals(value, ignoreCase = true) }
-            ?.let { extractResourceMediaSources(it).firstOrNull() }
-        if (!byCode.isNullOrBlank()) return Uri.parse(byCode)
-        val parsed = runCatching { Uri.parse(value) }.getOrNull()
-        return parsed?.takeIf { it.scheme != null }
+        val resources = allResources.value.map { it.resource }
+        val ref = parseIndexedResourceRef(value) ?: return null
+        val matched = resources.firstOrNull { it.resourceCode.equals(ref.resourceCode, ignoreCase = true) } ?: return null
+        val items = extractResourceMediaSources(matched)
+        val target = ref.itemIndex?.let { idx -> items.getOrNull(idx - 1) } ?: items.firstOrNull()
+        return target?.let(Uri::parse)
     }
 
     fun resolveMixedGroupSources(source: String): List<ResolvedMediaItem> {
-        val ids = source.split("&").map { it.trim() }.filter { it.isNotBlank() }
+        val ids = source.split(',', '&').map { it.trim() }.filter { it.isNotBlank() }
         val resources = allResources.value.map { it.resource }
         if (ids.isEmpty()) return emptyList()
-        if (ids.size == 1) {
-            val one = resources.firstOrNull { it.resourceCode.equals(ids.first(), ignoreCase = true) }
-            if (one != null) {
-                return extractResourceMediaSources(one).map { ResolvedMediaItem(it, one.type) }
-            }
-        }
         val result = mutableListOf<ResolvedMediaItem>()
-        ids.forEach { code ->
-            val res = resources.firstOrNull { it.resourceCode.equals(code, ignoreCase = true) } ?: return@forEach
-            extractResourceMediaSources(res).forEach { path -> result += ResolvedMediaItem(path, res.type) }
+        ids.forEach { raw ->
+            val ref = parseIndexedResourceRef(raw) ?: return@forEach
+            val res = resources.firstOrNull { it.resourceCode.equals(ref.resourceCode, ignoreCase = true) } ?: return@forEach
+            val items = extractResourceMediaSources(res)
+            if (ref.itemIndex != null) {
+                items.getOrNull(ref.itemIndex - 1)?.let { path -> result += ResolvedMediaItem(path, res.type) }
+            } else {
+                items.forEach { path -> result += ResolvedMediaItem(path, res.type) }
+            }
         }
         return result
     }
@@ -220,6 +229,18 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         if (candidate.isBlank()) return emptyList()
         val resources = allResources.value.map { it.resource }
 
+        parseIndexedResourceRef(candidate)?.let { ref ->
+            val matched = resources.firstOrNull { it.type == type && it.resourceCode.equals(ref.resourceCode, ignoreCase = true) }
+            if (matched != null) {
+                val items = extractResourceMediaSources(matched)
+                if (ref.itemIndex != null) {
+                    items.getOrNull(ref.itemIndex - 1)?.let { return listOf(it) }
+                } else if (items.isNotEmpty()) {
+                    return items
+                }
+            }
+        }
+
         parseCompactMediaRef(candidate)?.let { ref ->
             if (ref.type == type) {
                 val matchedByRef = resources.firstOrNull { resource ->
@@ -227,7 +248,6 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (matchedByRef != null) {
                     val items = extractResourceMediaSources(matchedByRef)
-                    if (ref.resourceId != null) return items
                     val single = items.firstOrNull { path ->
                         val uri = Uri.parse(path)
                         val pathName = uri.lastPathSegment?.takeIf { it.isNotBlank() }
@@ -249,6 +269,15 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private data class CompactMediaRef(val type: ResourceType, val name: String, val resourceId: Long?)
+    private data class IndexedResourceRef(val resourceCode: String, val itemIndex: Int?)
+
+    private fun parseIndexedResourceRef(raw: String): IndexedResourceRef? {
+        val match = Regex("^([ivstcf]\\d{4,})(?:\\.(\\d+))?$").find(raw.trim()) ?: return null
+        val code = match.groupValues[1]
+        val itemIndex = match.groupValues.getOrNull(2)?.toIntOrNull()
+        if (itemIndex != null && itemIndex <= 0) return null
+        return IndexedResourceRef(resourceCode = code, itemIndex = itemIndex)
+    }
 
     private fun parseCompactMediaRef(raw: String): CompactMediaRef? {
         val match = Regex("^([ivstc]),([^,]+?)(?:,(\\d+))?$").find(raw.trim()) ?: return null
