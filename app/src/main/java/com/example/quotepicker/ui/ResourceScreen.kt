@@ -3435,7 +3435,9 @@ private fun buildMagicDramaDefaultScript(
     val roleA = characters.getOrNull(0)?.name ?: "角色A"
     val roleB = characters.getOrNull(1)?.name ?: "角色B"
     val imageSource = pickFirstImageSource(availableResources)
+    val imageGroupSource = pickFirstImageGroupSource(availableResources)
     val videoSource = pickFirstVideoSource(availableResources)
+    val videoGroupSource = pickFirstVideoGroupSource(availableResources)
 
     return buildString {
         appendLine("+旁白:魔剧自动样例开始，包含所有常用case。-1200")
@@ -3444,12 +3446,23 @@ private fun buildMagicDramaDefaultScript(
         appendLine("+$roleA:收到，我先展示图片。nn如果你看到这句说明角色台词正常。-1600")
         videoSource?.let { appendLine("+视频:$it") }
         appendLine("+$roleB:现在切到视频，准备倒计时。-1600")
+        imageGroupSource?.let { appendLine("+图片组:$it") }
+        appendLine("+$roleA:这里是图片组轮播。-1200")
+        videoGroupSource?.let { appendLine("+视频组:$it") }
+        appendLine("+$roleB:这里是视频组轮播。-1200")
         appendLine("+倒计时:5")
         appendLine("+按钮:继续%go-结束%end")
         appendLine("+%go:旁白:你选择了继续分支。-1000")
         appendLine("+%go:$roleA:继续剧情测试通过。-1200")
         appendLine("+%end:旁白:你选择了结束分支，魔剧测试完成。-1000")
     }.trim()
+}
+
+private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
+    val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource ?: return null
+    val sources = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
+        .mapNotNull { it.path ?: it.base64 }
+    return sources.firstOrNull()
 }
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
@@ -3460,6 +3473,11 @@ private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): S
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
+    val videoPayload = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource?.contentUriOrPath
+    return parseVideoItems(videoPayload).firstOrNull()?.path
+}
+
+private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoPayload = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource?.contentUriOrPath
     return parseVideoItems(videoPayload).firstOrNull()?.path
 }
