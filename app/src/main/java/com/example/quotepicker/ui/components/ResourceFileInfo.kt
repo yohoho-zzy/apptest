@@ -15,6 +15,7 @@ fun encodeResourceFileInfo(type: ResourceType, uri: Uri): String {
         ResourceType.SOUND -> "s"
         ResourceType.TEXT -> "t"
         ResourceType.SCENE -> "c"
+        else -> {""}
     }
     val encodedUri = Uri.encode(uri.toString())
     return "$typeCode,$encodedUri"

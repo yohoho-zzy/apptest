@@ -502,7 +502,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun createCipher(mode: Int, iv: ByteArray, version: Byte): Cipher {
+    private fun createCipher(mode: Int, iv: ByteArray): Cipher {
         val key = SecretKeySpec(BACKUP_AES_KEY, "AES")
         return Cipher.getInstance("AES/CTR/NoPadding").apply {
             init(mode, key, IvParameterSpec(iv))
@@ -526,7 +526,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun isEncryptedBackup(uri: Uri): Boolean {
         val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: return true
         val lower = name.lowercase()
-        return lower.endsWith(".backup.dat")
+        return lower.endsWith(".backup.bin")
     }
 
     private fun queryDisplayName(uri: Uri): String? {

@@ -215,13 +215,13 @@ fun CharacterScreen(
                                 exportFormat = ExportFormat.ENCRYPTED
                                 exportPicker.launch("quote.backup.dat")
                             }) {
-                                Text("导出(加密)")
+                                Text("导出※")
                             }
                             TextButton(onClick = {
                                 exportFormat = ExportFormat.ZIP
                                 exportPicker.launch("quote.bin")
                             }) {
-                                Text("导出(.bin)")
+                                Text("导出包")
                             }
                         }
                     }
