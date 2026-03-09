@@ -435,6 +435,12 @@ private fun decodeImageSource(source: String, vm: ResourceViewModel): android.gr
             (0 until arr.length()).firstNotNullOfOrNull { idx -> decodeImageSource(arr.get(idx).toString(), vm) }
         }.getOrNull()
     }
+    decodeResourceFileInfo(trimmed)?.let { ref ->
+        if (ref.type == ResourceType.IMAGE) {
+            val uri = vm.resolveMediaUri(ResourceType.IMAGE, ref.name, ref.resourceId)
+            if (uri != null) return vm.decodeUriToBitmap(uri)
+        }
+    }
     val uri = Uri.parse(trimmed)
     return if (uri.scheme != null) vm.decodeUriToBitmap(uri) else vm.decodeBase64ToBitmap(trimmed)
 }
@@ -453,7 +459,14 @@ private fun DramaMediaArea(media: DramaMedia?, vm: ResourceViewModel) {
                 )
             }
         }
-        is DramaMedia.Video -> LoopVideo(uri = Uri.parse(media.source))
+        is DramaMedia.Video -> {
+            val resolved = remember(media.source, vm.allResources.value) {
+                decodeResourceFileInfo(media.source)?.takeIf { it.type == ResourceType.VIDEO }
+                    ?.let { vm.resolveMediaUri(ResourceType.VIDEO, it.name, it.resourceId) }
+                    ?: Uri.parse(media.source)
+            }
+            LoopVideo(uri = resolved)
+        }
         is DramaMedia.ImageGroup -> ImageCarousel(source = media.source, vm = vm)
         is DramaMedia.VideoGroup -> VideoCarousel(source = media.source, vm = vm)
         null -> Box(modifier = Modifier.fillMaxSize())

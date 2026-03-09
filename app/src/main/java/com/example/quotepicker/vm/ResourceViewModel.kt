@@ -153,11 +153,48 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun updateMarkStateFilter(state: ResourceMarkState?) {
         filters.value = filters.value.copy(selectedMarkState = state)
     }
+    fun resolveMediaUri(type: ResourceType, name: String, resourceId: Long? = null): Uri? {
+        val targetName = name.trim()
+        if (targetName.isBlank()) return null
+        val resources = allResources.value.map { it.resource }
+            .filter { it.type == type }
+            .filter { resourceId == null || it.id == resourceId }
+        resources.forEach { resource ->
+            val matched = extractResourceMediaSources(resource).firstOrNull { source ->
+                val uri = Uri.parse(source)
+                val candidateName = uri.lastPathSegment?.takeIf { it.isNotBlank() }
+                    ?: uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                candidateName == targetName
+            }
+            if (matched != null) return Uri.parse(matched)
+        }
+        return runCatching { Uri.parse(targetName) }.getOrNull()?.takeIf { it.scheme != null }
+    }
 
     fun resolveMediaGroupSources(type: ResourceType, source: String): List<String> {
         val candidate = source.trim()
         if (candidate.isBlank()) return emptyList()
         val resources = allResources.value.map { it.resource }
+
+        parseCompactMediaRef(candidate)?.let { ref ->
+            if (ref.type == type) {
+                val matchedByRef = resources.firstOrNull { resource ->
+                    resource.type == type && (ref.resourceId == null || resource.id == ref.resourceId)
+                }
+                if (matchedByRef != null) {
+                    val items = extractResourceMediaSources(matchedByRef)
+                    if (ref.resourceId != null) return items
+                    val single = items.firstOrNull { path ->
+                        val uri = Uri.parse(path)
+                        val pathName = uri.lastPathSegment?.takeIf { it.isNotBlank() }
+                            ?: uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                        pathName == ref.name
+                    }
+                    if (single != null) return listOf(single)
+                }
+            }
+        }
+
         resources.firstOrNull { resource ->
             resource.type == type && extractResourceMediaSources(resource).any { it == candidate }
         }?.let { matched ->
@@ -165,6 +202,23 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             if (items.isNotEmpty()) return items
         }
         return listOf(candidate)
+    }
+
+    private data class CompactMediaRef(val type: ResourceType, val name: String, val resourceId: Long?)
+
+    private fun parseCompactMediaRef(raw: String): CompactMediaRef? {
+        val match = Regex("^([ivstc]),([^,]+?)(?:,(\\d+))?$").find(raw.trim()) ?: return null
+        val type = when (match.groupValues[1]) {
+            "i" -> ResourceType.IMAGE
+            "v" -> ResourceType.VIDEO
+            "s" -> ResourceType.SOUND
+            "t" -> ResourceType.TEXT
+            "c" -> ResourceType.SCENE
+            else -> return null
+        }
+        val name = Uri.decode(match.groupValues[2])
+        val resourceId = match.groupValues.getOrNull(3)?.toLongOrNull()
+        return CompactMediaRef(type = type, name = name, resourceId = resourceId)
     }
 
     private fun extractResourceMediaSources(resource: ResourceEntity): List<String> {

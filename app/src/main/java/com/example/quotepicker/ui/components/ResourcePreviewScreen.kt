@@ -730,6 +730,9 @@ private fun InlineFilePreview(
     vm: ResourceViewModel,
     modifier: Modifier = Modifier
 ) {
+    val resolvedUri = remember(info, vm.allResources.value) {
+        vm.resolveMediaUri(info.type, info.name, info.resourceId)
+    }
     Card(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -737,10 +740,14 @@ private fun InlineFilePreview(
                 .heightIn(min = 220.dp, max = 360.dp)
                 .padding(12.dp)
         ) {
+            if (resolvedUri == null) {
+                Text("未找到文件：${info.name}")
+                return@Box
+            }
             when (info.type) {
                 ResourceType.IMAGE -> {
-                    val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, info.uri) {
-                        value = vm.decodeUriToBitmap(info.uri)
+                    val preview by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(initialValue = null, resolvedUri) {
+                        value = vm.decodeUriToBitmap(resolvedUri)
                     }
                     if (preview != null) {
                         Image(
@@ -755,12 +762,12 @@ private fun InlineFilePreview(
                 }
                 ResourceType.VIDEO -> {
                     MediaPreview(
-                        uri = info.uri,
+                        uri = resolvedUri,
                         modifier = Modifier.height(280.dp)
                     )
                 }
                 ResourceType.SOUND -> {
-                    AudioPreviewSingle(uri = info.uri)
+                    AudioPreviewSingle(uri = resolvedUri)
                 }
                 else -> Text("暂不支持的文件类型")
             }
