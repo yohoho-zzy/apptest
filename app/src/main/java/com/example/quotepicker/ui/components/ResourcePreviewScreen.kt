@@ -550,12 +550,10 @@ private fun MediaPreviewPager(uris: List<Uri>) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                if (uris.size > 1) {
-                    Text(
-                        text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
+                Text(
+                    text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
             TextButton(onClick = { fullScreenUri = uris[pagerState.currentPage] }) {
                 Text("全屏播放")
@@ -1037,6 +1035,10 @@ private fun QuoteImagePager(images: List<ImagePreviewItem>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { fullScreenImage = item.bitmap }
+            )
+            Text(
+                text = "1/1 ${item.resourceCode.orEmpty()} (${item.sizeMbText})",
+                style = MaterialTheme.typography.labelSmall
             )
             if (item.motionVideoUri != null) {
                 TextButton(onClick = { fullScreenVideo = item.motionVideoUri }) {

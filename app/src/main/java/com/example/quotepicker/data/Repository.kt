@@ -80,7 +80,7 @@ class Repository private constructor(context: Context) {
     suspend fun replaceSnapshot(snapshot: BackupSnapshot, mediaPayloads: Map<String, MediaPayload> = emptyMap()) {
         clearManagedMediaDirectories()
         val mediaMapping = restoreMedia(snapshot.media, mediaPayloads)
-        val restoredResources = snapshot.resources.map { resource ->
+        val restoredResources = assignMissingResourceCodes(snapshot.resources.map { resource ->
             val patched = when (resource.type) {
                 ResourceType.IMAGE,
                 ResourceType.VIDEO,
@@ -92,8 +92,8 @@ class Repository private constructor(context: Context) {
                 )
                 else -> resource
             }
-            ensureResourceCode(patched)
-        }
+            patched
+        })
         responseRecordDao.deleteAll()
         executionSettingsDao.deleteAll()
         executionResourceDao.deleteAll()
@@ -267,15 +267,42 @@ class Repository private constructor(context: Context) {
         return resource.copy(resourceCode = nextReusableResourceCode(resource.type))
     }
 
-    private suspend fun nextReusableResourceCode(type: ResourceType): String {
-        val prefix = when (type) {
-            ResourceType.IMAGE -> "i"
-            ResourceType.VIDEO -> "v"
-            ResourceType.SOUND -> "s"
-            ResourceType.TEXT -> "t"
-            ResourceType.SCENE -> "c"
-            ResourceType.FLOW -> "f"
+    private fun assignMissingResourceCodes(resources: List<ResourceEntity>): List<ResourceEntity> {
+        if (resources.isEmpty()) return resources
+        val usedByType = ResourceType.entries.associateWith { mutableSetOf<Int>() }.toMutableMap()
+        resources.forEach { resource ->
+            parseResourceCodeIndex(resource.resourceCode, resource.type)?.let { usedByType[resource.type]?.add(it) }
         }
+        return resources.map { resource ->
+            if (!resource.resourceCode.isNullOrBlank()) {
+                resource
+            } else {
+                val used = usedByType.getValue(resource.type)
+                var candidate = 1
+                while (used.contains(candidate)) candidate++
+                used.add(candidate)
+                resource.copy(resourceCode = resourceCodePrefix(resource.type) + candidate.toString().padStart(4, '0'))
+            }
+        }
+    }
+
+    private fun parseResourceCodeIndex(code: String?, type: ResourceType): Int? {
+        if (code.isNullOrBlank()) return null
+        val prefix = resourceCodePrefix(type)
+        return if (code.startsWith(prefix)) code.removePrefix(prefix).toIntOrNull() else null
+    }
+
+    private fun resourceCodePrefix(type: ResourceType): String = when (type) {
+        ResourceType.IMAGE -> "i"
+        ResourceType.VIDEO -> "v"
+        ResourceType.SOUND -> "s"
+        ResourceType.TEXT -> "t"
+        ResourceType.SCENE -> "c"
+        ResourceType.FLOW -> "f"
+    }
+
+    private suspend fun nextReusableResourceCode(type: ResourceType): String {
+        val prefix = resourceCodePrefix(type)
         val used = resourceDao.listCodesByType(type).mapNotNull { code ->
             if (code.startsWith(prefix)) code.removePrefix(prefix).toIntOrNull() else null
         }.toSet()
