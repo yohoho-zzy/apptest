@@ -11,15 +11,23 @@ import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagCategoryType
 import com.example.quotepicker.data.TagEntity
+import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
 import java.nio.charset.Charset
+import java.security.SecureRandom
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import javax.crypto.Cipher
+import javax.crypto.CipherInputStream
+import javax.crypto.CipherOutputStream
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -144,27 +152,32 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                     outputBytes = bytesWritten
                     updateProgress()
                 }
-                ZipOutputStream(countingOutput).use { zip ->
-                    zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
-                    writeChunked(zip, snapshotBytes) { written ->
-                        processedBytes += written
-                        updateProgress()
-                    }
-                    zip.closeEntry()
-                    exportPackage.mediaSources.forEach { source ->
-                        val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
-                        stream.use { input ->
-                            zip.putNextEntry(ZipEntry("media/${source.fileName}"))
-                            writeStreamChunked(input, zip) { written ->
-                                processedBytes += written
-                                updateProgress()
+                openEncryptedBackupOutput(countingOutput).use { cipherOutput ->
+                    ZipOutputStream(cipherOutput).use { zip ->
+                        zip.putNextEntry(ZipEntry(BACKUP_JSON_NAME))
+                        writeChunked(zip, snapshotBytes) { written ->
+                            processedBytes += written
+                            updateProgress()
+                        }
+                        zip.closeEntry()
+                        exportPackage.mediaSources.forEach { source ->
+                            val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
+                            stream.use { input ->
+                                zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                                writeStreamChunked(input, zip) { written ->
+                                    processedBytes += written
+                                    updateProgress()
+                                }
+                                zip.closeEntry()
                             }
-                            zip.closeEntry()
                         }
                     }
                 }
             }
             updateProgress(force = true)
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            t.printStackTrace()
         } finally {
             _transferState.update {
                 it.copy(
@@ -215,19 +228,14 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             var snapshot: BackupSnapshot? = null
             val mediaPayloads = mutableMapOf<String, com.example.quotepicker.data.MediaPayload>()
             resolver.openInputStream(uri)?.use { input ->
-                val pushbackInput = PushbackInputStream(input, 2)
-                val header = ByteArray(2)
-                val headerSize = pushbackInput.read(header)
-                if (headerSize > 0) {
-                    pushbackInput.unread(header, 0, headerSize)
-                }
-                val countingInput = CountingInputStream(pushbackInput) { bytesRead ->
+                val countingInput = CountingInputStream(BufferedInputStream(input)) { bytesRead ->
                     processedBytes = bytesRead
                     updateProgress()
                 }
-                val isZip = headerSize == 2 && header[0] == ZIP_MAGIC_P && header[1] == ZIP_MAGIC_K
+                val payloadInput = openDecodedBackupInput(countingInput)
+                val (detectedInput, isZip) = detectZipInput(payloadInput)
                 if (isZip) {
-                    ZipInputStream(countingInput).use { zip ->
+                    ZipInputStream(detectedInput).use { zip ->
                         var entry = zip.nextEntry
                         var payload: String? = null
                         val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
@@ -250,17 +258,18 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                         if (!payload.isNullOrBlank()) {
                             snapshot = BackupSnapshot.fromJson(payload)
                         }
-                        processedBytes = countingInput.bytesRead
-                        updateProgress(force = true)
                     }
                 } else {
-                    val payload = readStreamString(countingInput)
+                    val payload = readStreamBytes(detectedInput).toString(Charset.forName("UTF-8"))
                     snapshot = BackupSnapshot.fromJson(payload)
-                    processedBytes = countingInput.bytesRead
-                    updateProgress(force = true)
                 }
+                processedBytes = countingInput.bytesRead
+                updateProgress(force = true)
             }
             snapshot?.let { repo.replaceSnapshot(it, mediaPayloads) }
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            t.printStackTrace()
         } finally {
             tempFiles.forEach { file -> file.delete() }
             _transferState.update {
@@ -278,9 +287,14 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val BACKUP_JSON_NAME = "backup.json"
+        val BACKUP_MAGIC = byteArrayOf('B'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), '1'.code.toByte())
+        const val BACKUP_VERSION: Byte = 1
+        const val GCM_TAG_BITS = 128
+        const val GCM_IV_LENGTH = 12
         const val ZIP_MAGIC_P: Byte = 0x50
         const val ZIP_MAGIC_K: Byte = 0x4B
         const val PROGRESS_UPDATE_BYTES = 256 * 1024
+        val BACKUP_AES_KEY = "QuotePickerBackupAES256KeyMaterial!".toByteArray(Charset.forName("UTF-8")).copyOf(32)
     }
 
     private class CountingOutputStream(
@@ -376,7 +390,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         return output.toString(Charset.forName("UTF-8"))
     }
 
-    private fun readStreamString(input: InputStream): String {
+    private fun readStreamBytes(input: InputStream): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var read = input.read(buffer)
@@ -384,7 +398,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             output.write(buffer, 0, read)
             read = input.read(buffer)
         }
-        return output.toString(Charset.forName("UTF-8"))
+        return output.toByteArray()
     }
 
     private fun writeStreamChunked(input: InputStream, output: OutputStream, onChunk: (Int) -> Unit) {
@@ -395,5 +409,56 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
             onChunk(read)
             read = input.read(buffer)
         }
+    }
+
+    private fun openEncryptedBackupOutput(output: OutputStream): OutputStream {
+        val iv = ByteArray(GCM_IV_LENGTH)
+        SecureRandom().nextBytes(iv)
+        output.write(BACKUP_MAGIC)
+        output.write(BACKUP_VERSION.toInt())
+        output.write(iv)
+        return CipherOutputStream(output, createCipher(Cipher.ENCRYPT_MODE, iv))
+    }
+
+    private fun createCipher(mode: Int, iv: ByteArray): Cipher {
+        val key = SecretKeySpec(BACKUP_AES_KEY, "AES")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(mode, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        return cipher
+    }
+
+    private fun openDecodedBackupInput(input: InputStream): InputStream {
+        val prefixLength = BACKUP_MAGIC.size + 1
+        val pushback = PushbackInputStream(input, prefixLength)
+        val prefix = ByteArray(prefixLength)
+        val read = pushback.read(prefix)
+        if (read < 0) return pushback
+        val actual = prefix.copyOf(read)
+        pushback.unread(actual)
+        if (read < prefixLength) return pushback
+        if (!actual.copyOf(BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) return pushback
+        val version = actual[BACKUP_MAGIC.size]
+        require(version == BACKUP_VERSION) { "Unsupported backup version: $version" }
+
+        val headerBuffer = ByteArray(prefixLength + GCM_IV_LENGTH)
+        var offset = 0
+        while (offset < headerBuffer.size) {
+            val count = pushback.read(headerBuffer, offset, headerBuffer.size - offset)
+            require(count > 0) { "Invalid encrypted backup header" }
+            offset += count
+        }
+        val iv = headerBuffer.copyOfRange(prefixLength, headerBuffer.size)
+        return CipherInputStream(pushback, createCipher(Cipher.DECRYPT_MODE, iv))
+    }
+
+    private fun detectZipInput(input: InputStream): Pair<InputStream, Boolean> {
+        val pushback = PushbackInputStream(input, 2)
+        val header = ByteArray(2)
+        val read = pushback.read(header)
+        if (read > 0) {
+            pushback.unread(header, 0, read)
+        }
+        val isZip = read == 2 && header[0] == ZIP_MAGIC_P && header[1] == ZIP_MAGIC_K
+        return pushback to isZip
     }
 }
