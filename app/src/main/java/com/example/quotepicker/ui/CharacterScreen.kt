@@ -129,7 +129,7 @@ fun CharacterScreen(
             vm.importSnapshot(uri)
         }
     }
-    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) {
             vm.exportSnapshot(uri)
         }
@@ -206,10 +206,10 @@ fun CharacterScreen(
                 actions = {
                     if (selected == null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { importPicker.launch(arrayOf("application/zip", "application/json", "application/octet-stream")) }) {
+                            TextButton(onClick = { importPicker.launch(arrayOf("application/octet-stream", "application/zip", "application/json")) }) {
                                 Text("导入")
                             }
-                            TextButton(onClick = { exportPicker.launch("quote_backup.zip") }) {
+                            TextButton(onClick = { exportPicker.launch("quote_backup.backup.dat") }) {
                                 Text("导出")
                             }
                         }
