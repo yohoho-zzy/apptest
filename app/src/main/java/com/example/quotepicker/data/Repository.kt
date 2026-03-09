@@ -23,6 +23,7 @@ class Repository private constructor(context: Context) {
     private val responseRecordDao = db.responseRecordDao()
     private val executionSettingsDao = db.executionSettingsDao()
     private val executionResourceDao = db.executionResourceDao()
+    private val textUsageDao = db.textResourceUsageHistoryDao()
 
     fun observeCategories(): Flow<List<TagCategoryEntity>> = categoryDao.observeCategories()
     fun observeTagsByCategory(categoryId: Long): Flow<List<TagEntity>> = tagDao.observeTagsByCategory(categoryId)
@@ -240,7 +241,31 @@ class Repository private constructor(context: Context) {
     suspend fun updateResource(resource: ResourceEntity) =
         resourceDao.update(ensureResourceCode(resource).copy(updatedAt = System.currentTimeMillis()))
 
-    suspend fun deleteResource(resource: ResourceEntity) = resourceDao.delete(resource)
+    suspend fun deleteResource(resource: ResourceEntity) {
+        resourceDao.delete(resource)
+        textUsageDao.deleteByTextResourceId(resource.id)
+    }
+
+    suspend fun replaceTextResourceUsageHistory(textResourceId: Long, textTitle: String, refs: Set<String>) {
+        textUsageDao.deleteByTextResourceId(textResourceId)
+        if (refs.isEmpty()) return
+        val now = System.currentTimeMillis()
+        textUsageDao.insertAll(
+            refs.map { code ->
+                TextResourceUsageHistoryEntity(
+                    textResourceId = textResourceId,
+                    textTitle = textTitle,
+                    resourceCode = code,
+                    fileInfo = code,
+                    createdAt = now
+                )
+            }
+        )
+    }
+
+    suspend fun listUsageByResourceCode(resourceCode: String): List<TextResourceUsageHistoryEntity> =
+        textUsageDao.listByResourceCode(resourceCode)
+
 
     suspend fun updateResourceTags(resourceId: Long, tagIds: List<Long>) {
         crossRefDao.clearResourceTags(resourceId)

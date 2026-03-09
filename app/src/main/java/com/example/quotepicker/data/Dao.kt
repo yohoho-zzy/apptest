@@ -242,3 +242,19 @@ interface ExecutionResourceDao {
     @Query("DELETE FROM execution_resources")
     suspend fun deleteAll()
 }
+
+
+@Dao
+interface TextResourceUsageHistoryDao {
+    @Query("SELECT * FROM text_resource_usage_history WHERE textResourceId = :textResourceId")
+    suspend fun listByTextResourceId(textResourceId: Long): List<TextResourceUsageHistoryEntity>
+
+    @Query("SELECT * FROM text_resource_usage_history WHERE resourceCode = :resourceCode")
+    suspend fun listByResourceCode(resourceCode: String): List<TextResourceUsageHistoryEntity>
+
+    @Query("DELETE FROM text_resource_usage_history WHERE textResourceId = :textResourceId")
+    suspend fun deleteByTextResourceId(textResourceId: Long)
+
+    @Insert
+    suspend fun insertAll(items: List<TextResourceUsageHistoryEntity>)
+}

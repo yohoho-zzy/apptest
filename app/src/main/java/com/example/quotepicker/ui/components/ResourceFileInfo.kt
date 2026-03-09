@@ -39,8 +39,8 @@ fun decodeResourceFileInfo(raw: String): ResourceFileInfo? {
             'f' -> ResourceType.FLOW
             else -> return null
         }
-        val index = indexedCode.groupValues[2].toLongOrNull()?.takeIf { it > 0 } ?: return null
-        return ResourceFileInfo(type = type, name = code, resourceId = index)
+        val index = indexedCode.groupValues[2].toIntOrNull()?.takeIf { it > 0 } ?: return null
+        return ResourceFileInfo(type = type, name = "$code.$index", resourceId = null)
     }
     return null
 }

@@ -38,9 +38,10 @@ class Converters {
         ResourceCharacterCrossRef::class,
         ResponseRecordEntity::class,
         ExecutionSettingsEntity::class,
-        ExecutionResourceEntity::class
+        ExecutionResourceEntity::class,
+        TextResourceUsageHistoryEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -53,6 +54,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun responseRecordDao(): ResponseRecordDao
     abstract fun executionSettingsDao(): ExecutionSettingsDao
     abstract fun executionResourceDao(): ExecutionResourceDao
+    abstract fun textResourceUsageHistoryDao(): TextResourceUsageHistoryDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null

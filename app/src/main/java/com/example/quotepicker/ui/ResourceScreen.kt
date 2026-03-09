@@ -2167,6 +2167,16 @@ private fun ResourceEditScreen(
     val flowResources = remember(availableResources) {
         availableResources.filter { it.resource.type != ResourceType.FLOW }
     }
+    var usageHistory by remember(resource.resource.resourceCode) { mutableStateOf(listOf<com.example.quotepicker.data.TextResourceUsageHistoryEntity>()) }
+
+    LaunchedEffect(resource.resource.resourceCode) {
+        val code = resource.resource.resourceCode
+        if (code.isNullOrBlank()) {
+            usageHistory = emptyList()
+        } else {
+            vm.listResourceUsageHistory(code) { usageHistory = it }
+        }
+    }
 
     LaunchedEffect(availableResources) {
         if (resource.resource.type == ResourceType.FLOW) {
@@ -2266,6 +2276,23 @@ private fun ResourceEditScreen(
                 label = { Text("名称") },
                 modifier = Modifier.fillMaxWidth()
             )
+            resource.resource.resourceCode?.takeIf { it.isNotBlank() }?.let { code ->
+                Text(
+                    text = "资源ID: $code",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                usageHistory
+                    .distinctBy { it.textResourceId }
+                    .takeIf { it.isNotEmpty() }
+                    ?.forEach { usage ->
+                        Text(
+                            text = "被文本使用：${usage.textTitle}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Red
+                        )
+                    }
+            }
             when (resource.resource.type) {
                 ResourceType.TEXT -> {
                     OutlinedTextField(
@@ -3438,15 +3465,18 @@ private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
     val imageResource = resources.firstOrNull { it.resource.type == ResourceType.IMAGE }?.resource ?: return null
-    val firstIndex = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
-        .indexOfFirst { it.path != null }
-    return indexedResourceFileId(imageResource.resourceCode, firstIndex)
+    val items = parseImageItems(imageResource.contentUriOrPath, imageResource.quoteImageBase64)
+    if (items.isEmpty()) return imageResource.resourceCode
+    val firstIndex = items.indexOfFirst { it.path != null }.takeIf { it >= 0 } ?: 0
+    return indexedResourceFileId(imageResource.resourceCode, firstIndex) ?: imageResource.resourceCode
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
-    val firstIndex = parseVideoItems(videoResource.contentUriOrPath).indexOfFirst { it.path != null }
-    return indexedResourceFileId(videoResource.resourceCode, firstIndex)
+    val items = parseVideoItems(videoResource.contentUriOrPath)
+    if (items.isEmpty()) return videoResource.resourceCode
+    val firstIndex = items.indexOfFirst { it.path != null }.takeIf { it >= 0 } ?: 0
+    return indexedResourceFileId(videoResource.resourceCode, firstIndex) ?: videoResource.resourceCode
 }
 
 private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
