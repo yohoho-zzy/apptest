@@ -1,5 +1,6 @@
 package com.example.quotepicker.ui
 
+import android.net.Uri
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
