@@ -77,6 +77,11 @@ data class StoredMediaItem(
     val type: ResourceType
 )
 
+data class ResolvedMediaItem(
+    val path: String,
+    val type: ResourceType
+)
+
 data class SceneMessageDraft(
     val speaker: String,
     val content: String
@@ -159,6 +164,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val resources = allResources.value.map { it.resource }
             .filter { it.type == type }
             .filter { resourceId == null || it.id == resourceId }
+        resources.firstOrNull { it.resourceCode.equals(targetName, ignoreCase = true) }?.let { matchedResource ->
+            extractResourceMediaSources(matchedResource).firstOrNull()?.let { return Uri.parse(it) }
+        }
         resources.forEach { resource ->
             val matched = extractResourceMediaSources(resource).firstOrNull { source ->
                 val uri = Uri.parse(source)
@@ -171,6 +179,42 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         return runCatching { Uri.parse(targetName) }.getOrNull()?.takeIf { it.scheme != null }
     }
 
+
+
+    fun resolveMediaUriByCodeOrPath(codeOrPath: String): Uri? {
+        val value = codeOrPath.trim()
+        if (value.isBlank()) return null
+        val byCode = allResources.value.map { it.resource }
+            .firstOrNull { it.resourceCode.equals(value, ignoreCase = true) }
+            ?.let { extractResourceMediaSources(it).firstOrNull() }
+        if (!byCode.isNullOrBlank()) return Uri.parse(byCode)
+        val parsed = runCatching { Uri.parse(value) }.getOrNull()
+        return parsed?.takeIf { it.scheme != null }
+    }
+
+    fun resolveMixedGroupSources(source: String): List<ResolvedMediaItem> {
+        val ids = source.split(",", "，", " ", "
+", "	").map { it.trim() }.filter { it.isNotBlank() }
+        val resources = allResources.value.map { it.resource }
+        if (ids.isEmpty()) return emptyList()
+        if (ids.size == 1) {
+            val one = resources.firstOrNull { it.resourceCode.equals(ids.first(), ignoreCase = true) }
+            if (one != null) {
+                return extractResourceMediaSources(one).map { ResolvedMediaItem(it, one.type) }
+            }
+        }
+        val result = mutableListOf<ResolvedMediaItem>()
+        ids.forEach { code ->
+            val res = resources.firstOrNull { it.resourceCode.equals(code, ignoreCase = true) } ?: return@forEach
+            extractResourceMediaSources(res).forEach { path -> result += ResolvedMediaItem(path, res.type) }
+        }
+        return result
+    }
+
+    fun isVideoUri(uri: Uri): Boolean {
+        val path = uri.path?.lowercase() ?: return false
+        return path.endsWith(".mp4") || path.endsWith(".3gp") || path.endsWith(".mkv") || path.contains("/videos/")
+    }
     fun resolveMediaGroupSources(type: ResourceType, source: String): List<String> {
         val candidate = source.trim()
         if (candidate.isBlank()) return emptyList()
@@ -622,12 +666,15 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         val sourceFile = File(sourcePath)
         if (!sourceFile.exists()) return false
         val baseDir = File("/111rensheng/zy/file").apply { mkdirs() }
-        val ext = when (type) {
-            ResourceType.IMAGE -> "jpg"
-            ResourceType.VIDEO -> "mp4"
-            ResourceType.SOUND -> "mp3"
-            else -> "dat"
-        }
+        val originalExt = sourceFile.extension.lowercase()
+        val ext = if (originalExt.isBlank() || originalExt == "bat") {
+            when (type) {
+                ResourceType.IMAGE -> "jpg"
+                ResourceType.VIDEO -> "mp4"
+                ResourceType.SOUND -> "mp3"
+                else -> "dat"
+            }
+        } else originalExt
         val safeName = sourceFile.nameWithoutExtension.replace(".bat", "", ignoreCase = true)
         val target = File(baseDir, "${safeName}.${ext}")
         return runCatching {

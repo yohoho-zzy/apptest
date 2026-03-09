@@ -27,6 +27,19 @@ fun encodeResourceFileInfo(type: ResourceType, uri: Uri, resourceId: Long? = nul
 
 fun decodeResourceFileInfo(raw: String): ResourceFileInfo? {
     val trimmed = raw.trim()
+    val codeOnly = Regex("^([ivstcf])\\d{4,}$").find(trimmed)
+    if (codeOnly != null) {
+        val type = when (codeOnly.groupValues[1]) {
+            "i" -> ResourceType.IMAGE
+            "v" -> ResourceType.VIDEO
+            "s" -> ResourceType.SOUND
+            "t" -> ResourceType.TEXT
+            "c" -> ResourceType.SCENE
+            "f" -> ResourceType.FLOW
+            else -> return null
+        }
+        return ResourceFileInfo(type = type, name = trimmed, resourceId = null)
+    }
     val compact = Regex("^([ivstc]),([^,]+?)(?:,(\\d+))?$").find(trimmed)
     val legacy = Regex("type=([A-Z]+);uri=(.+)").find(trimmed)
     val (type, encodedValue, resourceId) = when {

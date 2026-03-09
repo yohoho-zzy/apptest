@@ -2352,7 +2352,7 @@ private fun ResourceEditScreen(
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     Text(
-                                        text = "图片 ${index + 1}",
+                                        text = item.path?.let { resource.resource.resourceCode ?: "图片" } ?: "新图片 ${index + 1}",
                                         modifier = Modifier.weight(1f)
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2434,7 +2434,7 @@ private fun ResourceEditScreen(
                                         }
                                     }
                                     Spacer(Modifier.width(12.dp))
-                                    val label = item.path?.let { "视频 ${index + 1}" } ?: "新视频 ${index + 1}"
+                                    val label = item.path?.let { resource.resource.resourceCode ?: "视频" } ?: "新视频 ${index + 1}"
                                     Text(text = label, modifier = Modifier.weight(1f))
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
@@ -3447,13 +3447,13 @@ private fun buildMagicDramaDefaultScript(
     return buildString {
         appendLine("+旁白:魔剧自动样例开始，包含所有常用case。-1200")
         appendLine("+重要:[[注意,提示]]：你可以直接编辑这些行。-1200")
-        imageSource?.let { appendLine("+图片:$it") }
+        imageSource?.let { appendLine("+资源:$it") }
         appendLine("+$roleA:收到，我先展示图片。nn如果你看到这句说明角色台词正常。-1600")
-        videoSource?.let { appendLine("+视频:$it") }
+        videoSource?.let { appendLine("+资源:$it") }
         appendLine("+$roleB:现在切到视频，准备倒计时。-1600")
-        imageGroupSource?.let { appendLine("+图片组:$it") }
+        imageGroupSource?.let { appendLine("+资源组:$it") }
         appendLine("+$roleA:这里是图片组轮播。-1200")
-        videoGroupSource?.let { appendLine("+视频组:$it") }
+        videoGroupSource?.let { appendLine("+资源组:$it") }
         appendLine("+$roleB:这里是视频组轮播。-1200")
         appendLine("+倒计时:5")
         appendLine("+按钮:继续%go-结束%end")
@@ -3469,7 +3469,7 @@ private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
@@ -3478,19 +3478,19 @@ private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): S
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {
