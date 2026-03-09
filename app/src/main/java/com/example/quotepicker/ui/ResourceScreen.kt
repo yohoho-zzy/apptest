@@ -2276,22 +2276,33 @@ private fun ResourceEditScreen(
                 label = { Text("名称") },
                 modifier = Modifier.fillMaxWidth()
             )
-            resource.resource.resourceCode?.takeIf { it.isNotBlank() }?.let { code ->
+            val resourceCode = resource.resource.resourceCode?.takeIf { it.isNotBlank() }
+            val normalizedUsageHistory = remember(resourceCode, usageHistory) {
+                resourceCode?.let { code ->
+                    usageHistory.filter { it.resourceCode == code }
+                } ?: emptyList()
+            }
+            val wholeUsageTexts = remember(resourceCode, normalizedUsageHistory) {
+                resourceCode?.let { code ->
+                    normalizedUsageHistory
+                        .filter { it.fileInfo == code }
+                        .distinctBy { it.textResourceId }
+                        .map { it.textTitle }
+                } ?: emptyList()
+            }
+            val fileUsageTexts = remember(resourceCode, normalizedUsageHistory) {
+                normalizedUsageHistory
+                    .filter { usage -> resourceCode != null && usage.fileInfo != resourceCode }
+                    .groupBy { it.fileInfo }
+                    .mapValues { (_, usages) -> usages.distinctBy { it.textResourceId }.map { it.textTitle } }
+            }
+            resourceCode?.let { code ->
+                val usageSuffix = wholeUsageTexts.takeIf { it.isNotEmpty() }?.joinToString("、")
                 Text(
-                    text = "资源ID: $code",
+                    text = if (usageSuffix.isNullOrBlank()) "资源ID: $code" else "资源ID: $code  $usageSuffix",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (usageSuffix.isNullOrBlank()) MaterialTheme.colorScheme.primary else Color.Red
                 )
-                usageHistory
-                    .distinctBy { it.textResourceId }
-                    .takeIf { it.isNotEmpty() }
-                    ?.forEach { usage ->
-                        Text(
-                            text = "被文本使用：${usage.textTitle}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Red
-                        )
-                    }
             }
             when (resource.resource.type) {
                 ResourceType.TEXT -> {
@@ -2346,10 +2357,22 @@ private fun ResourceEditScreen(
                                         }
                                     }
                                     Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        text = item.path?.let { indexedResourceFileId(resource.resource.resourceCode, index) ?: "图片" } ?: "新图片 ${index + 1}",
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
+                                    val imageUsageSuffix = fileId?.let { id ->
+                                        fileUsageTexts[id]
+                                            ?.takeIf { it.isNotEmpty() }
+                                            ?.joinToString("、")
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = item.path?.let { fileId ?: "图片" } ?: "新图片 ${index + 1}")
+                                        imageUsageSuffix?.let { suffix ->
+                                            Text(
+                                                text = suffix,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Red
+                                            )
+                                        }
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
                                             if (index > 0) {
@@ -2429,8 +2452,23 @@ private fun ResourceEditScreen(
                                         }
                                     }
                                     Spacer(Modifier.width(12.dp))
-                                    val label = item.path?.let { indexedResourceFileId(resource.resource.resourceCode, index) ?: "视频" } ?: "新视频 ${index + 1}"
-                                    Text(text = label, modifier = Modifier.weight(1f))
+                                    val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
+                                    val label = item.path?.let { fileId ?: "视频" } ?: "新视频 ${index + 1}"
+                                    val videoUsageSuffix = fileId?.let { id ->
+                                        fileUsageTexts[id]
+                                            ?.takeIf { it.isNotEmpty() }
+                                            ?.joinToString("、")
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = label)
+                                        videoUsageSuffix?.let { suffix ->
+                                            Text(
+                                                text = suffix,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Red
+                                            )
+                                        }
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
                                             if (index > 0) {
@@ -2487,8 +2525,23 @@ private fun ResourceEditScreen(
                                 ) {
                                     Icon(Icons.Default.MusicNote, contentDescription = null)
                                     Spacer(Modifier.width(12.dp))
-                                    val label = item.path?.let { "音频 ${index + 1}" } ?: "新音频 ${index + 1}"
-                                    Text(text = label, modifier = Modifier.weight(1f))
+                                    val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
+                                    val label = item.path?.let { fileId ?: "音频 ${index + 1}" } ?: "新音频 ${index + 1}"
+                                    val soundUsageSuffix = fileId?.let { id ->
+                                        fileUsageTexts[id]
+                                            ?.takeIf { it.isNotEmpty() }
+                                            ?.joinToString("、")
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = label)
+                                        soundUsageSuffix?.let { suffix ->
+                                            Text(
+                                                text = suffix,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Red
+                                            )
+                                        }
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
                                             if (index > 0) {

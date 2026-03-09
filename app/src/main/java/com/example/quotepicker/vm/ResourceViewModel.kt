@@ -342,17 +342,23 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             onResult(repo.listUsageByResourceCode(resourceCode))
         }
 
-    private fun extractReferencedResourceCodes(text: String): Set<String> {
-        val refs = mutableSetOf<String>()
+    private fun extractReferencedResourceCodes(text: String): Set<Pair<String, String>> {
+        val refs = mutableSetOf<Pair<String, String>>()
         Regex("""\+资源:([^\n\r]+)""").findAll(text).forEach { m ->
             val raw = m.groupValues.getOrNull(1).orEmpty()
             raw.split(',', '&').map { it.trim() }.filter { it.isNotBlank() }.forEach { token ->
-                parseIndexedResourceRef(token)?.let { refs.add(it.resourceCode) }
+                parseIndexedResourceRef(token)?.let { ref ->
+                    val fileInfo = if (ref.itemIndex != null) "${ref.resourceCode}.${ref.itemIndex}" else ref.resourceCode
+                    refs.add(ref.resourceCode to fileInfo)
+                }
             }
         }
         Regex("""@[^@]+@\(([^)]+)\)""").findAll(text).forEach { m ->
             val info = m.groupValues.getOrNull(1).orEmpty().trim()
-            parseIndexedResourceRef(info)?.let { refs.add(it.resourceCode) }
+            parseIndexedResourceRef(info)?.let { ref ->
+                val fileInfo = if (ref.itemIndex != null) "${ref.resourceCode}.${ref.itemIndex}" else ref.resourceCode
+                refs.add(ref.resourceCode to fileInfo)
+            }
         }
         return refs
     }
@@ -416,11 +422,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun addTextResource(title: String, text: String, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch {
             if (characterIds.isEmpty()) return@launch
-            repo.addResource(
-                ResourceEntity(type = ResourceType.TEXT, title = title, quoteText = text),
-                tagIds,
-                characterIds
-            )
+            val created = ResourceEntity(type = ResourceType.TEXT, title = title, quoteText = text)
+            val newId = repo.addResource(created, tagIds, characterIds)
+            refreshTextUsageHistory(created.copy(id = newId), text)
         }
 
     fun addImageGroup(title: String, imageUris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
@@ -447,16 +451,14 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun addScene(title: String, description: String?, sceneJson: String, tagIds: List<Long>, characterIds: List<Long>) =
         viewModelScope.launch {
             if (characterIds.isEmpty()) return@launch
-            repo.addResource(
-                ResourceEntity(
-                    type = ResourceType.SCENE,
-                    title = title,
-                    quoteText = description,
-                    sceneJson = sceneJson
-                ),
-                tagIds,
-                characterIds
+            val created = ResourceEntity(
+                type = ResourceType.SCENE,
+                title = title,
+                quoteText = description,
+                sceneJson = sceneJson
             )
+            val newId = repo.addResource(created, tagIds, characterIds)
+            refreshTextUsageHistory(created.copy(id = newId), sceneJson)
         }
 
     fun addVideoGroup(title: String, uris: List<Uri>, tagIds: List<Long>, characterIds: List<Long>) =
@@ -599,10 +601,13 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         characterIds: List<Long>
     ) = viewModelScope.launch(Dispatchers.IO) {
         if (characterIds.isEmpty()) return@launch
+        val oldPaths = parseSimplePathList(resource.contentUriOrPath)
         val newUris = resolveSoundItems(items)
         if (newUris.isEmpty()) return@launch
         val payload = org.json.JSONArray(newUris).toString()
-        repo.updateResource(resource.copy(title = title, contentUriOrPath = payload))
+        val updated = resource.copy(title = title, contentUriOrPath = payload)
+        repo.updateResource(updated)
+        remapTextReferencesForMovedMedia(updated, oldPaths, parseSimplePathList(updated.contentUriOrPath))
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }

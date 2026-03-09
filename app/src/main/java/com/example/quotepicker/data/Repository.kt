@@ -246,21 +246,23 @@ class Repository private constructor(context: Context) {
         textUsageDao.deleteByTextResourceId(resource.id)
     }
 
-    suspend fun replaceTextResourceUsageHistory(textResourceId: Long, textTitle: String, refs: Set<String>) {
+    suspend fun replaceTextResourceUsageHistory(
+        textResourceId: Long,
+        textTitle: String,
+        refs: Set<Pair<String, String>>
+    ) {
         textUsageDao.deleteByTextResourceId(textResourceId)
         if (refs.isEmpty()) return
         val now = System.currentTimeMillis()
-        textUsageDao.insertAll(
-            refs.map { code ->
+        textUsageDao.insertAll(refs.map { (code, fileInfo) ->
                 TextResourceUsageHistoryEntity(
                     textResourceId = textResourceId,
                     textTitle = textTitle,
                     resourceCode = code,
-                    fileInfo = code,
+                    fileInfo = fileInfo,
                     createdAt = now
                 )
-            }
-        )
+            })
     }
 
     suspend fun listUsageByResourceCode(resourceCode: String): List<TextResourceUsageHistoryEntity> =
