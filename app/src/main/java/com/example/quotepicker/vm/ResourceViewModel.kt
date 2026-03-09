@@ -384,9 +384,38 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun replaceIndexedResourceRef(text: String, fromRef: String, toRef: String): String {
+        if (fromRef == toRef) return text
+        val regex = Regex("""(?<![A-Za-z0-9_])""" + Regex.escape(fromRef) + """(?![A-Za-z0-9_])""")
+        return regex.replace(text, toRef)
+    }
+
+    private fun findIndexedRefByMediaPath(path: String): IndexedResourceRef? {
+        allResources.value.asSequence().map { it.resource }.forEach { candidate ->
+            val code = candidate.resourceCode?.takeIf { it.isNotBlank() } ?: return@forEach
+            val index = extractResourceMediaSources(candidate).indexOf(path)
+            if (index >= 0) return IndexedResourceRef(code, index + 1)
+        }
+        return null
+    }
+
     private suspend fun remapTextReferencesForMovedMedia(resource: ResourceEntity, oldPaths: List<String>, newPaths: List<String>) {
         val code = resource.resourceCode ?: return
         if (oldPaths == newPaths) return
+        val replacementByRef = buildMap {
+            oldPaths.forEachIndexed { oldIdx, oldPath ->
+                val oldRef = "$code.${oldIdx + 1}"
+                val mappedRef = when (val newIdx = newPaths.indexOf(oldPath)) {
+                    -1 -> {
+                        val moved = findIndexedRefByMediaPath(oldPath)
+                        if (moved?.itemIndex != null) "${moved.resourceCode}.${moved.itemIndex}" else null
+                    }
+                    else -> "$code.${newIdx + 1}"
+                }
+                if (!mappedRef.isNullOrBlank() && mappedRef != oldRef) put(oldRef, mappedRef)
+            }
+        }
+        if (replacementByRef.isEmpty()) return
         val textResources = allResources.value.map { it.resource }.filter { it.type == ResourceType.TEXT || it.type == ResourceType.SCENE }
         textResources.forEach { textRes ->
             val oldText = when (textRes.type) {
@@ -394,12 +423,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 ResourceType.SCENE -> textRes.sceneJson.orEmpty()
                 else -> ""
             }
-            var updatedText = oldText
-            oldPaths.forEachIndexed { oldIdx, oldPath ->
-                val newIdx = newPaths.indexOf(oldPath)
-                if (newIdx >= 0 && newIdx != oldIdx) {
-                    updatedText = remapIndexedRefByMovedItem(updatedText, code, oldIdx + 1, newIdx + 1)
-                }
+            val updatedText = replacementByRef.entries.fold(oldText) { acc, (fromRef, toRef) ->
+                replaceIndexedResourceRef(acc, fromRef, toRef)
             }
             if (updatedText != oldText) {
                 val patched = if (textRes.type == ResourceType.TEXT) textRes.copy(quoteText = updatedText) else textRes.copy(sceneJson = updatedText)
