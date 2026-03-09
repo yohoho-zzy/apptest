@@ -3493,16 +3493,10 @@ private fun buildMagicDramaDefaultScript(
     val videoGroupSource = pickFirstVideoGroupSource(availableResources)
 
     return buildString {
-        appendLine("+旁白:魔剧自动样例开始，包含所有常用case。-1200")
+        appendLine("+旁白:魔剧自动样例开始-1200")
         appendLine("+重要:[[注意,提示]]：你可以直接编辑这些行。-1200")
         imageSource?.let { appendLine("+资源:$it") }
-        appendLine("+$roleA:收到，我先展示图片。nn如果你看到这句说明角色台词正常。-1600")
-        videoSource?.let { appendLine("+资源:$it") }
-        appendLine("+$roleB:现在切到视频，准备倒计时。-1600")
-        imageGroupSource?.let { appendLine("+资源:$it") }
-        appendLine("+$roleA:这里是图片组轮播。-1200")
-        videoGroupSource?.let { appendLine("+资源:$it") }
-        appendLine("+$roleB:这里是视频组轮播。-1200")
+        appendLine("+$roleA:收到nn如果你看到这句说明角色台词正常。-1600")
         appendLine("+倒计时:5")
         appendLine("+按钮:继续%go-结束%end")
         appendLine("+%go:旁白:你选择了继续分支。-1000")
