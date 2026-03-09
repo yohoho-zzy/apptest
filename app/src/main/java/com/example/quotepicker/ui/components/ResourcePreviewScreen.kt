@@ -550,12 +550,10 @@ private fun MediaPreviewPager(uris: List<Uri>) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                if (uris.size > 1) {
-                    Text(
-                        text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
+                Text(
+                    text = "视频 ${pagerState.currentPage + 1}/${uris.size}",
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
             TextButton(onClick = { fullScreenUri = uris[pagerState.currentPage] }) {
                 Text("全屏播放")
@@ -663,7 +661,13 @@ private fun decodeImageSources(payload: String?, vm: ResourceViewModel, resource
     val items = parseImagePayloadEntries(payload)
     return items.mapNotNull { entry ->
         decodeImageSource(entry.image, vm)?.let { bitmap ->
-            ImagePreviewItem(bitmap = bitmap, motionVideoUri = entry.motionVideo?.let(Uri::parse), resourceCode = resourceCode, sizeMbText = formatSizeMb(entry.image))
+            val fileCode = runCatching { encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(entry.image)) }.getOrNull()
+            ImagePreviewItem(
+                bitmap = bitmap,
+                motionVideoUri = entry.motionVideo?.let(Uri::parse),
+                resourceCode = fileCode ?: resourceCode,
+                sizeMbText = formatSizeMb(entry.image)
+            )
         }
     }
 }
@@ -1037,6 +1041,10 @@ private fun QuoteImagePager(images: List<ImagePreviewItem>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { fullScreenImage = item.bitmap }
+            )
+            Text(
+                text = "1/1 ${item.resourceCode.orEmpty()} (${item.sizeMbText})",
+                style = MaterialTheme.typography.labelSmall
             )
             if (item.motionVideoUri != null) {
                 TextButton(onClick = { fullScreenVideo = item.motionVideoUri }) {
