@@ -60,6 +60,7 @@ import java.util.Locale
 
 data class MagicDramaSettings(
     val defaultDelayMs: Long = 1000L,
+    val enableSpeech: Boolean = true,
     val speechRate: Float = 1.0f,
     val speechPitch: Float = 1.0f
 )
@@ -121,7 +122,7 @@ fun MagicDramaScreen(
         }
     }
 
-    LaunchedEffect(script, settings.defaultDelayMs, settings.speechRate, settings.speechPitch) {
+    LaunchedEffect(script, settings.defaultDelayMs, settings.enableSpeech, settings.speechRate, settings.speechPitch) {
         messages.clear()
         currentMedia = null
         countdownSeconds = null
@@ -129,9 +130,13 @@ fun MagicDramaScreen(
         pendingBranch = null
         countdownJob?.cancel()
         countdownJob = null
-        tts.language = Locale.CHINA
-        tts.setSpeechRate(settings.speechRate)
-        tts.setPitch(settings.speechPitch)
+        if (settings.enableSpeech) {
+            tts.language = Locale.CHINA
+            tts.setSpeechRate(settings.speechRate)
+            tts.setPitch(settings.speechPitch)
+        } else {
+            tts.stop()
+        }
 
         val queue = ArrayDeque(parsed.main)
         while (queue.isNotEmpty()) {
@@ -139,7 +144,7 @@ fun MagicDramaScreen(
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
                     messages += DramaMessage.Narration(text = text, important = cmd.important)
-                    if (ttsReady) {
+                    if (settings.enableSpeech && ttsReady) {
                         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration_${messages.size}")
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
@@ -148,7 +153,7 @@ fun MagicDramaScreen(
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = cmd.text.replace("nn", "\n")
                     messages += DramaMessage.Role(role = role, text = text)
-                    if (ttsReady) {
+                    if (settings.enableSpeech && ttsReady) {
                         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "role_${messages.size}")
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -274,6 +275,7 @@ fun ResourcePreviewScreen(
                                 val isMagicDrama = liveResource.resource.title.contains("魔剧")
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("1000") }
+                                var enableSpeech by remember(liveResource.resource.id) { mutableStateOf(true) }
                                 var speechRateInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
                                 var speechPitchInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
                                 if (showMagicDrama) {
@@ -283,6 +285,7 @@ fun ResourcePreviewScreen(
                                         boundCharacters = liveResource.characters,
                                         settings = MagicDramaSettings(
                                             defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
+                                            enableSpeech = enableSpeech,
                                             speechRate = speechRateInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f,
                                             speechPitch = speechPitchInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
                                         ),
@@ -299,10 +302,21 @@ fun ResourcePreviewScreen(
                                             Text("开始魔剧")
                                         }
                                         Text(
-                                            text = "播放设置（默认值可编辑）",
+                                            text = "播放设置（开始前设置）",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = Color(0xFF5F6280)
                                         )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("文本显示时朗读")
+                                            Switch(
+                                                checked = enableSpeech,
+                                                onCheckedChange = { enableSpeech = it }
+                                            )
+                                        }
                                         OutlinedTextField(
                                             value = defaultDelayInput,
                                             onValueChange = { defaultDelayInput = it },
@@ -310,21 +324,23 @@ fun ResourcePreviewScreen(
                                             label = { Text("文本默认停留毫秒(300-10000)") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            OutlinedTextField(
-                                                value = speechRateInput,
-                                                onValueChange = { speechRateInput = it },
-                                                singleLine = true,
-                                                label = { Text("语速0.5-2") },
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            OutlinedTextField(
-                                                value = speechPitchInput,
-                                                onValueChange = { speechPitchInput = it },
-                                                singleLine = true,
-                                                label = { Text("音调0.5-2") },
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                        if (enableSpeech) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                OutlinedTextField(
+                                                    value = speechRateInput,
+                                                    onValueChange = { speechRateInput = it },
+                                                    singleLine = true,
+                                                    label = { Text("语速0.5-2") },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                OutlinedTextField(
+                                                    value = speechPitchInput,
+                                                    onValueChange = { speechPitchInput = it },
+                                                    singleLine = true,
+                                                    label = { Text("音调0.5-2") },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
