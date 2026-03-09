@@ -286,6 +286,7 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
         const val ZIP_MAGIC_P: Byte = 0x50
         const val ZIP_MAGIC_K: Byte = 0x4B
         const val PROGRESS_UPDATE_BYTES = 256 * 1024
+        const val MAX_ZERO_READ_RETRIES = 1024
         val BACKUP_AES_KEY = "QuotePickerBackupAES256KeyMaterial!".toByteArray(Charset.forName("UTF-8")).copyOf(32)
     }
 
@@ -359,25 +360,13 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun readEntryBytes(zip: ZipInputStream, buffer: ByteArray): ByteArray {
         val output = ByteArrayOutputStream()
-        var read = zip.read(buffer)
-        while (read >= 0) {
-            if (read > 0) {
-                output.write(buffer, 0, read)
-            }
-            read = zip.read(buffer)
-        }
+        copyStreamChunked(zip, output, buffer) { }
         return output.toByteArray()
     }
 
     private fun readEntryToFile(zip: ZipInputStream, target: File, buffer: ByteArray) {
         target.outputStream().use { output ->
-            var read = zip.read(buffer)
-            while (read >= 0) {
-                if (read > 0) {
-                    output.write(buffer, 0, read)
-                }
-                read = zip.read(buffer)
-            }
+            copyStreamChunked(zip, output, buffer) { }
         }
     }
 
@@ -389,25 +378,39 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
     private fun readStreamBytes(input: InputStream): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var read = input.read(buffer)
-        while (read >= 0) {
-            if (read > 0) {
-                output.write(buffer, 0, read)
-            }
-            read = input.read(buffer)
-        }
+        copyStreamChunked(input, output, buffer) { }
         return output.toByteArray()
     }
 
     private fun writeStreamChunked(input: InputStream, output: OutputStream, onChunk: (Int) -> Unit) {
         val buffer = ByteArray(PROGRESS_UPDATE_BYTES)
-        var read = input.read(buffer)
-        while (read >= 0) {
-            if (read > 0) {
-                output.write(buffer, 0, read)
-                onChunk(read)
+        copyStreamChunked(input, output, buffer, onChunk)
+    }
+
+    private fun copyStreamChunked(
+        input: InputStream,
+        output: OutputStream,
+        buffer: ByteArray,
+        onChunk: (Int) -> Unit
+    ) {
+        var zeroReadCount = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            if (read == 0) {
+                zeroReadCount += 1
+                if (zeroReadCount >= MAX_ZERO_READ_RETRIES) {
+                    throw IOException("Input stream returned 0 bytes repeatedly")
+                }
+                val singleByte = input.read()
+                if (singleByte < 0) break
+                output.write(singleByte)
+                onChunk(1)
+                continue
             }
-            read = input.read(buffer)
+            zeroReadCount = 0
+            output.write(buffer, 0, read)
+            onChunk(read)
         }
     }
 
@@ -424,15 +427,15 @@ class CharacterViewModel(app: Application) : AndroidViewModel(app) {
                 writeChunked(zip, snapshotBytes, onChunkWritten)
                 zip.closeEntry()
                 mediaSources.forEach { source ->
-                    val stream = repo.openMediaStream(source.originalPath) ?: return@forEach
-                    runCatching {
-                        stream.use { input ->
-                            zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                    val stream = repo.openMediaStream(source.originalPath)
+                        ?: throw IOException("Failed to open media stream: ${source.originalPath}")
+                    stream.use { input ->
+                        zip.putNextEntry(ZipEntry("media/${source.fileName}"))
+                        try {
                             writeStreamChunked(input, zip, onChunkWritten)
+                        } finally {
                             zip.closeEntry()
                         }
-                    }.onFailure {
-                        runCatching { zip.closeEntry() }
                     }
                 }
             }
