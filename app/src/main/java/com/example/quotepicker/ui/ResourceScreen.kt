@@ -983,13 +983,20 @@ private fun copyResourceCode(
 
 private fun findResourceCodeByPath(resources: List<ResourceWithTagsCharacters>, item: StoredMediaItem): String? {
     return resources.firstNotNullOfOrNull { res ->
-        val matched = when (item.type) {
-            ResourceType.IMAGE -> parseImageItems(res.resource.contentUriOrPath, res.resource.quoteImageBase64).any { it.path == item.path }
-            ResourceType.VIDEO -> parseVideoItems(res.resource.contentUriOrPath).any { it.path == item.path }
-            ResourceType.SOUND -> parseSoundItems(res.resource.contentUriOrPath).any { it.path == item.path }
-            else -> false
+        val path = item.path ?: return@firstNotNullOfOrNull null
+        val matchedPath = when (item.type) {
+            ResourceType.IMAGE -> parseImageItems(res.resource.contentUriOrPath, res.resource.quoteImageBase64)
+                .firstOrNull { it.path == path }
+                ?.path
+            ResourceType.VIDEO -> parseVideoItems(res.resource.contentUriOrPath)
+                .firstOrNull { it.path == path }
+                ?.path
+            ResourceType.SOUND -> parseSoundItems(res.resource.contentUriOrPath)
+                .firstOrNull { it.path == path }
+                ?.path
+            else -> null
         }
-        if (matched) res.resource.resourceCode else null
+        matchedPath?.let { encodeResourceFileInfo(item.type, Uri.parse(it)) }
     }
 }
 
@@ -2352,7 +2359,7 @@ private fun ResourceEditScreen(
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     Text(
-                                        text = item.path?.let { resource.resource.resourceCode ?: "图片" } ?: "新图片 ${index + 1}",
+                                        text = item.path?.let { encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(it)) } ?: "新图片 ${index + 1}",
                                         modifier = Modifier.weight(1f)
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2434,7 +2441,7 @@ private fun ResourceEditScreen(
                                         }
                                     }
                                     Spacer(Modifier.width(12.dp))
-                                    val label = item.path?.let { resource.resource.resourceCode ?: "视频" } ?: "新视频 ${index + 1}"
+                                    val label = item.path?.let { encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(it)) } ?: "新视频 ${index + 1}"
                                     Text(text = label, modifier = Modifier.weight(1f))
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = {
@@ -3469,7 +3476,7 @@ private fun pickFirstImageGroupSource(resources: List<ResourceWithTagsCharacters
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source))
 }
 
 private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): String? {
@@ -3478,19 +3485,19 @@ private fun pickFirstImageSource(resources: List<ResourceWithTagsCharacters>): S
         .mapNotNull { it.path }
         .firstOrNull()
         ?: return null
-    return imageResource.resourceCode ?: encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source), imageResource.id)
+    return encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(source))
 }
 
 private fun pickFirstVideoSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source))
 }
 
 private fun pickFirstVideoGroupSource(resources: List<ResourceWithTagsCharacters>): String? {
     val videoResource = resources.firstOrNull { it.resource.type == ResourceType.VIDEO }?.resource ?: return null
     val source = parseVideoItems(videoResource.contentUriOrPath).firstOrNull()?.path ?: return null
-    return videoResource.resourceCode ?: encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source), videoResource.id)
+    return encodeResourceFileInfo(ResourceType.VIDEO, Uri.parse(source))
 }
 
 private fun parseSceneMessages(raw: String?): List<SceneMessageDraft> {

@@ -661,7 +661,13 @@ private fun decodeImageSources(payload: String?, vm: ResourceViewModel, resource
     val items = parseImagePayloadEntries(payload)
     return items.mapNotNull { entry ->
         decodeImageSource(entry.image, vm)?.let { bitmap ->
-            ImagePreviewItem(bitmap = bitmap, motionVideoUri = entry.motionVideo?.let(Uri::parse), resourceCode = resourceCode, sizeMbText = formatSizeMb(entry.image))
+            val fileCode = runCatching { encodeResourceFileInfo(ResourceType.IMAGE, Uri.parse(entry.image)) }.getOrNull()
+            ImagePreviewItem(
+                bitmap = bitmap,
+                motionVideoUri = entry.motionVideo?.let(Uri::parse),
+                resourceCode = fileCode ?: resourceCode,
+                sizeMbText = formatSizeMb(entry.image)
+            )
         }
     }
 }

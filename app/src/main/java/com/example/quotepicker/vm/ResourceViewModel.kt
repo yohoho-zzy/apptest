@@ -227,7 +227,6 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (matchedByRef != null) {
                     val items = extractResourceMediaSources(matchedByRef)
-                    if (ref.resourceId != null) return items
                     val single = items.firstOrNull { path ->
                         val uri = Uri.parse(path)
                         val pathName = uri.lastPathSegment?.takeIf { it.isNotBlank() }
