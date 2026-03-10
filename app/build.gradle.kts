@@ -72,6 +72,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    implementation("com.k2fsa.sherpa-onnx:sherpa-onnx:1.10.39")
+
     // 可选
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
 }
