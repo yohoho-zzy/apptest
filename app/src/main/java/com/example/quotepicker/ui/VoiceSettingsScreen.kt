@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +55,14 @@ fun VoiceSettingsScreen(
     val ui by vm.uiState.collectAsState()
     val builtInProfile = ui.settings.profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
 
+    val allRoles = remember(ui.narratorName, ui.characterNames) { listOf(ui.narratorName) + ui.characterNames }
+    var selectedRole by rememberSaveable(allRoles) { mutableStateOf(allRoles.firstOrNull().orEmpty()) }
+    var showRoleDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (selectedRole !in allRoles) {
+        selectedRole = allRoles.firstOrNull().orEmpty()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,22 +86,64 @@ fun VoiceSettingsScreen(
                 Text("当前固定模型：vits-zh-hf-fanchen-C.onnx（无需导入）")
                 Text("可为每个角色单独设置 speaker 和参数，并可直接预览。")
             }
+
             item {
-                RoleVoiceSettingRow(
-                    roleName = ui.narratorName,
-                    baseProfile = builtInProfile,
-                    initial = ui.settings.roleSettings.firstOrNull { it.roleName == ui.narratorName },
-                    onSave = { vm.updateRoleSetting(ui.narratorName, builtInProfile?.id, it.speechRate, it.speakerId, it.noiseScale, it.noiseW, it.sentenceSilence) }
-                )
+                Button(
+                    onClick = { showRoleDialog = true },
+                    enabled = allRoles.isNotEmpty()
+                ) {
+                    Text("选择角色：$selectedRole")
+                }
             }
-            items(ui.characterNames, key = { it }) { roleName ->
-                RoleVoiceSettingRow(
-                    roleName = roleName,
-                    baseProfile = builtInProfile,
-                    initial = ui.settings.roleSettings.firstOrNull { it.roleName == roleName },
-                    onSave = { vm.updateRoleSetting(roleName, builtInProfile?.id, it.speechRate, it.speakerId, it.noiseScale, it.noiseW, it.sentenceSilence) }
-                )
+
+            item {
+                val current = ui.settings.roleSettings.firstOrNull { it.roleName == selectedRole }
+                if (selectedRole.isNotBlank()) {
+                    RoleVoiceSettingRow(
+                        roleName = selectedRole,
+                        baseProfile = builtInProfile,
+                        initial = current,
+                        onSave = {
+                            vm.updateRoleSetting(
+                                selectedRole,
+                                builtInProfile?.id,
+                                it.speechRate,
+                                it.speakerId,
+                                it.noiseScale,
+                                it.noiseW,
+                                it.sentenceSilence
+                            )
+                        }
+                    )
+                }
             }
+        }
+
+        if (showRoleDialog) {
+            AlertDialog(
+                onDismissRequest = { showRoleDialog = false },
+                title = { Text("选择角色") },
+                text = {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(allRoles, key = { it }) { roleName ->
+                            TextButton(
+                                onClick = {
+                                    selectedRole = roleName
+                                    showRoleDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(roleName)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showRoleDialog = false }) {
+                        Text("关闭")
+                    }
+                }
+            )
         }
     }
 }
@@ -243,4 +296,3 @@ private fun RoleVoiceSettingRow(
         }
     }
 }
-
