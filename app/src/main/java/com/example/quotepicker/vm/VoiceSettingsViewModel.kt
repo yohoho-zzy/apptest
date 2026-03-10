@@ -72,10 +72,28 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
         persist()
     }
 
-    fun updateRoleSetting(roleName: String, profileId: String?, speechRate: Float) {
+    fun updateRoleSetting(
+        roleName: String,
+        profileId: String?,
+        speechRate: Float,
+        speakerId: Int?,
+        noiseScale: Float?,
+        noiseW: Float?,
+        sentenceSilence: Float?
+    ) {
         localSettings.update { state ->
             val cleaned = state.roleSettings.filterNot { it.roleName == roleName }
-            state.copy(roleSettings = cleaned + RoleVoiceSetting(roleName = roleName, profileId = profileId, speechRate = speechRate))
+            state.copy(
+                roleSettings = cleaned + RoleVoiceSetting(
+                    roleName = roleName,
+                    profileId = profileId,
+                    speechRate = speechRate,
+                    speakerId = speakerId,
+                    noiseScale = noiseScale,
+                    noiseW = noiseW,
+                    sentenceSilence = sentenceSilence
+                )
+            )
         }
         persist()
     }
