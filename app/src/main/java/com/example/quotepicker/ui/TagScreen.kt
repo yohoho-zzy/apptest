@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -90,6 +91,12 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     var deleteTag by remember { mutableStateOf<TagEntity?>(null) }
     var selectedParentTag by remember { mutableStateOf<SelectedParentTagContext?>(null) }
     var showSubTagDialog by remember { mutableStateOf(false) }
+    var showVoiceSettings by remember { mutableStateOf(false) }
+
+    if (showVoiceSettings) {
+        VoiceSettingsScreen(onBack = { showVoiceSettings = false })
+        return
+    }
 
     val isInCategory = ui.currentCategory != null
     val linkedCategoryName = remember(ui.currentCategory) { extractLinkedCategoryName(ui.currentCategory?.name) }
@@ -155,6 +162,13 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                             }
                         }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
+                actions = {
+                    if (!isInCategory && !isInSubTagPage) {
+                        IconButton(onClick = { showVoiceSettings = true }) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = "声音设置")
                         }
                     }
                 }
