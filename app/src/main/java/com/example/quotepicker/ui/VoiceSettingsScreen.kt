@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.util.PiperSpeechEngine
+import java.util.Locale
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
 import com.example.quotepicker.vm.VoiceSettingsViewModel
@@ -111,6 +112,7 @@ private fun RoleVoiceSettingRow(
     var noiseWText by remember(roleName, initial?.noiseW) { mutableStateOf(initial?.noiseW?.toString() ?: "") }
     var sentenceSilenceText by remember(roleName, initial?.sentenceSilence) { mutableStateOf(initial?.sentenceSilence?.toString() ?: "") }
     var previewText by remember(roleName) { mutableStateOf("你好，我是$roleName，这是一段语音预览。") }
+    var statusText by remember(roleName) { mutableStateOf("") }
 
     fun currentSetting() = RoleVoiceSetting(
         roleName = roleName,
@@ -128,7 +130,7 @@ private fun RoleVoiceSettingRow(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(roleName)
         Row {
-            Text("语速 ${"%.2f".format(speed)}")
+            Text("语速 ${"%.2f".format(Locale.US, speed)}")
             Spacer(modifier = Modifier.width(8.dp))
             Slider(
                 value = speed,
@@ -147,68 +149,98 @@ private fun RoleVoiceSettingRow(
                 speakerText = it
                 saveCurrent()
             },
-            label = { Text("speaker（可选）") },
+            label = { Text("speaker（0~186）") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
+
         OutlinedTextField(
             value = noiseScaleText,
             onValueChange = {
                 noiseScaleText = it
                 saveCurrent()
             },
-            label = { Text("noise_scale（可选）") },
+            label = { Text("noise_scale（暂不单独覆盖）") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
         )
+
         OutlinedTextField(
             value = noiseWText,
             onValueChange = {
                 noiseWText = it
                 saveCurrent()
             },
-            label = { Text("noise_w（可选）") },
+            label = { Text("noise_w（暂不单独覆盖）") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
         )
+
         OutlinedTextField(
             value = sentenceSilenceText,
             onValueChange = {
                 sentenceSilenceText = it
                 saveCurrent()
             },
-            label = { Text("sentence_silence（可选）") },
+            label = { Text("sentence_silence（暂不单独覆盖）") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
         )
+
         OutlinedTextField(
             value = previewText,
             onValueChange = { previewText = it },
             label = { Text("预览文本（可修改）") },
             modifier = Modifier.fillMaxWidth()
         )
-        Button(
-            onClick = {
-                val base = baseProfile ?: return@Button
-                val setting = currentSetting()
-                saveCurrent()
-                val effective = base.copy(
-                    speakerId = setting.speakerId,
-                    noiseScale = setting.noiseScale,
-                    noiseW = setting.noiseW,
-                    sentenceSilence = setting.sentenceSilence
-                )
-                scope.launch {
-                    speech.speak(previewText, effective, setting.speechRate)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    if (baseProfile == null) return@Button
+                    val setting = currentSetting()
+                    saveCurrent()
+                    val effective = baseProfile.copy(
+                        speakerId = setting.speakerId,
+                        noiseScale = setting.noiseScale,
+                        noiseW = setting.noiseW,
+                        sentenceSilence = setting.sentenceSilence
+                    )
+                    scope.launch {
+                        try {
+                            statusText = "正在初始化/朗读..."
+                            speech.speak(previewText, effective, setting.speechRate)
+                            statusText = "朗读中"
+                        } catch (e: Throwable) {
+                            statusText = "失败：${e.message ?: e.javaClass.simpleName}"
+                            android.util.Log.e("VoiceSettings", "preview failed", e)
+                        }
+                    }
+                },
+                enabled = baseProfile != null
+            ) {
+                Text("预览朗读")
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        speech.stop()
+                        statusText = "已停止"
+                    }
                 }
-            },
-            enabled = baseProfile != null
-        ) {
-            Text("预览朗读")
+            ) {
+                Text("停止")
+            }
+        }
+
+        if (statusText.isNotBlank()) {
+            Text(statusText)
         }
     }
 }
+
