@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TTS_TAG = "PiperSpeech"
@@ -56,7 +57,8 @@ class PiperSpeechEngine(private val context: Context) {
                     AudioFormat.CHANNEL_OUT_MONO,
                     AudioFormat.ENCODING_PCM_16BIT
                 )
-                val bufferSize = maxOf(minBufferSize, pcm16.size * 2)
+                val pcmBytes = shortArrayToBytes(pcm16)
+                val bufferSize = maxOf(minBufferSize, pcmBytes.size)
 
                 val track = AudioTrack(
                     AudioAttributes.Builder()
@@ -69,19 +71,18 @@ class PiperSpeechEngine(private val context: Context) {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build(),
                     bufferSize,
-                    AudioTrack.MODE_STATIC,
+                    AudioTrack.MODE_STREAM,
                     AudioManager.AUDIO_SESSION_ID_GENERATE
                 )
 
                 audioTrack = track
-                val written = track.write(pcm16, 0, pcm16.size)
+                track.play()
+                val written = track.write(pcmBytes, 0, pcmBytes.size, AudioTrack.WRITE_BLOCKING)
                 if (written <= 0) {
                     track.release()
                     audioTrack = null
                     error("AudioTrack write failed: $written")
                 }
-
-                track.play()
                 true
             }.onFailure { e ->
                 Log.e(TTS_TAG, "speak failed", e)
@@ -155,10 +156,25 @@ class PiperSpeechEngine(private val context: Context) {
     }
 
     private fun floatToPcm16(samples: FloatArray): ShortArray {
+        // sherpa-onnx models may output normalized samples [-1, 1], but some builds return
+        // float values in the int16 range. Auto-detect to avoid heavy distortion.
+        val peak = samples.maxOfOrNull { abs(it) } ?: 1f
+        val scale = if (peak > 1.5f) 1f else Short.MAX_VALUE.toFloat()
+
         return ShortArray(samples.size) { i ->
-            val v = samples[i].coerceIn(-1f, 1f)
-            (v * Short.MAX_VALUE).roundToInt().toShort()
+            val normalized = (samples[i] / scale).coerceIn(-1f, 1f)
+            (normalized * Short.MAX_VALUE).roundToInt().toShort()
         }
+    }
+
+    private fun shortArrayToBytes(samples: ShortArray): ByteArray {
+        val out = ByteArray(samples.size * 2)
+        var j = 0
+        for (sample in samples) {
+            out[j++] = (sample.toInt() and 0xFF).toByte()
+            out[j++] = ((sample.toInt() shr 8) and 0xFF).toByte()
+        }
+        return out
     }
 
     private fun stopInternal() {
