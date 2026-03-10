@@ -130,8 +130,15 @@ fun MagicDramaScreen(
                     messages += DramaMessage.Narration(text = text, important = cmd.important)
                     val narratorSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == "旁白" }
                     val narratorProfile = voiceSettings.profiles.firstOrNull { it.id == narratorSetting?.profileId }
+                        ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
                     if (narratorProfile != null) {
-                        piperSpeechEngine.speak(text, narratorProfile, narratorSetting?.speechRate ?: 1.0f)
+                        val effective = narratorProfile.copy(
+                            speakerId = narratorSetting?.speakerId,
+                            noiseScale = narratorSetting?.noiseScale,
+                            noiseW = narratorSetting?.noiseW,
+                            sentenceSilence = narratorSetting?.sentenceSilence
+                        )
+                        piperSpeechEngine.speak(text, effective, narratorSetting?.speechRate ?: 1.0f)
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
@@ -141,8 +148,15 @@ fun MagicDramaScreen(
                     messages += DramaMessage.Role(role = role, text = text)
                     val roleSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == role }
                     val roleProfile = voiceSettings.profiles.firstOrNull { it.id == roleSetting?.profileId }
+                        ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
                     if (roleProfile != null) {
-                        piperSpeechEngine.speak(text, roleProfile, roleSetting?.speechRate ?: 1.0f)
+                        val effective = roleProfile.copy(
+                            speakerId = roleSetting?.speakerId,
+                            noiseScale = roleSetting?.noiseScale,
+                            noiseW = roleSetting?.noiseW,
+                            sentenceSilence = roleSetting?.sentenceSilence
+                        )
+                        piperSpeechEngine.speak(text, effective, roleSetting?.speechRate ?: 1.0f)
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }

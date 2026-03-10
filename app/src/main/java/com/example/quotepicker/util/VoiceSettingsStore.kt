@@ -22,7 +22,11 @@ data class VoiceProfile(
 data class RoleVoiceSetting(
     val roleName: String,
     val profileId: String? = null,
-    val speechRate: Float = 1.0f
+    val speechRate: Float = 1.0f,
+    val speakerId: Int? = null,
+    val noiseScale: Float? = null,
+    val noiseW: Float? = null,
+    val sentenceSilence: Float? = null
 )
 
 data class VoiceSettings(
@@ -72,31 +76,20 @@ class VoiceSettingsStore(context: Context) {
                             .put("roleName", item.roleName)
                             .put("profileId", item.profileId ?: "")
                             .put("speechRate", item.speechRate)
+                            .put("speakerId", item.speakerId)
+                            .put("noiseScale", item.noiseScale)
+                            .put("noiseW", item.noiseW)
+                            .put("sentenceSilence", item.sentenceSilence)
                     )
                 }
             })
         prefs.edit().putString(KEY_PAYLOAD, root.toString()).apply()
     }
 
-    fun ensureProfile(name: String): VoiceProfile {
-        val settings = load()
-        val existing = settings.profiles.firstOrNull { it.name == name }
-        if (existing != null) return existing
-        val created = VoiceProfile(
-            id = UUID.randomUUID().toString(),
-            name = name,
-            modelUri = "",
-            configUri = ""
-        )
-        save(settings.copy(profiles = settings.profiles + created))
-        return created
-    }
-
     companion object {
         private const val KEY_PAYLOAD = "payload"
     }
 }
-
 
 private fun VoiceSettings.withBuiltinProfile(): VoiceSettings {
     val existing = profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
@@ -152,7 +145,11 @@ private fun JSONArray?.toRoleSettings(): List<RoleVoiceSetting> {
                 RoleVoiceSetting(
                     roleName = role,
                     profileId = item.optString("profileId").ifBlank { null },
-                    speechRate = item.optDouble("speechRate", 1.0).toFloat()
+                    speechRate = item.optDouble("speechRate", 1.0).toFloat(),
+                    speakerId = item.optNullableInt("speakerId"),
+                    noiseScale = item.optNullableFloat("noiseScale"),
+                    noiseW = item.optNullableFloat("noiseW"),
+                    sentenceSilence = item.optNullableFloat("sentenceSilence")
                 )
             )
         }
