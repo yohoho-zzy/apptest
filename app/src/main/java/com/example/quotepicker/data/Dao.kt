@@ -255,6 +255,10 @@ interface TextResourceUsageHistoryDao {
     @Query("DELETE FROM text_resource_usage_history WHERE textResourceId = :textResourceId")
     suspend fun deleteByTextResourceId(textResourceId: Long)
 
+    @Query("DELETE FROM text_resource_usage_history WHERE textResourceId = :textResourceId AND textTitle = :textTitle")
+    suspend fun deleteByTextResourceIdAndTitle(textResourceId: Long, textTitle: String)
+
+
     @Insert
     suspend fun insertAll(items: List<TextResourceUsageHistoryEntity>)
 }

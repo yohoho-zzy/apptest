@@ -265,6 +265,27 @@ class Repository private constructor(context: Context) {
             })
     }
 
+    suspend fun replaceTextResourceUsageTitle(
+        textResourceId: Long,
+        oldTitle: String,
+        newTitle: String
+    ) {
+        if (oldTitle == newTitle) return
+        val oldRecords = textUsageDao.listByTextResourceId(textResourceId).filter { it.textTitle == oldTitle }
+        if (oldRecords.isEmpty()) return
+        textUsageDao.deleteByTextResourceIdAndTitle(textResourceId, oldTitle)
+        val now = System.currentTimeMillis()
+        textUsageDao.insertAll(oldRecords.map {
+            TextResourceUsageHistoryEntity(
+                textResourceId = it.textResourceId,
+                textTitle = newTitle,
+                resourceCode = it.resourceCode,
+                fileInfo = it.fileInfo,
+                createdAt = now
+            )
+        })
+    }
+
     suspend fun listUsageByResourceCode(resourceCode: String): List<TextResourceUsageHistoryEntity> =
         textUsageDao.listByResourceCode(resourceCode)
 
