@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -29,18 +30,20 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
 import com.example.quotepicker.vm.VoiceSettingsViewModel
-import androidx.compose.runtime.collectAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +118,7 @@ fun VoiceSettingsScreen(
                 )
             }
             item {
-                Text("请为音色导入ONNX模型与JSON配置。")
+                Text("ONNX 必填；JSON 配置可选（vits-zh-hf-fanchen-C.onnx 可不提供 json）。")
             }
         }
     }
@@ -183,6 +186,11 @@ private fun VoiceProfileEditor(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
+    var speakerText by remember(profile.id, profile.speakerId) { mutableStateOf(profile.speakerId?.toString() ?: "") }
+    var noiseScaleText by remember(profile.id, profile.noiseScale) { mutableStateOf(profile.noiseScale?.toString() ?: "") }
+    var noiseWText by remember(profile.id, profile.noiseW) { mutableStateOf(profile.noiseW?.toString() ?: "") }
+    var sentenceSilenceText by remember(profile.id, profile.sentenceSilence) { mutableStateOf(profile.sentenceSilence?.toString() ?: "") }
+
     val modelLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
             context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -195,14 +203,71 @@ private fun VoiceProfileEditor(
             onUpdate(profile.copy(configUri = it.toString()))
         }
     }
-    Column {
+
+    fun saveAdvanced() {
+        onUpdate(
+            profile.copy(
+                speakerId = speakerText.toIntOrNull(),
+                noiseScale = noiseScaleText.toFloatOrNull(),
+                noiseW = noiseWText.toFloatOrNull(),
+                sentenceSilence = sentenceSilenceText.toFloatOrNull()
+            )
+        )
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(profile.name)
             IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "删除音色") }
         }
-        AssistChip(onClick = { modelLauncher.launch(arrayOf("*/*")) }, label = { Text("导入ONNX模型") })
-        AssistChip(onClick = { configLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, label = { Text("导入配置JSON") })
+        AssistChip(onClick = { modelLauncher.launch(arrayOf("*/*")) }, label = { Text("导入ONNX模型（必填）") })
+        AssistChip(onClick = { configLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, label = { Text("导入配置JSON（可选）") })
         Text("模型: ${profile.modelUri.ifBlank { "未导入" }}")
-        Text("配置: ${profile.configUri.ifBlank { "未导入" }}")
+        Text("配置: ${profile.configUri.ifBlank { "未导入（将使用模型默认参数）" }}")
+
+        OutlinedTextField(
+            value = speakerText,
+            onValueChange = {
+                speakerText = it
+                saveAdvanced()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Speaker ID（可选）") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+        OutlinedTextField(
+            value = noiseScaleText,
+            onValueChange = {
+                noiseScaleText = it
+                saveAdvanced()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("noise_scale（可选）") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        )
+        OutlinedTextField(
+            value = noiseWText,
+            onValueChange = {
+                noiseWText = it
+                saveAdvanced()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("noise_w（可选）") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        )
+        OutlinedTextField(
+            value = sentenceSilenceText,
+            onValueChange = {
+                sentenceSilenceText = it
+                saveAdvanced()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("sentence_silence（可选）") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        )
     }
 }
