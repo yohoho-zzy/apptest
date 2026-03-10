@@ -342,22 +342,31 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
             onResult(repo.listUsageByResourceCode(resourceCode))
         }
 
+    private fun resolveUsageFileInfo(ref: IndexedResourceRef): String {
+        if (ref.itemIndex == null) return ref.resourceCode
+        val resource = allResources.value
+            .asSequence()
+            .map { it.resource }
+            .firstOrNull { it.resourceCode.equals(ref.resourceCode, ignoreCase = true) }
+            ?: return "${ref.resourceCode}.${ref.itemIndex}"
+        val selectedPath = extractResourceMediaSources(resource).getOrNull(ref.itemIndex - 1)
+        return selectedPath?.takeIf { it.isNotBlank() } ?: "${ref.resourceCode}.${ref.itemIndex}"
+    }
+
     private fun extractReferencedResourceCodes(text: String): Set<Pair<String, String>> {
         val refs = mutableSetOf<Pair<String, String>>()
         Regex("""\+资源:([^\n\r]+)""").findAll(text).forEach { m ->
             val raw = m.groupValues.getOrNull(1).orEmpty()
             raw.split(',', '&').map { it.trim() }.filter { it.isNotBlank() }.forEach { token ->
                 parseIndexedResourceRef(token)?.let { ref ->
-                    val fileInfo = if (ref.itemIndex != null) "${ref.resourceCode}.${ref.itemIndex}" else ref.resourceCode
-                    refs.add(ref.resourceCode to fileInfo)
+                    refs.add(ref.resourceCode to resolveUsageFileInfo(ref))
                 }
             }
         }
         Regex("""@[^@]+@\(([^)]+)\)""").findAll(text).forEach { m ->
             val info = m.groupValues.getOrNull(1).orEmpty().trim()
             parseIndexedResourceRef(info)?.let { ref ->
-                val fileInfo = if (ref.itemIndex != null) "${ref.resourceCode}.${ref.itemIndex}" else ref.resourceCode
-                refs.add(ref.resourceCode to fileInfo)
+                refs.add(ref.resourceCode to resolveUsageFileInfo(ref))
             }
         }
         return refs
