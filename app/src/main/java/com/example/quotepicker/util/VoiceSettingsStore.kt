@@ -5,11 +5,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
+private const val BUILTIN_PROFILE_NAME = "vits-zh-hf-fanchen-C"
+private const val BUILTIN_MODEL_URI = "asset://tts/vits-zh-hf-fanchen-C.onnx"
+
 data class VoiceProfile(
     val id: String,
     val name: String,
     val modelUri: String,
-    val configUri: String
+    val configUri: String,
+    val speakerId: Int? = null,
+    val noiseScale: Float? = null,
+    val noiseW: Float? = null,
+    val sentenceSilence: Float? = null
 )
 
 data class RoleVoiceSetting(
@@ -27,13 +34,18 @@ class VoiceSettingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("voice_settings", Context.MODE_PRIVATE)
 
     fun load(): VoiceSettings {
-        val raw = prefs.getString(KEY_PAYLOAD, null) ?: return VoiceSettings()
-        return runCatching {
-            val root = JSONObject(raw)
-            val profiles = root.optJSONArray("profiles").toProfiles()
-            val roleSettings = root.optJSONArray("roleSettings").toRoleSettings()
-            VoiceSettings(profiles = profiles, roleSettings = roleSettings)
-        }.getOrDefault(VoiceSettings())
+        val raw = prefs.getString(KEY_PAYLOAD, null)
+        val parsed = if (raw == null) {
+            VoiceSettings()
+        } else {
+            runCatching {
+                val root = JSONObject(raw)
+                val profiles = root.optJSONArray("profiles").toProfiles()
+                val roleSettings = root.optJSONArray("roleSettings").toRoleSettings()
+                VoiceSettings(profiles = profiles, roleSettings = roleSettings)
+            }.getOrDefault(VoiceSettings())
+        }
+        return parsed.withBuiltinProfile()
     }
 
     fun save(settings: VoiceSettings) {
@@ -46,6 +58,10 @@ class VoiceSettingsStore(context: Context) {
                             .put("name", profile.name)
                             .put("modelUri", profile.modelUri)
                             .put("configUri", profile.configUri)
+                            .put("speakerId", profile.speakerId)
+                            .put("noiseScale", profile.noiseScale)
+                            .put("noiseW", profile.noiseW)
+                            .put("sentenceSilence", profile.sentenceSilence)
                     )
                 }
             })
@@ -81,6 +97,19 @@ class VoiceSettingsStore(context: Context) {
     }
 }
 
+
+private fun VoiceSettings.withBuiltinProfile(): VoiceSettings {
+    val existing = profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
+    if (existing != null) return this
+    val builtIn = VoiceProfile(
+        id = UUID.randomUUID().toString(),
+        name = BUILTIN_PROFILE_NAME,
+        modelUri = BUILTIN_MODEL_URI,
+        configUri = ""
+    )
+    return copy(profiles = listOf(builtIn) + profiles)
+}
+
 private fun JSONArray?.toProfiles(): List<VoiceProfile> {
     if (this == null) return emptyList()
     return buildList {
@@ -91,11 +120,25 @@ private fun JSONArray?.toProfiles(): List<VoiceProfile> {
                     id = item.optString("id"),
                     name = item.optString("name"),
                     modelUri = item.optString("modelUri"),
-                    configUri = item.optString("configUri")
+                    configUri = item.optString("configUri"),
+                    speakerId = item.optNullableInt("speakerId"),
+                    noiseScale = item.optNullableFloat("noiseScale"),
+                    noiseW = item.optNullableFloat("noiseW"),
+                    sentenceSilence = item.optNullableFloat("sentenceSilence")
                 )
             )
         }
     }
+}
+
+private fun JSONObject.optNullableInt(key: String): Int? {
+    if (isNull(key) || !has(key)) return null
+    return optInt(key)
+}
+
+private fun JSONObject.optNullableFloat(key: String): Float? {
+    if (isNull(key) || !has(key)) return null
+    return optDouble(key).toFloat()
 }
 
 private fun JSONArray?.toRoleSettings(): List<RoleVoiceSetting> {
