@@ -117,7 +117,7 @@ fun VoiceSettingsScreen(
                 )
             }
             item {
-                Text("可上传参考音频（实验）：用于记录你的自定义音色来源，训练/转换后将ONNX模型与JSON配置导入到对应音色。")
+                Text("请为音色导入ONNX模型与JSON配置。")
             }
         }
     }
@@ -197,12 +197,6 @@ private fun VoiceProfileEditor(
             onUpdate(profile.copy(configUri = it.toString()))
         }
     }
-    val refLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            onUpdate(profile.copy(referenceAudioUri = it.toString()))
-        }
-    }
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(profile.name)
@@ -210,7 +204,6 @@ private fun VoiceProfileEditor(
         }
         AssistChip(onClick = { modelLauncher.launch(arrayOf("*/*")) }, label = { Text("导入ONNX模型") })
         AssistChip(onClick = { configLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, label = { Text("导入配置JSON") })
-        AssistChip(onClick = { refLauncher.launch(arrayOf("audio/*")) }, label = { Text("上传参考音频(实验)") })
         Text("模型: ${profile.modelUri.ifBlank { "未导入" }}")
         Text("配置: ${profile.configUri.ifBlank { "未导入" }}")
     }

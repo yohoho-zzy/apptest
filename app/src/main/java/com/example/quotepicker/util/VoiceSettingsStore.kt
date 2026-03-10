@@ -9,8 +9,7 @@ data class VoiceProfile(
     val id: String,
     val name: String,
     val modelUri: String,
-    val configUri: String,
-    val referenceAudioUri: String? = null
+    val configUri: String
 )
 
 data class RoleVoiceSetting(
@@ -47,7 +46,6 @@ class VoiceSettingsStore(context: Context) {
                             .put("name", profile.name)
                             .put("modelUri", profile.modelUri)
                             .put("configUri", profile.configUri)
-                            .put("referenceAudioUri", profile.referenceAudioUri ?: "")
                     )
                 }
             })
@@ -93,8 +91,7 @@ private fun JSONArray?.toProfiles(): List<VoiceProfile> {
                     id = item.optString("id"),
                     name = item.optString("name"),
                     modelUri = item.optString("modelUri"),
-                    configUri = item.optString("configUri"),
-                    referenceAudioUri = item.optString("referenceAudioUri").ifBlank { null }
+                    configUri = item.optString("configUri")
                 )
             )
         }
