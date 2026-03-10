@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 private const val TTS_TAG = "PiperSpeech"
 
@@ -49,14 +48,18 @@ class PiperSpeechEngine(private val context: Context) {
 
                 stopInternal()
 
-                val pcm16 = floatToPcm16(audio.samples)
-                val sampleRate = engine.sampleRate()
+                val sampleRate = audio.sampleRate
+                val samples = audio.samples
+                if (samples.isEmpty()) {
+                    error("Generated audio is empty")
+                }
+
                 val minBufferSize = AudioTrack.getMinBufferSize(
                     sampleRate,
                     AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
+                    AudioFormat.ENCODING_PCM_FLOAT
                 )
-                val bufferSize = maxOf(minBufferSize, pcm16.size * 2)
+                val bufferSize = maxOf(minBufferSize, samples.size * 4)
 
                 val track = AudioTrack(
                     AudioAttributes.Builder()
@@ -65,23 +68,24 @@ class PiperSpeechEngine(private val context: Context) {
                         .build(),
                     AudioFormat.Builder()
                         .setSampleRate(sampleRate)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build(),
                     bufferSize,
-                    AudioTrack.MODE_STATIC,
+                    AudioTrack.MODE_STREAM,
                     AudioManager.AUDIO_SESSION_ID_GENERATE
                 )
 
                 audioTrack = track
-                val written = track.write(pcm16, 0, pcm16.size)
+                track.play()
+                val written = track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
                 if (written <= 0) {
                     track.release()
                     audioTrack = null
                     error("AudioTrack write failed: $written")
                 }
 
-                track.play()
+                Log.d(TTS_TAG, "Played generated audio. sampleRate=$sampleRate, samples=${samples.size}, written=$written")
                 true
             }.onFailure { e ->
                 Log.e(TTS_TAG, "speak failed", e)
@@ -115,7 +119,6 @@ class PiperSpeechEngine(private val context: Context) {
                 noiseScaleW = 0.8f,
                 lengthScale = 1.0f
             )
-
 
             val ruleFars = if (assetExists(RULE_FARS)) RULE_FARS else ""
 
@@ -152,13 +155,6 @@ class PiperSpeechEngine(private val context: Context) {
         val count = engine.numSpeakers()
         if (count <= 0) return 0
         return (speakerId ?: 0).coerceIn(0, count - 1)
-    }
-
-    private fun floatToPcm16(samples: FloatArray): ShortArray {
-        return ShortArray(samples.size) { i ->
-            val v = samples[i].coerceIn(-1f, 1f)
-            (v * Short.MAX_VALUE).roundToInt().toShort()
-        }
     }
 
     private fun stopInternal() {
