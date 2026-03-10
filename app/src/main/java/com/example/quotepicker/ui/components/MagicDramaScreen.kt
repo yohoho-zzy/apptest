@@ -2,6 +2,8 @@ package com.example.quotepicker.ui.components
 
 import android.net.Uri
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,6 +58,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import java.util.Locale
 
@@ -86,6 +89,11 @@ private sealed interface DramaMedia {
     data class Resource(val source: String) : DramaMedia
 }
 
+private const val TTS_TAG = "MagicDramaTTS"
+
+private fun isLanguageAvailable(status: Int): Boolean =
+    status != TextToSpeech.LANG_MISSING_DATA && status != TextToSpeech.LANG_NOT_SUPPORTED
+
 @Composable
 fun MagicDramaScreen(
     title: String,
@@ -107,9 +115,25 @@ fun MagicDramaScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var ttsReady by remember { mutableStateOf(false) }
+    var ttsInitialized by remember { mutableStateOf(false) }
+    var ttsSupported by remember { mutableStateOf(false) }
     val tts = remember {
         TextToSpeech(context) { status ->
+            ttsInitialized = true
             ttsReady = status == TextToSpeech.SUCCESS
+            Log.i(TTS_TAG, "init status=$status ready=$ttsReady")
+        }.apply {
+            setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) = Unit
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    Log.e(TTS_TAG, "utterance error id=$utteranceId")
+                }
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    Log.e(TTS_TAG, "utterance error id=$utteranceId code=$errorCode")
+                }
+            })
         }
     }
 
@@ -131,11 +155,35 @@ fun MagicDramaScreen(
         countdownJob?.cancel()
         countdownJob = null
         if (settings.enableSpeech) {
-            tts.language = Locale.CHINA
-            tts.setSpeechRate(settings.speechRate)
-            tts.setPitch(settings.speechPitch)
+            if (!ttsInitialized) {
+                withTimeoutOrNull(1500) {
+                    while (!ttsInitialized) {
+                        delay(50)
+                    }
+                }
+            }
+            if (ttsReady) {
+                val candidateLocales = listOf(Locale.SIMPLIFIED_CHINESE, Locale.CHINESE, Locale.getDefault()).distinct()
+                val selectedLocale = candidateLocales.firstOrNull { locale ->
+                    val status = tts.setLanguage(locale)
+                    Log.i(TTS_TAG, "try locale=$locale status=$status")
+                    isLanguageAvailable(status)
+                }
+                ttsSupported = selectedLocale != null
+                if (ttsSupported) {
+                    tts.setSpeechRate(settings.speechRate)
+                    tts.setPitch(settings.speechPitch)
+                    Log.i(TTS_TAG, "tts ready engine=${tts.defaultEngine} locale=$selectedLocale")
+                } else {
+                    Log.e(TTS_TAG, "no supported locale for engine=${tts.defaultEngine}")
+                }
+            } else {
+                ttsSupported = false
+                Log.e(TTS_TAG, "tts init did not succeed, skip speech")
+            }
         } else {
             tts.stop()
+            ttsSupported = false
         }
 
         val queue = ArrayDeque(parsed.main)
@@ -144,8 +192,11 @@ fun MagicDramaScreen(
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
                     messages += DramaMessage.Narration(text = text, important = cmd.important)
-                    if (settings.enableSpeech && ttsReady) {
-                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration_${messages.size}")
+                    if (settings.enableSpeech && ttsSupported) {
+                        val speakStatus = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration_${messages.size}")
+                        if (speakStatus == TextToSpeech.ERROR) {
+                            Log.e(TTS_TAG, "speak failed for narration")
+                        }
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
@@ -153,8 +204,11 @@ fun MagicDramaScreen(
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = cmd.text.replace("nn", "\n")
                     messages += DramaMessage.Role(role = role, text = text)
-                    if (settings.enableSpeech && ttsReady) {
-                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "role_${messages.size}")
+                    if (settings.enableSpeech && ttsSupported) {
+                        val speakStatus = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "role_${messages.size}")
+                        if (speakStatus == TextToSpeech.ERROR) {
+                            Log.e(TTS_TAG, "speak failed for role=$role")
+                        }
                     }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
