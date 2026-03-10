@@ -2296,6 +2296,13 @@ private fun ResourceEditScreen(
                     .groupBy { it.fileInfo }
                     .mapValues { (_, usages) -> usages.distinctBy { it.textResourceId }.map { it.textTitle } }
             }
+
+            fun mediaUsageSuffix(path: String?): String? {
+                if (path.isNullOrBlank()) return null
+                return fileUsageTexts[path]
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.joinToString("、")
+            }
             resourceCode?.let { code ->
                 val usageSuffix = wholeUsageTexts.takeIf { it.isNotEmpty() }?.joinToString("、")
                 Text(
@@ -2358,11 +2365,7 @@ private fun ResourceEditScreen(
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
-                                    val imageUsageSuffix = fileId?.let { id ->
-                                        fileUsageTexts[id]
-                                            ?.takeIf { it.isNotEmpty() }
-                                            ?.joinToString("、")
-                                    }
+                                    val imageUsageSuffix = mediaUsageSuffix(item.path)
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(text = item.path?.let { fileId ?: "图片" } ?: "新图片 ${index + 1}")
                                         imageUsageSuffix?.let { suffix ->
@@ -2454,11 +2457,7 @@ private fun ResourceEditScreen(
                                     Spacer(Modifier.width(12.dp))
                                     val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
                                     val label = item.path?.let { fileId ?: "视频" } ?: "新视频 ${index + 1}"
-                                    val videoUsageSuffix = fileId?.let { id ->
-                                        fileUsageTexts[id]
-                                            ?.takeIf { it.isNotEmpty() }
-                                            ?.joinToString("、")
-                                    }
+                                    val videoUsageSuffix = mediaUsageSuffix(item.path)
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(text = label)
                                         videoUsageSuffix?.let { suffix ->
@@ -2527,11 +2526,7 @@ private fun ResourceEditScreen(
                                     Spacer(Modifier.width(12.dp))
                                     val fileId = indexedResourceFileId(resource.resource.resourceCode, index)
                                     val label = item.path?.let { fileId ?: "音频 ${index + 1}" } ?: "新音频 ${index + 1}"
-                                    val soundUsageSuffix = fileId?.let { id ->
-                                        fileUsageTexts[id]
-                                            ?.takeIf { it.isNotEmpty() }
-                                            ?.joinToString("、")
-                                    }
+                                    val soundUsageSuffix = mediaUsageSuffix(item.path)
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(text = label)
                                         soundUsageSuffix?.let { suffix ->
