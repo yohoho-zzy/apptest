@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -280,9 +279,6 @@ fun ResourcePreviewScreen(
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
-                                var enableSpeech by remember(liveResource.resource.id) { mutableStateOf(true) }
-                                var speechRateInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
-                                var speechPitchInput by remember(liveResource.resource.id) { mutableStateOf("1.0") }
                                 if (showMagicDrama) {
                                     MagicDramaScreen(
                                         title = liveResource.resource.title,
@@ -290,10 +286,7 @@ fun ResourcePreviewScreen(
                                         boundCharacters = liveResource.characters,
                                         settings = MagicDramaSettings(
                                             defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
-                                            imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L,
-                                            enableSpeech = enableSpeech,
-                                            speechRate = speechRateInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f,
-                                            speechPitch = speechPitchInput.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
+                                            imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L
                                         ),
                                         vm = vm,
                                         onClose = { showMagicDrama = false }
@@ -308,21 +301,10 @@ fun ResourcePreviewScreen(
                                             Text("开始魔剧")
                                         }
                                         Text(
-                                            text = "播放设置（开始前设置）",
+                                            text = "播放设置（声音请到标签页右上角“声音设置”中配置）",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = Color(0xFF5F6280)
                                         )
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text("文本显示时朗读")
-                                            Switch(
-                                                checked = enableSpeech,
-                                                onCheckedChange = { enableSpeech = it }
-                                            )
-                                        }
                                         OutlinedTextField(
                                             value = defaultDelayInput,
                                             onValueChange = { defaultDelayInput = it },
@@ -337,24 +319,6 @@ fun ResourcePreviewScreen(
                                             label = { Text("图片轮播毫秒(300-10000)") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
-                                        if (enableSpeech) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                OutlinedTextField(
-                                                    value = speechRateInput,
-                                                    onValueChange = { speechRateInput = it },
-                                                    singleLine = true,
-                                                    label = { Text("语速0.5-2") },
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                OutlinedTextField(
-                                                    value = speechPitchInput,
-                                                    onValueChange = { speechPitchInput = it },
-                                                    singleLine = true,
-                                                    label = { Text("音调0.5-2") },
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
-                                        }
                                     }
                                 } else {
                                     if (quoteText.isNotBlank()) {
