@@ -2105,11 +2105,13 @@ private fun ResourceEditScreen(
     onBack: () -> Unit
 ) {
     var title by remember { mutableStateOf(resource.resource.title) }
+    val originalTitle = remember(resource.resource.id) { resource.resource.title }
     var selectedTags by remember { mutableStateOf(resource.tags.map { it.id }.toSet()) }
     var selectedCharacters by remember { mutableStateOf(resource.characters.map { it.id }.toSet()) }
     var showTagPicker by remember { mutableStateOf(false) }
     var showCharacterPicker by remember { mutableStateOf(false) }
     var textContent by remember { mutableStateOf(resource.resource.quoteText.orEmpty()) }
+    val originalTextContent = remember(resource.resource.id) { resource.resource.quoteText.orEmpty() }
     var description by remember { mutableStateOf(resource.resource.quoteText.orEmpty()) }
     var sceneMessages by remember { mutableStateOf(parseSceneMessages(resource.resource.sceneJson)) }
     var imageItems by remember {
@@ -2219,6 +2221,8 @@ private fun ResourceEditScreen(
                             )
                             ResourceType.TEXT -> vm.updateTextResource(
                                 resource.resource,
+                                originalTitle,
+                                originalTextContent,
                                 title.trim(),
                                 textContent.trim(),
                                 selectedTags.toList(),

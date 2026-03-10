@@ -560,6 +560,8 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateTextResource(
         resource: ResourceEntity,
+        originalTitle: String,
+        originalText: String,
         title: String,
         text: String,
         tagIds: List<Long>,
@@ -568,7 +570,12 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         if (characterIds.isEmpty()) return@launch
         val updated = resource.copy(title = title, quoteText = text)
         repo.updateResource(updated)
-        refreshTextUsageHistory(updated, text)
+        if (originalTitle != title) {
+            repo.replaceTextResourceUsageTitle(resource.id, originalTitle, title)
+        }
+        if (originalText != text) {
+            refreshTextUsageHistory(updated, text)
+        }
         updateResourceTags(resource.id, tagIds)
         updateResourceCharacters(resource.id, characterIds)
     }
