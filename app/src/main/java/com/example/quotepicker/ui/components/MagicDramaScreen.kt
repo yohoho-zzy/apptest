@@ -121,6 +121,11 @@ fun MagicDramaScreen(
         onDispose {
             countdownJob?.cancel()
             pendingBranch?.cancel()
+            coroutineScope.launch {
+                piperSpeechEngine.stop()
+                piperSpeechEngine.cleanupPreviewTempFiles()
+                piperSpeechEngine.release()
+            }
         }
     }
 

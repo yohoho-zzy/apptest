@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -154,6 +155,16 @@ private fun VoiceSettingEditor(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val speech = remember(context) { PiperSpeechEngine(context) }
+
+    DisposableEffect(speech) {
+        onDispose {
+            scope.launch {
+                speech.stop()
+                speech.cleanupPreviewTempFiles()
+                speech.release()
+            }
+        }
+    }
 
     var speed by remember(initial?.speechRate) { mutableStateOf((initial?.speechRate ?: 1.0f).coerceIn(0.6f, 1.8f)) }
     var speakerId by remember(initial?.speakerId) { mutableStateOf((initial?.speakerId ?: 0).coerceIn(0, 186)) }

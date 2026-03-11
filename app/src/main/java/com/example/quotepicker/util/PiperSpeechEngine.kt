@@ -19,6 +19,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -38,6 +39,9 @@ class PiperSpeechEngine(private val context: Context) {
 
         private const val MAX_GAIN = 8.0f
         private const val TARGET_PEAK = 0.75f
+        private const val PREVIEW_TEMP_DIR = "voice-preview-audio"
+        private val PREVIEW_TEMP_MAX_AGE_MS = TimeUnit.HOURS.toMillis(12)
+        private const val PREVIEW_TEMP_MAX_FILE_COUNT = 5
     }
 
     private val mutex = Mutex()
@@ -114,16 +118,35 @@ class PiperSpeechEngine(private val context: Context) {
         return withContext(Dispatchers.IO) {
             runCatching {
                 ensureInit(profile)
+                cleanupPreviewTempFiles()
                 val engine = tts ?: error("TTS engine not initialized")
                 val sid = normalizeSpeakerId(engine, profile.speakerId)
                 val speed = speechRate.coerceIn(0.5f, 2.0f)
                 val audio = engine.generate(text = text, sid = sid, speed = speed)
                 val pcm = floatToPcm16WithGain(audio.samples)
-                val tempDir = File(context.cacheDir, "voice-preview-audio").apply { mkdirs() }
+                val tempDir = File(context.cacheDir, PREVIEW_TEMP_DIR).apply { mkdirs() }
                 val out = File(tempDir, "preview_${System.currentTimeMillis()}_${UUID.randomUUID()}.wav")
                 writePcmWav(out, pcm, audio.sampleRate)
                 out
             }.getOrNull()
+        }
+    }
+
+    suspend fun cleanupPreviewTempFiles() = withContext(Dispatchers.IO) {
+        val tempDir = File(context.cacheDir, PREVIEW_TEMP_DIR)
+        if (!tempDir.exists()) return@withContext
+        val now = System.currentTimeMillis()
+        val files = tempDir.listFiles()
+            ?.filter { it.isFile }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
+
+        files.forEachIndexed { index, file ->
+            val isExpired = now - file.lastModified() > PREVIEW_TEMP_MAX_AGE_MS
+            val exceedsCountLimit = index >= PREVIEW_TEMP_MAX_FILE_COUNT
+            if (isExpired || exceedsCountLimit) {
+                runCatching { file.delete() }
+            }
         }
     }
 
