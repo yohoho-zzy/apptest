@@ -145,8 +145,8 @@ class PiperSpeechEngine(private val context: Context) {
     }
 
     private suspend fun ensureInit(profile: VoiceProfile) = withContext(Dispatchers.IO) {
-        val effectiveNoiseScale = (profile.noiseScale ?: 0.667f).coerceIn(0.1f, 2.0f)
-        val effectiveNoiseScaleW = (profile.noiseScaleW ?: 0.8f).coerceIn(0.1f, 2.0f)
+        val effectiveNoiseScale = (profile.noiseScale ?: 0.2f).coerceIn(0.1f, 2.0f)
+        val effectiveNoiseScaleW = (profile.noiseScaleW ?: 0.2f).coerceIn(0.1f, 2.0f)
         val effectiveLengthScale = (profile.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)
         val effectiveMaxNumSentences = (profile.maxNumSentences ?: 1).coerceIn(1, 10)
         val effectiveSilenceScale = (profile.silenceScale ?: 0.2f).coerceIn(0f, 1f)

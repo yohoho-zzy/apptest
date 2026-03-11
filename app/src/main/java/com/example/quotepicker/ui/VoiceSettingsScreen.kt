@@ -180,8 +180,8 @@ private fun VoiceSettingEditor(
 
     var speed by remember(initial?.speechRate) { mutableStateOf((initial?.speechRate ?: 1.0f).coerceIn(0.6f, 1.8f)) }
     var speakerId by remember(initial?.speakerId) { mutableStateOf((initial?.speakerId ?: 0).coerceIn(0, 186)) }
-    var noiseScale by remember(initial?.noiseScale) { mutableStateOf((initial?.noiseScale ?: 0.667f).coerceIn(0.1f, 2.0f)) }
-    var noiseScaleW by remember(initial?.noiseScaleW) { mutableStateOf((initial?.noiseScaleW ?: 0.8f).coerceIn(0.1f, 2.0f)) }
+    var noiseScale by remember(initial?.noiseScale) { mutableStateOf((initial?.noiseScale ?: 0.2f).coerceIn(0.1f, 2.0f)) }
+    var noiseScaleW by remember(initial?.noiseScaleW) { mutableStateOf((initial?.noiseScaleW ?: 0.2f).coerceIn(0.1f, 2.0f)) }
     var lengthScale by remember(initial?.lengthScale) { mutableStateOf((initial?.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)) }
     var maxNumSentences by remember(initial?.maxNumSentences) { mutableStateOf((initial?.maxNumSentences ?: 1).coerceIn(1, 10)) }
     var silenceScale by remember(initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
