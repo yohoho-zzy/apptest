@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -169,9 +171,10 @@ fun MagicDramaScreen(
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
                     if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
+                        val narrationRoleName = if (cmd.important) "注意" else "旁白"
                         speakByRole(
                             text = text,
-                            roleName = "注意",
+                            roleName = narrationRoleName,
                             voiceSettings = voiceSettings,
                             piperSpeechEngine = piperSpeechEngine,
                             vm = vm
@@ -265,6 +268,29 @@ fun MagicDramaScreen(
                     }
                 }
             }
+            if (variables.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF2F6FF))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = Color(0xFF42506A))
+                    variables.forEach { (k, v) ->
+                        Text(
+                            text = "$k:$v",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF1F2433),
+                            modifier = Modifier
+                                .background(Color.White, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
             Column(
                 modifier = Modifier
                     .weight(2f)
@@ -274,32 +300,15 @@ fun MagicDramaScreen(
             ) {
                 Text(text = title, color = Color(0xFF2D3561), style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.weight(1f)) {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        state = listState
-                    ) {
-                        items(messages) { message ->
-                            when (message) {
-                                is DramaMessage.Narration -> NarrationBubble(message)
-                                is DramaMessage.Role -> RoleBubble(message)
-                            }
-                        }
-                    }
-                    if (variables.isNotEmpty()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(
-                            modifier = Modifier
-                                .width(120.dp)
-                                .background(Color(0xFFF2F6FF), RoundedCornerShape(8.dp))
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = Color(0xFF42506A))
-                            variables.forEach { (k, v) ->
-                                Text(text = "$k:$v", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1F2433))
-                            }
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    state = listState
+                ) {
+                    items(messages) { message ->
+                        when (message) {
+                            is DramaMessage.Narration -> NarrationBubble(message)
+                            is DramaMessage.Role -> RoleBubble(message)
                         }
                     }
                 }
