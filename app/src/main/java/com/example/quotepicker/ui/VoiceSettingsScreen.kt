@@ -57,7 +57,7 @@ fun VoiceSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("声音设置（内置 vits-zh-hf-fanchen-C）") },
+                title = { Text("声音设置") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -75,7 +75,6 @@ fun VoiceSettingsScreen(
         ) {
             item {
                 Text("当前固定模型：vits-zh-hf-fanchen-C.onnx（无需导入）")
-                Text("只维护一套通用配置；保存时可绑定到任意角色的“声音配置”文本资源。")
             }
             item {
                 VoiceSettingEditor(
@@ -159,43 +158,43 @@ private fun VoiceSettingEditor(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("$title（每项都限制在安全区间）")
 
-        Text("speakerId")
+        Text("speakerId>说话者(0-186)")
         Row {
             Text("$speakerId")
             Slider(value = speakerId.toFloat(), onValueChange = { speakerId = it.toInt(); saveCurrent() }, valueRange = 0f..186f, modifier = Modifier.weight(1f))
         }
 
-        Text("speed")
+        Text("speed>语速(0.6-1.8)")
         Row {
             Text("${"%.2f".format(Locale.US, speed)}")
             Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.weight(1f))
         }
 
-        Text("noiseScale")
+        Text("noiseScale>情绪:随机发音(0.1-2.0)")
         Row {
             Text("${"%.3f".format(Locale.US, noiseScale)}")
             Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
         }
 
-        Text("noiseScaleW")
+        Text("noiseScaleW>音素:随机间隔(0.1-2.0)")
         Row {
             Text("${"%.3f".format(Locale.US, noiseScaleW)}")
             Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
         }
 
-        Text("lengthScale")
+        Text("lengthScale>句子时长(0.5-2.0)")
         Row {
             Text("${"%.2f".format(Locale.US, lengthScale)}")
             Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.weight(1f))
         }
 
-        Text("maxNumSentences")
+        Text("maxNumSentences>句子处理量(1-10)")
         Row {
             Text("$maxNumSentences")
             Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.weight(1f))
         }
 
-        Text("silenceScale")
+        Text("silenceScale>句子间隔(0-1)")
         Row {
             Text("${"%.2f".format(Locale.US, silenceScale)}")
             Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.weight(1f))
