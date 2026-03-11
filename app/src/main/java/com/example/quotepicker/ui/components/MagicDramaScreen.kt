@@ -32,6 +32,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -80,11 +81,15 @@ enum class MagicDramaVoicePlaybackMode {
 }
 
 private sealed interface DramaCommand {
-    data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
-    data class RoleLine(val roleKey: String, val text: String, val delayMs: Long) : DramaCommand
+    data class Narration(val text: String, val important: Boolean) : DramaCommand
+    data class RoleLine(val roleKey: String, val text: String) : DramaCommand
     data class ShowResource(val source: String) : DramaCommand
     data class ShowButtons(val options: List<DramaButtonOption>) : DramaCommand
-    data class Countdown(val seconds: Int) : DramaCommand
+    data class Countdown(val seconds: Int, val timeoutBlock: String) : DramaCommand
+    data class WaitSeconds(val seconds: Int) : DramaCommand
+    data class SetVariable(val expression: String) : DramaCommand
+    data class Jump(val blockId: String) : DramaCommand
+    data class ConditionalJump(val condition: String, val targetBlock: String) : DramaCommand
 }
 
 private data class DramaButtonOption(val text: String, val branchId: String)
@@ -134,6 +139,8 @@ fun MagicDramaScreen(
             }
         }
     }
+    val variables = remember { mutableStateMapOf<String, String>() }
+    var timeoutBlockToJump by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(script, settings.defaultDelayMs, voiceSettings, playbackOptions) {
         messages.clear()
@@ -141,26 +148,39 @@ fun MagicDramaScreen(
         countdownSeconds = null
         buttonOptions = emptyList()
         pendingBranch = null
+        variables.clear()
+        timeoutBlockToJump = null
         countdownJob?.cancel()
         countdownJob = null
-        val queue = ArrayDeque(parsed.main)
+
+        fun jumpTo(blockId: String, queue: ArrayDeque<DramaCommand>) {
+            queue.clear()
+            parsed.blocks[blockId]?.asReversed()?.forEach { queue.addFirst(it) }
+        }
+
+        val queue = ArrayDeque(parsed.blocks[parsed.startBlock].orEmpty())
         while (queue.isNotEmpty()) {
+            timeoutBlockToJump?.let { blockId ->
+                timeoutBlockToJump = null
+                jumpTo(blockId, queue)
+            }
+
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
-                    val voiceRole = if (cmd.important) "注意" else "旁白"
                     if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
                         speakByRole(
                             text = text,
-                            roleName = voiceRole,
+                            roleName = "注意",
                             voiceSettings = voiceSettings,
                             piperSpeechEngine = piperSpeechEngine,
                             vm = vm
                         )
                     }
                     messages += DramaMessage.Narration(text = text, important = cmd.important)
-                    delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
+                    delay(settings.defaultDelayMs)
                 }
+
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = cmd.text.replace("nn", "\n")
@@ -174,23 +194,37 @@ fun MagicDramaScreen(
                         )
                     }
                     messages += DramaMessage.Role(role = role, text = text)
-                    delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
+                    delay(settings.defaultDelayMs)
                 }
+
                 is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
+                is DramaCommand.WaitSeconds -> delay(cmd.seconds.coerceAtLeast(0) * 1000L)
+                is DramaCommand.SetVariable -> applyVariableExpression(cmd.expression, variables)
+                is DramaCommand.Jump -> jumpTo(cmd.blockId, queue)
+                is DramaCommand.ConditionalJump -> {
+                    if (evaluateCondition(cmd.condition, variables)) jumpTo(cmd.targetBlock, queue)
+                }
+
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
                     countdownJob = coroutineScope.launch {
                         launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
+                        timeoutBlockToJump = cmd.timeoutBlock
+                        pendingBranch?.complete(cmd.timeoutBlock)
                     }
                 }
+
                 is DramaCommand.ShowButtons -> {
                     buttonOptions = cmd.options
                     val waiter = CompletableDeferred<String>()
                     pendingBranch = waiter
                     val selected = waiter.await()
+                    countdownJob?.cancel()
+                    countdownJob = null
+                    countdownSeconds = null
                     buttonOptions = emptyList()
                     pendingBranch = null
-                    parsed.branches[selected]?.asReversed()?.forEach { queue.addFirst(it) }
+                    jumpTo(selected, queue)
                 }
             }
         }
@@ -240,15 +274,32 @@ fun MagicDramaScreen(
             ) {
                 Text(text = title, color = Color(0xFF2D3561), style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    state = listState
-                ) {
-                    items(messages) { message ->
-                        when (message) {
-                            is DramaMessage.Narration -> NarrationBubble(message)
-                            is DramaMessage.Role -> RoleBubble(message)
+                Row(modifier = Modifier.weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        state = listState
+                    ) {
+                        items(messages) { message ->
+                            when (message) {
+                                is DramaMessage.Narration -> NarrationBubble(message)
+                                is DramaMessage.Role -> RoleBubble(message)
+                            }
+                        }
+                    }
+                    if (variables.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(
+                            modifier = Modifier
+                                .width(120.dp)
+                                .background(Color(0xFFF2F6FF), RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = Color(0xFF42506A))
+                            variables.forEach { (k, v) ->
+                                Text(text = "$k:$v", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1F2433))
+                            }
                         }
                     }
                 }
@@ -339,6 +390,60 @@ private suspend fun launchCountdown(total: Int, onTick: (Int?) -> Unit) {
     onTick(null)
 }
 
+private fun applyVariableExpression(expression: String, variables: MutableMap<String, String>) {
+    val raw = expression.trim()
+    when {
+        raw.contains("+=") -> {
+            val (name, deltaRaw) = raw.split("+=", limit = 2)
+            val key = name.trim()
+            val delta = deltaRaw.trim().toIntOrNull() ?: 0
+            val current = variables[key]?.toIntOrNull() ?: 0
+            variables[key] = (current + delta).toString()
+        }
+        raw.contains("-=") -> {
+            val (name, deltaRaw) = raw.split("-=", limit = 2)
+            val key = name.trim()
+            val delta = deltaRaw.trim().toIntOrNull() ?: 0
+            val current = variables[key]?.toIntOrNull() ?: 0
+            variables[key] = (current - delta).toString()
+        }
+        raw.contains("=") -> {
+            val (name, value) = raw.split("=", limit = 2)
+            if (name.isNotBlank()) variables[name.trim()] = value.trim()
+        }
+    }
+}
+
+private fun evaluateCondition(condition: String, variables: Map<String, String>): Boolean {
+    val ops = listOf(">=", "<=", "!=", ">", "<", "=")
+    val op = ops.firstOrNull { condition.contains(it) } ?: return false
+    val parts = condition.split(op, limit = 2)
+    if (parts.size != 2) return false
+    val key = parts[0].trim()
+    val right = parts[1].trim()
+    val leftValue = variables[key] ?: ""
+
+    val leftInt = leftValue.toIntOrNull()
+    val rightInt = right.toIntOrNull()
+    return if (leftInt != null && rightInt != null) {
+        when (op) {
+            "=" -> leftInt == rightInt
+            "!=" -> leftInt != rightInt
+            ">" -> leftInt > rightInt
+            "<" -> leftInt < rightInt
+            ">=" -> leftInt >= rightInt
+            "<=" -> leftInt <= rightInt
+            else -> false
+        }
+    } else {
+        when (op) {
+            "=" -> leftValue == right
+            "!=" -> leftValue != right
+            else -> false
+        }
+    }
+}
+
 @Composable
 private fun LoopVideo(uri: Uri, onCompleted: (() -> Unit)? = null) {
     val holder = remember { mutableStateOf<VideoView?>(null) }
@@ -408,68 +513,81 @@ private fun RoleBubble(message: DramaMessage.Role) {
 }
 
 private data class ParsedDramaScript(
-    val main: List<DramaCommand>,
-    val branches: Map<String, List<DramaCommand>>
+    val startBlock: String,
+    val blocks: Map<String, List<DramaCommand>>
 )
 
 private fun parseDramaScript(raw: String): ParsedDramaScript {
-    val main = mutableListOf<DramaCommand>()
-    val branches = mutableMapOf<String, MutableList<DramaCommand>>()
-    raw.lines().forEach { line ->
-        val trimmed = line.trim()
-        if (!trimmed.startsWith("+")) return@forEach
-        val body = trimmed.removePrefix("+")
-        val branchMatch = Regex("^%(\\w+)(.+)$").find(body)
-        if (branchMatch != null) {
-            val branchId = branchMatch.groupValues[1]
-            val cmd = parseDramaCommand(branchMatch.groupValues[2].trimStart(':'))
-            if (cmd != null) branches.getOrPut(branchId) { mutableListOf() }.add(cmd)
+    val lines = raw.lines().map { sanitizeScriptLine(it) }.filter { it.isNotBlank() }
+    val blockLines = linkedMapOf<String, MutableList<String>>()
+    var currentBlock: String? = null
+    lines.forEach { line ->
+        if (line.startsWith("@")) {
+            currentBlock = line.removePrefix("@").trim()
+            if (currentBlock!!.isNotBlank()) blockLines.getOrPut(currentBlock!!) { mutableListOf() }
         } else {
-            parseDramaCommand(body)?.let(main::add)
+            currentBlock?.let { blockLines.getOrPut(it) { mutableListOf() }.add(line) }
         }
     }
-    return ParsedDramaScript(main = main, branches = branches)
+
+    val start = blockLines.keys.firstOrNull() ?: "开始"
+    val blocks = blockLines.mapValues { (_, content) -> parseBlockCommands(content) }
+    return ParsedDramaScript(startBlock = start, blocks = blocks)
 }
 
-private fun parseDramaCommand(raw: String): DramaCommand? {
-    val idx = raw.indexOf(':')
-    if (idx <= 0) return null
-    val key = raw.substring(0, idx).trim()
-    val value = raw.substring(idx + 1).trim()
-    return when {
-        key == "旁白" -> {
-            val (text, delay) = parseDelayText(value)
-            DramaCommand.Narration(text, delay, important = false)
-        }
-        key == "重要" || key == "注意" -> {
-            val (text, delay) = parseDelayText(value)
-            DramaCommand.Narration(text, delay, important = true)
-        }
-        key in setOf("资源", "视频", "图片") -> DramaCommand.ShowResource(value)
-        key == "按钮" -> {
-            val options = value.split("-")
-                .mapNotNull { item ->
-                    val m = Regex("(.+)%([\\w]+)$").find(item.trim()) ?: return@mapNotNull null
-                    DramaButtonOption(m.groupValues[1].trim(), m.groupValues[2].trim())
+private fun sanitizeScriptLine(raw: String): String {
+    val trimmed = raw.trim()
+    return trimmed.replace(Regex("\\s\\[[^\\[\\]]*]$"), "").trim()
+}
+
+private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
+    val commands = mutableListOf<DramaCommand>()
+    var i = 0
+    while (i < lines.size) {
+        val line = lines[i]
+        when {
+            line.matches(Regex("^w\\d+$", RegexOption.IGNORE_CASE)) -> {
+                commands += DramaCommand.WaitSeconds(line.drop(1).toIntOrNull() ?: 0)
+            }
+            line.startsWith("资源:") -> commands += DramaCommand.ShowResource(line.substringAfter(':').trim())
+            line.startsWith("旁白:") -> commands += DramaCommand.Narration(line.substringAfter(':').trim(), important = false)
+            line.startsWith("注意:") -> commands += DramaCommand.Narration(line.substringAfter(':').trim(), important = true)
+            line.startsWith("设:") -> commands += DramaCommand.SetVariable(line.substringAfter(':').trim())
+            line.startsWith("跳:") -> commands += DramaCommand.Jump(line.substringAfter(':').trim())
+            line.startsWith("判:") -> {
+                val body = line.substringAfter(':').trim()
+                val parts = body.split("--", limit = 2)
+                if (parts.size == 2) commands += DramaCommand.ConditionalJump(parts[0].trim(), parts[1].trim())
+            }
+            line.startsWith("计时:") -> {
+                val body = line.substringAfter(':').trim()
+                val parts = body.split("--", limit = 2)
+                val sec = parts.firstOrNull()?.trim()?.toIntOrNull()
+                val target = parts.getOrNull(1)?.trim()
+                if (sec != null && !target.isNullOrBlank()) commands += DramaCommand.Countdown(sec, target)
+            }
+            line.startsWith("按钮:") -> {
+                val options = mutableListOf<DramaButtonOption>()
+                var j = i + 1
+                while (j < lines.size && lines[j].contains("--")) {
+                    val p = lines[j].split("--", limit = 2)
+                    val text = p.firstOrNull()?.trim().orEmpty()
+                    val target = p.getOrNull(1)?.trim().orEmpty()
+                    if (text.isNotBlank() && target.isNotBlank()) options += DramaButtonOption(text, target)
+                    j++
                 }
-            if (options.isNotEmpty()) DramaCommand.ShowButtons(options) else null
+                if (options.isNotEmpty()) commands += DramaCommand.ShowButtons(options)
+                i = j - 1
+            }
+            line.contains(":") -> {
+                val key = line.substringBefore(':').trim()
+                val value = line.substringAfter(':').trim()
+                if (key.isNotBlank()) commands += DramaCommand.RoleLine(key, value)
+            }
         }
-        key in setOf("倒数", "倒计时", "计时") -> value.toIntOrNull()?.let { DramaCommand.Countdown(it) }
-        else -> {
-            val (text, delay) = parseDelayText(value)
-            DramaCommand.RoleLine(roleKey = key, text = text, delayMs = delay)
-        }
+        i++
     }
-}
-
-private fun parseDelayText(raw: String): Pair<String, Long> {
-    val idx = raw.lastIndexOf('-')
-    if (idx > 0) {
-        val text = raw.substring(0, idx).trim()
-        val ms = raw.substring(idx + 1).trim().toLongOrNull()
-        if (ms != null) return text to ms
-    }
-    return raw to 0L
+    return commands
 }
 
 private fun resolveRoleName(input: String, boundCharacters: List<CharacterEntity>): String {
