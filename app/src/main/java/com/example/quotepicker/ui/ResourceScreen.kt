@@ -3039,7 +3039,7 @@ private fun applyPendingTransfers(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ResourceTagPickerRow(
+internal fun ResourceTagPickerRow(
     label: String,
     allTags: List<TagEntity>,
     selected: Set<Long>,
@@ -3065,7 +3065,7 @@ private fun ResourceTagPickerRow(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ResourceCharacterPickerRow(
+internal fun ResourceCharacterPickerRow(
     label: String,
     characters: List<CharacterEntity>,
     selected: Set<Long>,
@@ -3090,7 +3090,7 @@ private fun ResourceCharacterPickerRow(
 }
 
 @Composable
-private fun TagPickerDialog(
+internal fun TagPickerDialog(
     categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
     selectedIds: Set<Long>,
@@ -3125,7 +3125,7 @@ private fun TagPickerDialog(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CharacterPickerDialog(
+internal fun CharacterPickerDialog(
     characters: List<CharacterEntity>,
     selectedIds: Set<Long>,
     onConfirm: (Set<Long>) -> Unit,
@@ -3177,7 +3177,7 @@ private fun CharacterPickerDialog(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagSelectionSection(
+internal fun TagSelectionSection(
     label: String,
     categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
@@ -3268,7 +3268,7 @@ private fun TagSelectionSection(
 }
 
 @Composable
-private fun TagFilterChip(
+internal fun TagFilterChip(
     tag: TagEntity,
     selected: Set<Long>,
     onChange: (Set<Long>) -> Unit,

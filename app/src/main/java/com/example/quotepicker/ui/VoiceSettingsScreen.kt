@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
+import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.util.PiperSpeechEngine
 import com.example.quotepicker.util.RoleVoiceSetting
@@ -72,6 +72,7 @@ fun VoiceSettingsScreen(
     if (saveMode != null) {
         VoiceResourceSaveScreen(
             mode = saveMode!!,
+            categories = resourceUi.categories,
             tags = resourceUi.tags,
             characters = resourceUi.characters,
             onBack = { saveMode = null },
@@ -287,6 +288,7 @@ private fun VoiceSettingEditor(
 @Composable
 private fun VoiceResourceSaveScreen(
     mode: VoiceSaveMode,
+    categories: List<TagCategoryEntity>,
     tags: List<TagEntity>,
     characters: List<CharacterEntity>,
     onBack: () -> Unit,
@@ -371,87 +373,37 @@ private fun VoiceResourceSaveScreen(
                 Text(if (soundUris.isEmpty()) "未选择音频（将创建空声音组）" else "已选择 ${soundUris.size} 个音频")
             }
 
-            SelectSummaryRow("标签", tags.filter { selectedTagIds.contains(it.id) }.map { it.name }, onPick = { showTagPicker = true })
-            SelectSummaryRow("角色", characters.filter { selectedCharacterIds.contains(it.id) }.map { it.name }, onPick = { showCharacterPicker = true })
+            ResourceTagPickerRow(
+                label = "标签",
+                allTags = tags,
+                selected = selectedTagIds,
+                onPick = { showTagPicker = true }
+            )
+            ResourceCharacterPickerRow(
+                label = "角色",
+                characters = characters,
+                selected = selectedCharacterIds,
+                onPick = { showCharacterPicker = true }
+            )
         }
     }
 
     if (showTagPicker) {
-        MultiSelectDialog(
-            title = "选择标签",
-            options = tags.map { it.id to it.name },
+        TagPickerDialog(
+            categories = categories,
+            tags = tags,
             selectedIds = selectedTagIds,
-            onDismiss = { showTagPicker = false },
-            onConfirm = {
-                selectedTagIds = it
-                showTagPicker = false
-            }
+            onConfirm = { selectedTagIds = it },
+            onDismiss = { showTagPicker = false }
         )
     }
 
     if (showCharacterPicker) {
-        MultiSelectDialog(
-            title = "选择角色",
-            options = characters.map { it.id to it.name },
+        CharacterPickerDialog(
+            characters = characters,
             selectedIds = selectedCharacterIds,
-            onDismiss = { showCharacterPicker = false },
-            onConfirm = {
-                selectedCharacterIds = it
-                showCharacterPicker = false
-            }
+            onConfirm = { selectedCharacterIds = it },
+            onDismiss = { showCharacterPicker = false }
         )
     }
-}
-
-@Composable
-private fun SelectSummaryRow(label: String, selectedNames: List<String>, onPick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text("$label：", modifier = Modifier.padding(bottom = 6.dp))
-        Row(modifier = Modifier.fillMaxWidth().clickable { onPick() }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (selectedNames.isEmpty()) {
-                Text("未选择$label", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            } else {
-                selectedNames.take(3).forEach { name ->
-                    FilterChip(selected = true, onClick = onPick, label = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) })
-                }
-            }
-            TextButton(onClick = onPick) { Text("选择") }
-        }
-    }
-}
-
-@Composable
-private fun MultiSelectDialog(
-    title: String,
-    options: List<Pair<Long, String>>,
-    selectedIds: Set<Long>,
-    onDismiss: () -> Unit,
-    onConfirm: (Set<Long>) -> Unit
-) {
-    var localSelected by remember(selectedIds) { mutableStateOf(selectedIds) }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                options.forEach { option ->
-                    item {
-                    FilterChip(
-                        selected = localSelected.contains(option.first),
-                        onClick = {
-                            localSelected = if (localSelected.contains(option.first)) {
-                                localSelected - option.first
-                            } else {
-                                localSelected + option.first
-                            }
-                        },
-                        label = { Text(option.second) }
-                    )
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(localSelected) }) { Text("确定") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
 }
