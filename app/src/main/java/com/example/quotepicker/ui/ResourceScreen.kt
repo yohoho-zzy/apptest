@@ -3487,20 +3487,31 @@ private fun buildMagicDramaDefaultScript(
     val roleA = characters.getOrNull(0)?.name ?: "角色A"
     val roleB = characters.getOrNull(1)?.name ?: "角色B"
     val imageSource = pickFirstImageSource(availableResources)
-    val imageGroupSource = pickFirstImageGroupSource(availableResources)
-    val videoSource = pickFirstVideoSource(availableResources)
-    val videoGroupSource = pickFirstVideoGroupSource(availableResources)
-
     return buildString {
-        appendLine("+旁白:魔剧自动样例开始-1200")
-        appendLine("+重要:[[注意,提示]]：你可以直接编辑这些行。-1200")
-        imageSource?.let { appendLine("+资源:$it") }
-        appendLine("+$roleA:收到nn如果你看到这句说明角色台词正常。-1600")
-        appendLine("+倒计时:5")
-        appendLine("+按钮:继续%go-结束%end")
-        appendLine("+%go:旁白:你选择了继续分支。-1000")
-        appendLine("+%go:$roleA:继续剧情测试通过。-1200")
-        appendLine("+%end:旁白:你选择了结束分支，魔剧测试完成。-1000")
+        appendLine("@开始")
+        appendLine("注意:你可以直接编辑这些行")
+        appendLine("旁白:魔剧自动样例开始")
+        imageSource?.let { appendLine("资源:$it") }
+        appendLine("$roleA:如果你看到这句，角色台词正常")
+        appendLine("w1")
+        appendLine("设:尝试=0")
+        appendLine("计时:5--超时")
+        appendLine("按钮:")
+        appendLine("继续测试--继续")
+        appendLine("结束测试--结束")
+        appendLine("")
+        appendLine("@继续")
+        appendLine("设:尝试+=1")
+        appendLine("旁白:你选择了继续分支")
+        appendLine("$roleB:继续剧情测试通过")
+        appendLine("跳:结束")
+        appendLine("")
+        appendLine("@超时")
+        appendLine("旁白:你犹豫太久，触发超时")
+        appendLine("跳:结束")
+        appendLine("")
+        appendLine("@结束")
+        appendLine("旁白:魔剧测试完成")
     }.trim()
 }
 
