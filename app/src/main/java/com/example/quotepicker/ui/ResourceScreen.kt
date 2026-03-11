@@ -95,6 +95,7 @@ import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.sortTagsForDisplay
+import com.example.quotepicker.ui.components.formatRoleListForResourceRow
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.vm.FlowUpdateItem
 import com.example.quotepicker.vm.ImageUpdateItem
@@ -363,7 +364,7 @@ fun ResourceScreen(modifier: Modifier = Modifier, vm: ResourceViewModel = viewMo
                             ResourceListRow(
                                 resource = res,
                                 categories = ui.categories,
-                                roleText = res.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                                roleText = formatRoleListForResourceRow(res.characters.map { it.name }),
                                 onClick = { previewTarget = res },
                                 onLongClick = { bottomSheetTarget = res }
                             )
@@ -1378,7 +1379,7 @@ private fun ResourceGroupedPage(
                 ResourceListRow(
                     resource = resource,
                     categories = categories,
-                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                    roleText = formatRoleListForResourceRow(resource.characters.map { it.name }),
                     onClick = { onPreview(resource) },
                     onLongClick = { onLongClick(resource) }
                 )
