@@ -70,8 +70,14 @@ data class MagicDramaSettings(
 private const val DEFAULT_VOICE_SETTING_ROLE = "__default_voice_setting__"
 
 data class MagicDramaPlaybackOptions(
-    val readNarrationAndNotice: Boolean = false
+    val voicePlaybackMode: MagicDramaVoicePlaybackMode = MagicDramaVoicePlaybackMode.ROLE_ONLY
 )
+
+enum class MagicDramaVoicePlaybackMode {
+    SILENT,
+    ROLE_ONLY,
+    ALL
+}
 
 private sealed interface DramaCommand {
     data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
@@ -143,7 +149,7 @@ fun MagicDramaScreen(
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
                     val voiceRole = if (cmd.important) "注意" else "旁白"
-                    if (playbackOptions.readNarrationAndNotice) {
+                    if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
                         speakByRole(
                             text = text,
                             roleName = voiceRole,
@@ -158,13 +164,15 @@ fun MagicDramaScreen(
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = cmd.text.replace("nn", "\n")
-                    speakByRole(
-                        text = text,
-                        roleName = role,
-                        voiceSettings = voiceSettings,
-                        piperSpeechEngine = piperSpeechEngine,
-                        vm = vm
-                    )
+                    if (playbackOptions.voicePlaybackMode != MagicDramaVoicePlaybackMode.SILENT) {
+                        speakByRole(
+                            text = text,
+                            roleName = role,
+                            voiceSettings = voiceSettings,
+                            piperSpeechEngine = piperSpeechEngine,
+                            vm = vm
+                        )
+                    }
                     messages += DramaMessage.Role(role = role, text = text)
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
