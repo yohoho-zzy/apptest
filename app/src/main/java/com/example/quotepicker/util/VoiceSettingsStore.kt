@@ -15,8 +15,10 @@ data class VoiceProfile(
     val configUri: String,
     val speakerId: Int? = null,
     val noiseScale: Float? = null,
-    val noiseW: Float? = null,
-    val sentenceSilence: Float? = null
+    val noiseScaleW: Float? = null,
+    val lengthScale: Float? = null,
+    val maxNumSentences: Int? = null,
+    val silenceScale: Float? = null
 )
 
 data class RoleVoiceSetting(
@@ -25,8 +27,10 @@ data class RoleVoiceSetting(
     val speechRate: Float = 1.0f,
     val speakerId: Int? = null,
     val noiseScale: Float? = null,
-    val noiseW: Float? = null,
-    val sentenceSilence: Float? = null
+    val noiseScaleW: Float? = null,
+    val lengthScale: Float? = null,
+    val maxNumSentences: Int? = null,
+    val silenceScale: Float? = null
 )
 
 data class VoiceSettings(
@@ -64,8 +68,10 @@ class VoiceSettingsStore(context: Context) {
                             .put("configUri", profile.configUri)
                             .put("speakerId", profile.speakerId)
                             .put("noiseScale", profile.noiseScale)
-                            .put("noiseW", profile.noiseW)
-                            .put("sentenceSilence", profile.sentenceSilence)
+                            .put("noiseScaleW", profile.noiseScaleW)
+                            .put("lengthScale", profile.lengthScale)
+                            .put("maxNumSentences", profile.maxNumSentences)
+                            .put("silenceScale", profile.silenceScale)
                     )
                 }
             })
@@ -78,8 +84,10 @@ class VoiceSettingsStore(context: Context) {
                             .put("speechRate", item.speechRate)
                             .put("speakerId", item.speakerId)
                             .put("noiseScale", item.noiseScale)
-                            .put("noiseW", item.noiseW)
-                            .put("sentenceSilence", item.sentenceSilence)
+                            .put("noiseScaleW", item.noiseScaleW)
+                            .put("lengthScale", item.lengthScale)
+                            .put("maxNumSentences", item.maxNumSentences)
+                            .put("silenceScale", item.silenceScale)
                     )
                 }
             })
@@ -116,8 +124,12 @@ private fun JSONArray?.toProfiles(): List<VoiceProfile> {
                     configUri = item.optString("configUri"),
                     speakerId = item.optNullableInt("speakerId"),
                     noiseScale = item.optNullableFloat("noiseScale"),
-                    noiseW = item.optNullableFloat("noiseW"),
-                    sentenceSilence = item.optNullableFloat("sentenceSilence")
+                    noiseScaleW = item.optNullableFloat("noiseScaleW")
+                        ?: item.optNullableFloat("noiseW"),
+                    lengthScale = item.optNullableFloat("lengthScale"),
+                    maxNumSentences = item.optNullableInt("maxNumSentences"),
+                    silenceScale = item.optNullableFloat("silenceScale")
+                        ?: item.optNullableFloat("sentenceSilence")
                 )
             )
         }
@@ -148,8 +160,12 @@ private fun JSONArray?.toRoleSettings(): List<RoleVoiceSetting> {
                     speechRate = item.optDouble("speechRate", 1.0).toFloat(),
                     speakerId = item.optNullableInt("speakerId"),
                     noiseScale = item.optNullableFloat("noiseScale"),
-                    noiseW = item.optNullableFloat("noiseW"),
-                    sentenceSilence = item.optNullableFloat("sentenceSilence")
+                    noiseScaleW = item.optNullableFloat("noiseScaleW")
+                        ?: item.optNullableFloat("noiseW"),
+                    lengthScale = item.optNullableFloat("lengthScale"),
+                    maxNumSentences = item.optNullableInt("maxNumSentences"),
+                    silenceScale = item.optNullableFloat("silenceScale")
+                        ?: item.optNullableFloat("sentenceSilence")
                 )
             )
         }

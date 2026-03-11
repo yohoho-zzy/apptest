@@ -48,12 +48,15 @@ class PiperSpeechEngine(private val context: Context) {
     @Volatile
     private var preparedModelDir: File? = null
 
+    @Volatile
+    private var configSignature: String? = null
+
     suspend fun speak(text: String, profile: VoiceProfile, speechRate: Float): Boolean {
         if (text.isBlank()) return false
 
         return withContext(Dispatchers.Default) {
             runCatching {
-                ensureInit()
+                ensureInit(profile)
 
                 val engine = tts ?: error("TTS engine not initialized")
                 val sid = normalizeSpeakerId(engine, profile.speakerId)
@@ -109,12 +112,28 @@ class PiperSpeechEngine(private val context: Context) {
             tts?.release()
             tts = null
             preparedModelDir = null
+            configSignature = null
         }
     }
 
-    private suspend fun ensureInit() = withContext(Dispatchers.IO) {
+    private suspend fun ensureInit(profile: VoiceProfile) = withContext(Dispatchers.IO) {
+        val effectiveNoiseScale = (profile.noiseScale ?: 0.667f).coerceIn(0.1f, 2.0f)
+        val effectiveNoiseScaleW = (profile.noiseScaleW ?: 0.8f).coerceIn(0.1f, 2.0f)
+        val effectiveLengthScale = (profile.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)
+        val effectiveMaxNumSentences = (profile.maxNumSentences ?: 1).coerceIn(1, 10)
+        val effectiveSilenceScale = (profile.silenceScale ?: 0.2f).coerceIn(0f, 1f)
+        val targetSignature = listOf(
+            effectiveNoiseScale,
+            effectiveNoiseScaleW,
+            effectiveLengthScale,
+            effectiveMaxNumSentences,
+            effectiveSilenceScale
+        ).joinToString("|")
+
         mutex.withLock {
-            if (tts != null) return@withLock
+            if (tts != null && configSignature == targetSignature) return@withLock
+            tts?.release()
+            tts = null
 
             val modelDir = prepareModelDir()
             preparedModelDir = modelDir
@@ -147,9 +166,9 @@ class PiperSpeechEngine(private val context: Context) {
                 lexicon = lexiconPath,
                 tokens = tokensPath,
                 dictDir = dictDirPath,
-                noiseScale = 0.667f,
-                noiseScaleW = 0.8f,
-                lengthScale = 1.0f
+                noiseScale = effectiveNoiseScale,
+                noiseScaleW = effectiveNoiseScaleW,
+                lengthScale = effectiveLengthScale
             )
 
             val config = OfflineTtsConfig(
@@ -161,11 +180,12 @@ class PiperSpeechEngine(private val context: Context) {
                 ),
                 ruleFsts = ruleFsts,
                 ruleFars = ruleFars,
-                maxNumSentences = 1,
-                silenceScale = 0.2f
+                maxNumSentences = effectiveMaxNumSentences,
+                silenceScale = effectiveSilenceScale
             )
 
             tts = OfflineTts(config = config)
+            configSignature = targetSignature
 
             Log.d(
                 TTS_TAG,
