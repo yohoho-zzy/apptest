@@ -278,8 +278,8 @@ fun ResourcePreviewScreen(
                                 val quoteText = liveResource.resource.quoteText.orEmpty()
                                 val isMagicDrama = liveResource.resource.title.contains("魔剧")
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
-                                var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
-                                var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
+                                var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3") }
+                                var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3") }
                                 var voicePlaybackMode by remember(liveResource.resource.id) {
                                     mutableStateOf(MagicDramaVoicePlaybackMode.ROLE_ONLY)
                                 }
@@ -289,8 +289,10 @@ fun ResourcePreviewScreen(
                                         script = quoteText,
                                         boundCharacters = liveResource.characters,
                                         settings = MagicDramaSettings(
-                                            defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
-                                            imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L
+                                            defaultDelayMs = (defaultDelayInput.toLongOrNull()?.coerceIn(1L, 10L)
+                                                ?: 3L) * 1000L,
+                                            imageIntervalMs = (imageIntervalInput.toLongOrNull()?.coerceIn(1L, 10L)
+                                                ?: 3L) * 1000L
                                         ),
                                         playbackOptions = MagicDramaPlaybackOptions(
                                             voicePlaybackMode = voicePlaybackMode
@@ -343,14 +345,14 @@ fun ResourcePreviewScreen(
                                             value = defaultDelayInput,
                                             onValueChange = { defaultDelayInput = it },
                                             singleLine = true,
-                                            label = { Text("文本默认停留毫秒(300-10000)") },
+                                            label = { Text("文本默认停留秒(1-10)") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         OutlinedTextField(
                                             value = imageIntervalInput,
                                             onValueChange = { imageIntervalInput = it },
                                             singleLine = true,
-                                            label = { Text("图片轮播毫秒(300-10000)") },
+                                            label = { Text("图片轮播秒(1-10)") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     }
