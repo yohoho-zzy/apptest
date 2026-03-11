@@ -1,16 +1,20 @@
 package com.example.quotepicker.ui
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.quotepicker.data.CharacterEntity
+import com.example.quotepicker.data.TagCategoryEntity
+import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.util.PiperSpeechEngine
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
@@ -41,6 +48,11 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 private const val BUILTIN_MODEL_URI = "asset://tts/vits-zh-hf-fanchen-C.onnx"
+
+private sealed class VoiceSaveMode {
+    data class Text(val initialContent: String) : VoiceSaveMode()
+    data class Sound(val initialUri: Uri) : VoiceSaveMode()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +65,26 @@ fun VoiceSettingsScreen(
     val resourceUi by resourceVm.uiState.collectAsState()
     val builtInProfile = ui.settings.profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
     val current = vm.globalRoleSetting(ui.settings)
+    var saveMode by remember { mutableStateOf<VoiceSaveMode?>(null) }
+
+    if (saveMode != null) {
+        VoiceResourceSaveScreen(
+            mode = saveMode!!,
+            categories = resourceUi.categories,
+            tags = resourceUi.tags,
+            characters = resourceUi.characters,
+            onBack = { saveMode = null },
+            onSaveText = { title, content, tagIds, characterIds ->
+                resourceVm.addTextResource(title, content, tagIds, characterIds)
+                saveMode = null
+            },
+            onSaveSound = { title, uris, tagIds, characterIds ->
+                resourceVm.addSoundGroup(title, uris, tagIds, characterIds)
+                saveMode = null
+            }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -82,8 +114,6 @@ fun VoiceSettingsScreen(
                     baseProfile = builtInProfile,
                     initial = current,
                     initialPreviewText = ui.settings.rolePreviewTexts[VoiceSettingsViewModel.DEFAULT_ROLE_KEY],
-                    allTags = resourceUi.tags,
-                    allCharacters = resourceUi.characters,
                     onSave = {
                         vm.updateRoleSetting(
                             VoiceSettingsViewModel.DEFAULT_ROLE_KEY,
@@ -98,12 +128,8 @@ fun VoiceSettingsScreen(
                         )
                     },
                     onPersistPreviewText = { vm.updatePreviewText(VoiceSettingsViewModel.DEFAULT_ROLE_KEY, it) },
-                    onSaveAsText = { title, content, tagIds, characterIds ->
-                        resourceVm.addTextResource(title, content, tagIds, characterIds)
-                    },
-                    onSaveAsSound = { title, uri, tagIds, characterIds ->
-                        resourceVm.addSoundGroup(title, listOf(uri), tagIds, characterIds)
-                    },
+                    onOpenSaveTextPage = { content -> saveMode = VoiceSaveMode.Text(content) },
+                    onOpenSaveSoundPage = { uri -> saveMode = VoiceSaveMode.Sound(uri) },
                     buildConfigText = { vm.buildDefaultConfigText() }
                 )
             }
@@ -117,12 +143,10 @@ private fun VoiceSettingEditor(
     baseProfile: VoiceProfile?,
     initial: RoleVoiceSetting?,
     initialPreviewText: String?,
-    allTags: List<com.example.quotepicker.data.TagEntity>,
-    allCharacters: List<com.example.quotepicker.data.CharacterEntity>,
     onSave: (RoleVoiceSetting) -> Unit,
     onPersistPreviewText: (String) -> Unit,
-    onSaveAsText: (String, String, List<Long>, List<Long>) -> Unit,
-    onSaveAsSound: (String, Uri, List<Long>, List<Long>) -> Unit,
+    onOpenSaveTextPage: (String) -> Unit,
+    onOpenSaveSoundPage: (Uri) -> Unit,
     buildConfigText: () -> String
 ) {
     val context = LocalContext.current
@@ -138,9 +162,6 @@ private fun VoiceSettingEditor(
     var silenceScale by remember(initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
     var previewText by remember(initialPreviewText) { mutableStateOf(initialPreviewText ?: "这是一段语音预览。") }
     var statusText by remember { mutableStateOf("") }
-    var showSaveTextDialog by remember { mutableStateOf(false) }
-    var showSaveSoundDialog by remember { mutableStateOf(false) }
-    var tempAudioUri by remember { mutableStateOf<Uri?>(null) }
 
     fun currentSetting() = RoleVoiceSetting(
         roleName = VoiceSettingsViewModel.DEFAULT_ROLE_KEY,
@@ -232,7 +253,7 @@ private fun VoiceSettingEditor(
             ) { Text("预览朗读") }
 
             Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }) { Text("停止") }
-            Button(onClick = { showSaveTextDialog = true }) { Text("保存") }
+            Button(onClick = { onOpenSaveTextPage(buildConfigText()) }) { Text("保存") }
             Button(onClick = {
                 if (baseProfile == null) return@Button
                 val setting = currentSetting()
@@ -248,8 +269,7 @@ private fun VoiceSettingEditor(
                     statusText = "正在生成声音文件..."
                     val file = speech.synthesizeToTempWav(previewText, effective, setting.speechRate)
                     if (file != null) {
-                        tempAudioUri = Uri.fromFile(file)
-                        showSaveSoundDialog = true
+                        onOpenSaveSoundPage(Uri.fromFile(file))
                         statusText = "已生成临时声音文件"
                     } else {
                         statusText = "生成失败"
@@ -260,110 +280,128 @@ private fun VoiceSettingEditor(
 
         if (statusText.isNotBlank()) Text(statusText)
 
-        if (showSaveTextDialog) {
-            SaveTextConfigDialog(
-                initialContent = buildConfigText(),
-                tags = allTags,
-                characters = allCharacters,
-                onDismiss = { showSaveTextDialog = false },
-                onConfirm = { saveTitle, content, tagIds, characterIds ->
-                    onSaveAsText(saveTitle, content, tagIds, characterIds)
-                    showSaveTextDialog = false
-                    statusText = "已创建文本资源"
-                }
-            )
-        }
-
-        if (showSaveSoundDialog) {
-            SaveSoundDialog(
-                tempUri = tempAudioUri,
-                tags = allTags,
-                characters = allCharacters,
-                onDismiss = {
-                    tempAudioUri?.path?.let { java.io.File(it).delete() }
-                    tempAudioUri = null
-                    showSaveSoundDialog = false
-                },
-                onConfirm = { saveTitle, uri, tagIds, characterIds ->
-                    onSaveAsSound(saveTitle, uri, tagIds, characterIds)
-                    uri.path?.let { java.io.File(it).delete() }
-                    tempAudioUri = null
-                    showSaveSoundDialog = false
-                    statusText = "已保存声音资源"
-                }
-            )
-        }
     }
 }
 
 @Composable
-private fun SaveTextConfigDialog(
-    initialContent: String,
-    tags: List<com.example.quotepicker.data.TagEntity>,
-    characters: List<com.example.quotepicker.data.CharacterEntity>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, List<Long>, List<Long>) -> Unit
+private fun VoiceResourceSaveScreen(
+    mode: VoiceSaveMode,
+    categories: List<TagCategoryEntity>,
+    tags: List<TagEntity>,
+    characters: List<CharacterEntity>,
+    onBack: () -> Unit,
+    onSaveText: (String, String, List<Long>, List<Long>) -> Unit,
+    onSaveSound: (String, List<Uri>, List<Long>, List<Long>) -> Unit
 ) {
-    var title by remember { mutableStateOf("声音配置") }
-    var content by remember(initialContent) { mutableStateOf(initialContent) }
-    var tagInput by remember { mutableStateOf("") }
-    var characterInput by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("保存声音配置文本") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("文本名") })
-                OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("文本内容") })
-                OutlinedTextField(value = tagInput, onValueChange = { tagInput = it }, label = { Text("标签(逗号分隔)") })
-                OutlinedTextField(value = characterInput, onValueChange = { characterInput = it }, label = { Text("角色名(逗号分隔)") })
+    val context = LocalContext.current
+    var title by remember(mode) {
+        mutableStateOf(
+            when (mode) {
+                is VoiceSaveMode.Text -> "声音配置"
+                is VoiceSaveMode.Sound -> "留声"
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val tagNames = tagInput.split(',').map { it.trim() }
-                val roleNames = characterInput.split(',').map { it.trim() }
-                val selectedTagIds = tags.filter { t -> t.name in tagNames }.map { it.id }
-                val selectedCharacterIds = characters.filter { c -> c.name in roleNames }.map { it.id }
-                onConfirm(title.trim().ifBlank { "声音配置" }, content, selectedTagIds, selectedCharacterIds)
-            }) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
-}
+        )
+    }
+    var content by remember(mode) { mutableStateOf((mode as? VoiceSaveMode.Text)?.initialContent ?: "") }
+    var selectedTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var selectedCharacterIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var showTagPicker by remember { mutableStateOf(false) }
+    var showCharacterPicker by remember { mutableStateOf(false) }
+    var soundUris by remember(mode) {
+        mutableStateOf(
+            when (mode) {
+                is VoiceSaveMode.Sound -> listOf(mode.initialUri)
+                is VoiceSaveMode.Text -> emptyList()
+            }
+        )
+    }
 
-@Composable
-private fun SaveSoundDialog(
-    tempUri: Uri?,
-    tags: List<com.example.quotepicker.data.TagEntity>,
-    characters: List<com.example.quotepicker.data.CharacterEntity>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, Uri, List<Long>, List<Long>) -> Unit
-) {
-    var title by remember { mutableStateOf("留声") }
-    var tagInput by remember { mutableStateOf("") }
-    var characterInput by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("保存声音资源") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("声音资源名") })
-                Text("文件：${tempUri?.lastPathSegment ?: "未生成"}")
-                OutlinedTextField(value = tagInput, onValueChange = { tagInput = it }, label = { Text("标签(逗号分隔)") })
-                OutlinedTextField(value = characterInput, onValueChange = { characterInput = it }, label = { Text("角色名(逗号分隔)") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val uri = tempUri ?: return@TextButton
-                val tagNames = tagInput.split(',').map { it.trim() }
-                val roleNames = characterInput.split(',').map { it.trim() }
-                val selectedTagIds = tags.filter { t -> t.name in tagNames }.map { it.id }
-                val selectedCharacterIds = characters.filter { c -> c.name in roleNames }.map { it.id }
-                onConfirm(title.trim(), uri, selectedTagIds, selectedCharacterIds)
-            }) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        soundUris = uris
+        uris.forEach { uri ->
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+    }
+
+    val canSave = title.isNotBlank() && selectedCharacterIds.isNotEmpty() && (
+        mode is VoiceSaveMode.Text && content.isNotBlank() || mode is VoiceSaveMode.Sound
     )
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (mode is VoiceSaveMode.Text) "创建文本" else "上传声音组") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            when (mode) {
+                                is VoiceSaveMode.Text -> onSaveText(title.trim(), content.trim(), selectedTagIds.toList(), selectedCharacterIds.toList())
+                                is VoiceSaveMode.Sound -> onSaveSound(title.trim(), soundUris, selectedTagIds.toList(), selectedCharacterIds.toList())
+                            }
+                        },
+                        enabled = canSave
+                    ) { Text("保存") }
+                }
+            )
+        }
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(if (mode is VoiceSaveMode.Text) "文本名" else "名称") }, modifier = Modifier.fillMaxWidth())
+            if (mode is VoiceSaveMode.Text) {
+                OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("文本内容") }, modifier = Modifier.fillMaxWidth())
+            } else {
+                TextButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("选择音频")
+                }
+                Text(if (soundUris.isEmpty()) "未选择音频（将创建空声音组）" else "已选择 ${soundUris.size} 个音频")
+            }
+
+            ResourceTagPickerRow(
+                label = "标签",
+                allTags = tags,
+                selected = selectedTagIds,
+                onPick = { showTagPicker = true }
+            )
+            ResourceCharacterPickerRow(
+                label = "角色",
+                characters = characters,
+                selected = selectedCharacterIds,
+                onPick = { showCharacterPicker = true }
+            )
+        }
+    }
+
+    if (showTagPicker) {
+        TagPickerDialog(
+            categories = categories,
+            tags = tags,
+            selectedIds = selectedTagIds,
+            onConfirm = { selectedTagIds = it },
+            onDismiss = { showTagPicker = false }
+        )
+    }
+
+    if (showCharacterPicker) {
+        CharacterPickerDialog(
+            characters = characters,
+            selectedIds = selectedCharacterIds,
+            onConfirm = { selectedCharacterIds = it },
+            onDismiss = { showCharacterPicker = false }
+        )
+    }
 }
