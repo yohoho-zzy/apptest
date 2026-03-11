@@ -876,6 +876,11 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault(false)
         if (!deleted) {
             runCatching { app.contentResolver.delete(uri, null, null) }
+            if (uri.scheme == "file") {
+                runCatching {
+                    uri.path?.let { File(it).delete() }
+                }
+            }
         }
     }
 
