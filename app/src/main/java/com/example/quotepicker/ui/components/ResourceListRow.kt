@@ -94,6 +94,21 @@ fun ResourceListRow(
     }
 }
 
+fun formatRoleListForResourceRow(roleNames: List<String>): String {
+    val cleanedNames = roleNames.map { it.trim() }.filter { it.isNotEmpty() }
+    if (cleanedNames.isEmpty()) return "无角色"
+
+    val prioritizedNames = cleanedNames.sortedByDescending { it.length }
+    val visibleNames = prioritizedNames.take(4)
+    val hasMoreRoles = prioritizedNames.size > visibleNames.size
+    return buildString {
+        append(visibleNames.joinToString("/"))
+        if (hasMoreRoles) {
+            append("/...")
+        }
+    }
+}
+
 @Composable
 private fun CompactTagLabel(tag: TagEntity) {
     val bgColor = Color(tag.colorArgb)

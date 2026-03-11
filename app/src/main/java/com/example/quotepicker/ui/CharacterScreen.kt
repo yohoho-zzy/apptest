@@ -87,6 +87,7 @@ import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.SquareGridItem
 import com.example.quotepicker.ui.components.sortTagsForDisplay
+import com.example.quotepicker.ui.components.formatRoleListForResourceRow
 import com.example.quotepicker.ui.components.isPrefixGroupingCategory
 import com.example.quotepicker.ui.components.splitTagsByPrefix
 import com.example.quotepicker.vm.CharacterViewModel
@@ -945,7 +946,7 @@ private fun CharacterGroupedResourcePage(
                 ResourceListRow(
                     resource = resource,
                     categories = categories,
-                    roleText = resource.characters.joinToString("/") { it.name }.ifBlank { "无角色" },
+                    roleText = formatRoleListForResourceRow(resource.characters.map { it.name }),
                     onClick = { onPreview(resource) },
                     onLongClick = {}
                 )
