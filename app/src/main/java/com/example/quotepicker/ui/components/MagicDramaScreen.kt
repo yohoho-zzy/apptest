@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,8 +50,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.CharacterEntity
+import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
+import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.util.PiperSpeechEngine
+import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceSettingsStore
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -58,6 +62,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 
 data class MagicDramaSettings(
     val defaultDelayMs: Long = 1000L,
@@ -111,6 +116,7 @@ fun MagicDramaScreen(
     val voiceSettingsStore = remember(context) { VoiceSettingsStore(context) }
     val piperSpeechEngine = remember(context) { PiperSpeechEngine(context) }
     val voiceSettings = remember { voiceSettingsStore.load() }
+    val allResources by vm.allResources.collectAsState()
 
     DisposableEffect(Unit) {
         onDispose {
@@ -138,6 +144,7 @@ fun MagicDramaScreen(
                             text = text,
                             roleName = voiceRole,
                             voiceSettings = voiceSettings,
+                            allResources = allResources,
                             piperSpeechEngine = piperSpeechEngine
                         )
                     }
@@ -151,6 +158,7 @@ fun MagicDramaScreen(
                         text = text,
                         roleName = role,
                         voiceSettings = voiceSettings,
+                        allResources = allResources,
                         piperSpeechEngine = piperSpeechEngine
                     )
                     messages += DramaMessage.Role(role = role, text = text)
@@ -263,9 +271,11 @@ private suspend fun speakByRole(
     text: String,
     roleName: String,
     voiceSettings: com.example.quotepicker.util.VoiceSettings,
+    allResources: List<ResourceWithTagsCharacters>,
     piperSpeechEngine: PiperSpeechEngine
 ) {
-    val roleSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == roleName }
+    val roleSetting = resolveRoleSettingFromTextResource(roleName, allResources)
+        ?: voiceSettings.roleSettings.firstOrNull { it.roleName == roleName }
     val roleProfile = voiceSettings.profiles.firstOrNull { it.id == roleSetting?.profileId }
         ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
     if (roleProfile != null) {
@@ -279,6 +289,39 @@ private suspend fun speakByRole(
         )
         piperSpeechEngine.speak(text, effective, roleSetting?.speechRate ?: 1.0f)
     }
+}
+
+private fun resolveRoleSettingFromTextResource(
+    roleName: String,
+    resources: List<ResourceWithTagsCharacters>
+): RoleVoiceSetting? {
+    val candidates = resources.filter { item ->
+        item.resource.type == ResourceType.TEXT &&
+                item.resource.title.contains("声音配置") &&
+                item.characters.any { it.name == roleName }
+    }
+    if (candidates.isEmpty()) return null
+    val favorites = candidates.filter { it.resource.markState == ResourceMarkState.FAVORITE }
+    val chosen = if (favorites.size == 1) favorites.first() else candidates.first()
+    return parseVoiceConfig(chosen.resource.quoteText.orEmpty(), roleName)
+}
+
+private fun parseVoiceConfig(raw: String, roleName: String): RoleVoiceSetting? {
+    if (raw.isBlank()) return null
+    return runCatching {
+        val obj = JSONObject(raw)
+        if (obj.optString("kind") != "voice_config") return@runCatching null
+        RoleVoiceSetting(
+            roleName = roleName,
+            speechRate = obj.optDouble("speechRate", 1.0).toFloat(),
+            speakerId = obj.optInt("speakerId", 0),
+            noiseScale = obj.optDouble("noiseScale", 0.667).toFloat(),
+            noiseScaleW = obj.optDouble("noiseScaleW", 0.8).toFloat(),
+            lengthScale = obj.optDouble("lengthScale", 1.0).toFloat(),
+            maxNumSentences = obj.optInt("maxNumSentences", 1),
+            silenceScale = obj.optDouble("silenceScale", 0.2).toFloat()
+        )
+    }.getOrNull()
 }
 
 private suspend fun launchCountdown(total: Int, onTick: (Int?) -> Unit) {

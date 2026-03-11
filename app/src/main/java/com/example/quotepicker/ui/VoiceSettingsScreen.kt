@@ -1,5 +1,6 @@
 package com.example.quotepicker.ui
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,18 +28,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.util.PiperSpeechEngine
-import java.util.Locale
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
 import com.example.quotepicker.vm.VoiceSettingsViewModel
+import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 private const val BUILTIN_MODEL_URI = "asset://tts/vits-zh-hf-fanchen-C.onnx"
 
@@ -50,13 +52,8 @@ fun VoiceSettingsScreen(
 ) {
     val ui by vm.uiState.collectAsState()
     val builtInProfile = ui.settings.profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
-
-    val allRoles = remember(ui.narratorName, ui.noticeName, ui.characterNames) { listOf(ui.narratorName, ui.noticeName) + ui.characterNames }
-    var selectedRole by rememberSaveable(allRoles) { mutableStateOf(allRoles.firstOrNull().orEmpty()) }
-    var showRoleDialog by rememberSaveable { mutableStateOf(false) }
-
-    if (selectedRole !in allRoles) {
-        selectedRole = allRoles.firstOrNull().orEmpty()
+    val allRoles = remember(ui.narratorName, ui.noticeName, ui.characterNames) {
+        (listOf(ui.narratorName, ui.noticeName) + ui.characterNames).distinct()
     }
 
     Scaffold(
@@ -80,68 +77,32 @@ fun VoiceSettingsScreen(
         ) {
             item {
                 Text("当前固定模型：vits-zh-hf-fanchen-C.onnx（无需导入）")
-                Text("可为每个角色单独设置 speaker 和参数，并可直接预览。")
+                Text("可为每个角色单独设置 speaker 和参数，并可直接预览/保存。")
             }
 
-            item {
-                Button(
-                    onClick = { showRoleDialog = true },
-                    enabled = allRoles.isNotEmpty()
-                ) {
-                    Text("选择角色：$selectedRole")
-                }
+            items(allRoles, key = { it }) { roleName ->
+                val current = ui.settings.roleSettings.firstOrNull { it.roleName == roleName }
+                RoleVoiceSettingRow(
+                    roleName = roleName,
+                    baseProfile = builtInProfile,
+                    initial = current,
+                    onSave = {
+                        vm.updateRoleSetting(
+                            roleName,
+                            builtInProfile?.id,
+                            it.speechRate,
+                            it.speakerId,
+                            it.noiseScale,
+                            it.noiseScaleW,
+                            it.lengthScale,
+                            it.maxNumSentences,
+                            it.silenceScale
+                        )
+                    },
+                    onSaveAsText = { payload -> vm.saveRoleConfigAsText(roleName, payload) },
+                    onSaveAsSound = { uri -> vm.savePreviewAsSound(roleName, uri) }
+                )
             }
-
-            item {
-                val current = ui.settings.roleSettings.firstOrNull { it.roleName == selectedRole }
-                if (selectedRole.isNotBlank()) {
-                    RoleVoiceSettingRow(
-                        roleName = selectedRole,
-                        baseProfile = builtInProfile,
-                        initial = current,
-                        onSave = {
-                            vm.updateRoleSetting(
-                                selectedRole,
-                                builtInProfile?.id,
-                                it.speechRate,
-                                it.speakerId,
-                                it.noiseScale,
-                                it.noiseScaleW,
-                                it.lengthScale,
-                                it.maxNumSentences,
-                                it.silenceScale
-                            )
-                        }
-                    )
-                }
-            }
-        }
-
-        if (showRoleDialog) {
-            AlertDialog(
-                onDismissRequest = { showRoleDialog = false },
-                title = { Text("选择角色") },
-                text = {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(allRoles, key = { it }) { roleName ->
-                            TextButton(
-                                onClick = {
-                                    selectedRole = roleName
-                                    showRoleDialog = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(roleName)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showRoleDialog = false }) {
-                        Text("关闭")
-                    }
-                }
-            )
         }
     }
 }
@@ -151,7 +112,9 @@ private fun RoleVoiceSettingRow(
     roleName: String,
     baseProfile: VoiceProfile?,
     initial: RoleVoiceSetting?,
-    onSave: (RoleVoiceSetting) -> Unit
+    onSave: (RoleVoiceSetting) -> Unit,
+    onSaveAsText: (String) -> Unit,
+    onSaveAsSound: (Uri) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -166,6 +129,7 @@ private fun RoleVoiceSettingRow(
     var silenceScale by remember(roleName, initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
     var previewText by remember(roleName) { mutableStateOf("你好，我是$roleName，这是一段语音预览。") }
     var statusText by remember(roleName) { mutableStateOf("") }
+    var showSaveDialog by remember(roleName) { mutableStateOf(false) }
 
     fun currentSetting() = RoleVoiceSetting(
         roleName = roleName,
@@ -177,6 +141,28 @@ private fun RoleVoiceSettingRow(
         maxNumSentences = maxNumSentences,
         silenceScale = silenceScale
     )
+
+    fun effectiveProfile(setting: RoleVoiceSetting): VoiceProfile? = baseProfile?.copy(
+        speakerId = setting.speakerId,
+        noiseScale = setting.noiseScale,
+        noiseScaleW = setting.noiseScaleW,
+        lengthScale = setting.lengthScale,
+        maxNumSentences = setting.maxNumSentences,
+        silenceScale = setting.silenceScale
+    )
+
+    fun voiceConfigPayload(setting: RoleVoiceSetting): String = JSONObject()
+        .put("kind", "voice_config")
+        .put("roleName", roleName)
+        .put("speechRate", setting.speechRate)
+        .put("speakerId", setting.speakerId)
+        .put("noiseScale", setting.noiseScale)
+        .put("noiseScaleW", setting.noiseScaleW)
+        .put("lengthScale", setting.lengthScale)
+        .put("maxNumSentences", setting.maxNumSentences)
+        .put("silenceScale", setting.silenceScale)
+        .put("previewText", previewText)
+        .toString()
 
     fun saveCurrent() = onSave(currentSetting())
 
@@ -235,17 +221,9 @@ private fun RoleVoiceSettingRow(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
-                    if (baseProfile == null) return@Button
                     val setting = currentSetting()
                     saveCurrent()
-                    val effective = baseProfile.copy(
-                        speakerId = setting.speakerId,
-                        noiseScale = setting.noiseScale,
-                        noiseScaleW = setting.noiseScaleW,
-                        lengthScale = setting.lengthScale,
-                        maxNumSentences = setting.maxNumSentences,
-                        silenceScale = setting.silenceScale
-                    )
+                    val effective = effectiveProfile(setting) ?: return@Button
                     scope.launch {
                         try {
                             statusText = "正在初始化/朗读..."
@@ -261,8 +239,47 @@ private fun RoleVoiceSettingRow(
             ) { Text("预览朗读") }
 
             Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }) { Text("停止") }
+            Button(onClick = { showSaveDialog = true }, enabled = baseProfile != null && previewText.isNotBlank()) { Text("保存") }
         }
 
         if (statusText.isNotBlank()) Text(statusText)
+    }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("保存方式") },
+            text = { Text("选择作为声音或作为文本保存") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val setting = currentSetting()
+                    saveCurrent()
+                    onSaveAsText(voiceConfigPayload(setting))
+                    statusText = "已保存为文本配置"
+                    showSaveDialog = false
+                }) { Text("作为文本") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        val setting = currentSetting()
+                        saveCurrent()
+                        val effective = effectiveProfile(setting) ?: return@TextButton
+                        scope.launch {
+                            val out = File(context.filesDir, "audio/voice_config_${roleName}_${System.currentTimeMillis()}.wav")
+                            val ok = speech.synthesizeToWav(previewText, effective, setting.speechRate, out)
+                            if (ok) {
+                                onSaveAsSound(Uri.fromFile(out))
+                                statusText = "已保存为声音"
+                            } else {
+                                statusText = "保存声音失败"
+                            }
+                        }
+                        showSaveDialog = false
+                    }) { Text("作为声音") }
+                    TextButton(onClick = { showSaveDialog = false }) { Text("取消") }
+                }
+            }
+        )
     }
 }

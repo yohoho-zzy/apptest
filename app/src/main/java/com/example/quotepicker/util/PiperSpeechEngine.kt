@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.abs
@@ -104,6 +106,32 @@ class PiperSpeechEngine(private val context: Context) {
 
     suspend fun stop() = withContext(Dispatchers.IO) {
         stopInternal()
+    }
+
+    suspend fun synthesizeToWav(
+        text: String,
+        profile: VoiceProfile,
+        speechRate: Float,
+        outFile: File
+    ): Boolean {
+        if (text.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                ensureInit(profile)
+                val engine = tts ?: error("TTS engine not initialized")
+                val sid = normalizeSpeakerId(engine, profile.speakerId)
+                val speed = speechRate.coerceIn(0.5f, 2.0f)
+                val audio = engine.generate(text = text, sid = sid, speed = speed)
+                val samples = audio.samples
+                if (samples.isEmpty()) error("Generated audio is empty")
+                val pcm16 = floatToPcm16WithGain(samples)
+                outFile.parentFile?.mkdirs()
+                writeWavFile(outFile, pcm16, audio.sampleRate)
+                true
+            }.onFailure { e ->
+                Log.e(TTS_TAG, "synthesizeToWav failed", e)
+            }.getOrDefault(false)
+        }
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
@@ -369,6 +397,32 @@ class PiperSpeechEngine(private val context: Context) {
             }
         } finally {
             audioTrack = null
+        }
+    }
+
+    private fun writeWavFile(file: File, samples: ShortArray, sampleRate: Int) {
+        val dataBytes = samples.size * 2
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray())
+            putInt(36 + dataBytes)
+            put("WAVE".toByteArray())
+            put("fmt ".toByteArray())
+            putInt(16)
+            putShort(1)
+            putShort(1)
+            putInt(sampleRate)
+            putInt(sampleRate * 2)
+            putShort(2)
+            putShort(16)
+            put("data".toByteArray())
+            putInt(dataBytes)
+        }.array()
+        FileOutputStream(file).use { fos ->
+            fos.write(header)
+            val pcm = ByteBuffer.allocate(dataBytes).order(ByteOrder.LITTLE_ENDIAN)
+            samples.forEach { pcm.putShort(it) }
+            fos.write(pcm.array())
+            fos.flush()
         }
     }
 }

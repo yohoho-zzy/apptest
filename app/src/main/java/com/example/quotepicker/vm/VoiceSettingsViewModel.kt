@@ -1,9 +1,12 @@
 package com.example.quotepicker.vm
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
+import com.example.quotepicker.data.ResourceEntity
+import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
 import com.example.quotepicker.util.VoiceSettings
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -101,6 +105,34 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
             )
         }
         persist()
+    }
+
+
+    fun saveRoleConfigAsText(roleName: String, textPayload: String) = viewModelScope.launch {
+        val finalRole = roleName.trim()
+        if (finalRole.isBlank() || textPayload.isBlank()) return@launch
+        val matched = repo.observeCharacters().first().firstOrNull { it.name == finalRole } ?: return@launch
+        val title = "声音配置-$finalRole-${'$'}{System.currentTimeMillis() % 100000}"
+        repo.addResource(
+            ResourceEntity(type = ResourceType.TEXT, title = title, quoteText = textPayload),
+            tagIds = emptyList(),
+            characterIds = listOf(matched.id)
+        )
+    }
+
+    fun savePreviewAsSound(roleName: String, wavUri: Uri) = viewModelScope.launch {
+        val finalRole = roleName.trim()
+        if (finalRole.isBlank()) return@launch
+        val matched = repo.observeCharacters().first().firstOrNull { it.name == finalRole } ?: return@launch
+        repo.addResource(
+            ResourceEntity(
+                type = ResourceType.SOUND,
+                title = "声音配置-$finalRole-${'$'}{System.currentTimeMillis() % 100000}",
+                contentUriOrPath = org.json.JSONArray(listOf(wavUri.toString())).toString()
+            ),
+            tagIds = emptyList(),
+            characterIds = listOf(matched.id)
+        )
     }
 
     private fun persist() {
