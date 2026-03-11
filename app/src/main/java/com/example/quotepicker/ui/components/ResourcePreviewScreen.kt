@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -322,14 +323,23 @@ fun ResourcePreviewScreen(
                                                     MagicDramaVoicePlaybackMode.ROLE_ONLY to "角色",
                                                     MagicDramaVoicePlaybackMode.ALL to "全部"
                                                 )
+
                                                 options.forEach { (mode, label) ->
                                                     AssistChip(
                                                         onClick = { voicePlaybackMode = mode },
                                                         label = { Text(label) },
                                                         modifier = Modifier.weight(1f),
-                                                        colors = ButtonDefaults.assistChipColors(
-                                                            containerColor = if (voicePlaybackMode == mode) Color(0xFFE5E8FF) else Color(0xFFF5F5F5),
-                                                            labelColor = if (voicePlaybackMode == mode) Color(0xFF2D3561) else Color(0xFF444444)
+                                                        colors = AssistChipDefaults.assistChipColors(
+                                                            containerColor = if (voicePlaybackMode == mode) {
+                                                                Color(0xFFE5E8FF)
+                                                            } else {
+                                                                Color(0xFFF5F5F5)
+                                                            },
+                                                            labelColor = if (voicePlaybackMode == mode) {
+                                                                Color(0xFF2D3561)
+                                                            } else {
+                                                                Color(0xFF444444)
+                                                            }
                                                         )
                                                     )
                                                 }
@@ -339,7 +349,7 @@ fun ResourcePreviewScreen(
                                             Text("开始魔剧")
                                         }
                                         Text(
-                                            text = "播放设置（声音请到标签页右上角“声音设置”中配置；注意可按角色单独配置）",
+                                            text = "播放设置",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = Color(0xFF5F6280)
                                         )
