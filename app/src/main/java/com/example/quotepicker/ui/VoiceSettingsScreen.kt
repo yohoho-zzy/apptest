@@ -137,9 +137,12 @@ fun VoiceSettingsScreen(
                         )
                     },
                     onPersistPreviewText = { vm.updatePreviewText(VoiceSettingsViewModel.DEFAULT_ROLE_KEY, it) },
+                    speakerMemos = ui.settings.speakerMemos,
+                    onSaveSpeakerMemo = { speakerId, memo -> vm.updateSpeakerMemo(speakerId, memo) },
                     onOpenSaveTextPage = { content -> saveMode = VoiceSaveMode.Text(content) },
                     onOpenSaveSoundPage = { uri -> saveMode = VoiceSaveMode.Sound(uri) },
-                    buildConfigText = { vm.buildDefaultConfigText() }
+                    buildConfigText = { vm.buildDefaultConfigText() },
+                    buildSpeakerMemoExportText = { vm.buildSpeakerMemoExportText() }
                 )
             }
         }
@@ -154,9 +157,12 @@ private fun VoiceSettingEditor(
     initialPreviewText: String?,
     onSave: (RoleVoiceSetting) -> Unit,
     onPersistPreviewText: (String) -> Unit,
+    speakerMemos: Map<Int, String>,
+    onSaveSpeakerMemo: (Int, String) -> Unit,
     onOpenSaveTextPage: (String) -> Unit,
     onOpenSaveSoundPage: (Uri) -> Unit,
-    buildConfigText: () -> String
+    buildConfigText: () -> String,
+    buildSpeakerMemoExportText: () -> String
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -181,6 +187,12 @@ private fun VoiceSettingEditor(
     var silenceScale by remember(initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
     var previewText by remember(initialPreviewText) { mutableStateOf(initialPreviewText ?: "这是一段语音预览。") }
     var statusText by remember { mutableStateOf("") }
+    var previousSpeakerId by remember { mutableStateOf(speakerId) }
+    var speakerMemo by remember(speakerId, speakerMemos) { mutableStateOf(speakerMemos[speakerId].orEmpty()) }
+
+    fun persistSpeakerMemo(targetSpeakerId: Int, memo: String) {
+        onSaveSpeakerMemo(targetSpeakerId, memo)
+    }
 
     fun currentSetting() = RoleVoiceSetting(
         roleName = VoiceSettingsViewModel.DEFAULT_ROLE_KEY,
@@ -216,12 +228,36 @@ private fun VoiceSettingEditor(
             }
         }
 
+        OutlinedTextField(
+            value = speakerMemo,
+            onValueChange = {
+                speakerMemo = it
+                persistSpeakerMemo(speakerId, it)
+            },
+            label = { Text("说话者 Memo（$speakerId）") },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("为当前说话者记录备注") }
+        )
+
         SliderSettingRow(
             label = "说话者",
             hint = "speakerId · 0-186",
             valueText = "$speakerId"
         ) {
-            Slider(value = speakerId.toFloat(), onValueChange = { speakerId = it.toInt(); saveCurrent() }, valueRange = 0f..186f, modifier = Modifier.fillMaxWidth())
+            Slider(
+                value = speakerId.toFloat(),
+                onValueChange = {
+                    val newSpeakerId = it.toInt().coerceIn(0, 186)
+                    if (newSpeakerId == speakerId) return@Slider
+                    persistSpeakerMemo(previousSpeakerId, speakerMemo)
+                    previousSpeakerId = newSpeakerId
+                    speakerId = newSpeakerId
+                    speakerMemo = speakerMemos[newSpeakerId].orEmpty()
+                    saveCurrent()
+                },
+                valueRange = 0f..186f,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         SliderSettingRow(
@@ -309,6 +345,16 @@ private fun VoiceSettingEditor(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenSaveTextPage(buildConfigText()) }, modifier = Modifier.weight(1f)) { Text("保存文本") }
+            Button(
+                onClick = {
+                    persistSpeakerMemo(speakerId, speakerMemo)
+                    onOpenSaveTextPage(buildSpeakerMemoExportText())
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("导出Memo") }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = {
                 if (baseProfile == null) return@Button
                 val setting = currentSetting()

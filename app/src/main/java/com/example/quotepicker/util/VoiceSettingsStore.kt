@@ -36,7 +36,8 @@ data class RoleVoiceSetting(
 data class VoiceSettings(
     val profiles: List<VoiceProfile> = emptyList(),
     val roleSettings: List<RoleVoiceSetting> = emptyList(),
-    val rolePreviewTexts: Map<String, String> = emptyMap()
+    val rolePreviewTexts: Map<String, String> = emptyMap(),
+    val speakerMemos: Map<Int, String> = emptyMap()
 )
 
 class VoiceSettingsStore(context: Context) {
@@ -52,7 +53,13 @@ class VoiceSettingsStore(context: Context) {
                 val profiles = root.optJSONArray("profiles").toProfiles()
                 val roleSettings = root.optJSONArray("roleSettings").toRoleSettings()
                 val rolePreviewTexts = root.optJSONObject("rolePreviewTexts").toPreviewTexts()
-                VoiceSettings(profiles = profiles, roleSettings = roleSettings, rolePreviewTexts = rolePreviewTexts)
+                val speakerMemos = root.optJSONObject("speakerMemos").toSpeakerMemos()
+                VoiceSettings(
+                    profiles = profiles,
+                    roleSettings = roleSettings,
+                    rolePreviewTexts = rolePreviewTexts,
+                    speakerMemos = speakerMemos
+                )
             }.getOrDefault(VoiceSettings())
         }
         return parsed.withBuiltinProfile()
@@ -96,6 +103,11 @@ class VoiceSettingsStore(context: Context) {
             .put("rolePreviewTexts", JSONObject().apply {
                 settings.rolePreviewTexts.forEach { (role, text) ->
                     put(role, text)
+                }
+            })
+            .put("speakerMemos", JSONObject().apply {
+                settings.speakerMemos.forEach { (speakerId, memo) ->
+                    put(speakerId.toString(), memo)
                 }
             })
         prefs.edit().putString(KEY_PAYLOAD, root.toString()).apply()
@@ -185,5 +197,13 @@ private fun JSONObject?.toPreviewTexts(): Map<String, String> {
         key?.takeIf { it.isNotBlank() }?.let { safeKey ->
             safeKey to optString(safeKey)
         }
+    }.toMap()
+}
+
+private fun JSONObject?.toSpeakerMemos(): Map<Int, String> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().mapNotNull { key ->
+        val speakerId = key?.toIntOrNull() ?: return@mapNotNull null
+        speakerId to optString(key)
     }.toMap()
 }

@@ -118,6 +118,28 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
     }
 
 
+
+    fun updateSpeakerMemo(speakerId: Int, memo: String) {
+        val normalizedId = speakerId.coerceIn(0, 186)
+        localSettings.update { state ->
+            val updated = state.speakerMemos.toMutableMap()
+            if (memo.isBlank()) {
+                updated.remove(normalizedId)
+            } else {
+                updated[normalizedId] = memo
+            }
+            state.copy(speakerMemos = updated)
+        }
+        persist()
+    }
+
+    fun buildSpeakerMemoExportText(): String {
+        if (localSettings.value.speakerMemos.isEmpty()) return ""
+        return localSettings.value.speakerMemos.toSortedMap().entries.joinToString("\n") { (speakerId, memo) ->
+            "$speakerId：$memo"
+        }
+    }
+
     fun resolveRoleSettingFromResources(roleName: String, resources: List<ResourceWithTagsCharacters>): RoleVoiceSetting? {
         val candidates = resources.filter { item ->
             item.resource.type == ResourceType.TEXT &&
