@@ -64,6 +64,10 @@ data class MagicDramaSettings(
     val imageIntervalMs: Long = 3000L
 )
 
+data class MagicDramaPlaybackOptions(
+    val readNarrationAndNotice: Boolean = false
+)
+
 private sealed interface DramaCommand {
     data class Narration(val text: String, val delayMs: Long, val important: Boolean) : DramaCommand
     data class RoleLine(val roleKey: String, val text: String, val delayMs: Long) : DramaCommand
@@ -89,6 +93,7 @@ fun MagicDramaScreen(
     script: String,
     boundCharacters: List<CharacterEntity>,
     settings: MagicDramaSettings,
+    playbackOptions: MagicDramaPlaybackOptions,
     vm: ResourceViewModel,
     onClose: () -> Unit
 ) {
@@ -114,7 +119,7 @@ fun MagicDramaScreen(
         }
     }
 
-    LaunchedEffect(script, settings.defaultDelayMs, voiceSettings) {
+    LaunchedEffect(script, settings.defaultDelayMs, voiceSettings, playbackOptions) {
         messages.clear()
         currentMedia = null
         countdownSeconds = null
@@ -127,37 +132,28 @@ fun MagicDramaScreen(
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
                     val text = renderRandomToken(cmd.text)
-                    messages += DramaMessage.Narration(text = text, important = cmd.important)
-                    val narratorSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == "旁白" }
-                    val narratorProfile = voiceSettings.profiles.firstOrNull { it.id == narratorSetting?.profileId }
-                        ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
-                    if (narratorProfile != null) {
-                        val effective = narratorProfile.copy(
-                            speakerId = narratorSetting?.speakerId,
-                            noiseScale = narratorSetting?.noiseScale,
-                            noiseW = narratorSetting?.noiseW,
-                            sentenceSilence = narratorSetting?.sentenceSilence
+                    val voiceRole = if (cmd.important) "注意" else "旁白"
+                    if (playbackOptions.readNarrationAndNotice) {
+                        speakByRole(
+                            text = text,
+                            roleName = voiceRole,
+                            voiceSettings = voiceSettings,
+                            piperSpeechEngine = piperSpeechEngine
                         )
-                        piperSpeechEngine.speak(text, effective, narratorSetting?.speechRate ?: 1.0f)
                     }
+                    messages += DramaMessage.Narration(text = text, important = cmd.important)
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = cmd.text.replace("nn", "\n")
+                    speakByRole(
+                        text = text,
+                        roleName = role,
+                        voiceSettings = voiceSettings,
+                        piperSpeechEngine = piperSpeechEngine
+                    )
                     messages += DramaMessage.Role(role = role, text = text)
-                    val roleSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == role }
-                    val roleProfile = voiceSettings.profiles.firstOrNull { it.id == roleSetting?.profileId }
-                        ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
-                    if (roleProfile != null) {
-                        val effective = roleProfile.copy(
-                            speakerId = roleSetting?.speakerId,
-                            noiseScale = roleSetting?.noiseScale,
-                            noiseW = roleSetting?.noiseW,
-                            sentenceSilence = roleSetting?.sentenceSilence
-                        )
-                        piperSpeechEngine.speak(text, effective, roleSetting?.speechRate ?: 1.0f)
-                    }
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
                 }
                 is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
@@ -259,6 +255,29 @@ fun MagicDramaScreen(
                 Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White)
             }
         }
+    }
+}
+
+
+private suspend fun speakByRole(
+    text: String,
+    roleName: String,
+    voiceSettings: com.example.quotepicker.util.VoiceSettings,
+    piperSpeechEngine: PiperSpeechEngine
+) {
+    val roleSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == roleName }
+    val roleProfile = voiceSettings.profiles.firstOrNull { it.id == roleSetting?.profileId }
+        ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
+    if (roleProfile != null) {
+        val effective = roleProfile.copy(
+            speakerId = roleSetting?.speakerId,
+            noiseScale = roleSetting?.noiseScale,
+            noiseScaleW = roleSetting?.noiseScaleW,
+            lengthScale = roleSetting?.lengthScale,
+            maxNumSentences = roleSetting?.maxNumSentences,
+            silenceScale = roleSetting?.silenceScale
+        )
+        piperSpeechEngine.speak(text, effective, roleSetting?.speechRate ?: 1.0f)
     }
 }
 

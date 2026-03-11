@@ -3,14 +3,11 @@ package com.example.quotepicker.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -34,7 +31,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.util.PiperSpeechEngine
@@ -55,7 +51,7 @@ fun VoiceSettingsScreen(
     val ui by vm.uiState.collectAsState()
     val builtInProfile = ui.settings.profiles.firstOrNull { it.modelUri == BUILTIN_MODEL_URI }
 
-    val allRoles = remember(ui.narratorName, ui.characterNames) { listOf(ui.narratorName) + ui.characterNames }
+    val allRoles = remember(ui.narratorName, ui.noticeName, ui.characterNames) { listOf(ui.narratorName, ui.noticeName) + ui.characterNames }
     var selectedRole by rememberSaveable(allRoles) { mutableStateOf(allRoles.firstOrNull().orEmpty()) }
     var showRoleDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -110,8 +106,10 @@ fun VoiceSettingsScreen(
                                 it.speechRate,
                                 it.speakerId,
                                 it.noiseScale,
-                                it.noiseW,
-                                it.sentenceSilence
+                                it.noiseScaleW,
+                                it.lengthScale,
+                                it.maxNumSentences,
+                                it.silenceScale
                             )
                         }
                     )
@@ -159,90 +157,73 @@ private fun RoleVoiceSettingRow(
     val scope = rememberCoroutineScope()
     val speech = remember(context) { PiperSpeechEngine(context) }
 
-    var speed by remember(roleName, initial?.speechRate) { mutableStateOf(initial?.speechRate ?: 1.0f) }
-    var speakerText by remember(roleName, initial?.speakerId) { mutableStateOf(initial?.speakerId?.toString() ?: "") }
-    var noiseScaleText by remember(roleName, initial?.noiseScale) { mutableStateOf(initial?.noiseScale?.toString() ?: "") }
-    var noiseWText by remember(roleName, initial?.noiseW) { mutableStateOf(initial?.noiseW?.toString() ?: "") }
-    var sentenceSilenceText by remember(roleName, initial?.sentenceSilence) { mutableStateOf(initial?.sentenceSilence?.toString() ?: "") }
+    var speed by remember(roleName, initial?.speechRate) { mutableStateOf((initial?.speechRate ?: 1.0f).coerceIn(0.6f, 1.8f)) }
+    var speakerId by remember(roleName, initial?.speakerId) { mutableStateOf((initial?.speakerId ?: 0).coerceIn(0, 186)) }
+    var noiseScale by remember(roleName, initial?.noiseScale) { mutableStateOf((initial?.noiseScale ?: 0.667f).coerceIn(0.1f, 2.0f)) }
+    var noiseScaleW by remember(roleName, initial?.noiseScaleW) { mutableStateOf((initial?.noiseScaleW ?: 0.8f).coerceIn(0.1f, 2.0f)) }
+    var lengthScale by remember(roleName, initial?.lengthScale) { mutableStateOf((initial?.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)) }
+    var maxNumSentences by remember(roleName, initial?.maxNumSentences) { mutableStateOf((initial?.maxNumSentences ?: 1).coerceIn(1, 10)) }
+    var silenceScale by remember(roleName, initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
     var previewText by remember(roleName) { mutableStateOf("你好，我是$roleName，这是一段语音预览。") }
     var statusText by remember(roleName) { mutableStateOf("") }
 
     fun currentSetting() = RoleVoiceSetting(
         roleName = roleName,
         speechRate = speed,
-        speakerId = speakerText.toIntOrNull(),
-        noiseScale = noiseScaleText.toFloatOrNull(),
-        noiseW = noiseWText.toFloatOrNull(),
-        sentenceSilence = sentenceSilenceText.toFloatOrNull()
+        speakerId = speakerId,
+        noiseScale = noiseScale,
+        noiseScaleW = noiseScaleW,
+        lengthScale = lengthScale,
+        maxNumSentences = maxNumSentences,
+        silenceScale = silenceScale
     )
 
-    fun saveCurrent() {
-        onSave(currentSetting())
-    }
+    fun saveCurrent() = onSave(currentSetting())
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(roleName)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("$roleName（每项都限制在安全区间）")
+
+        Text("speakerId: 选择音色说话人。推荐 0（可尝试不同角色分配不同 speaker）。")
         Row {
-            Text("语速 ${"%.2f".format(Locale.US, speed)}")
-            Spacer(modifier = Modifier.width(8.dp))
-            Slider(
-                value = speed,
-                onValueChange = {
-                    speed = it
-                    saveCurrent()
-                },
-                valueRange = 0.6f..1.8f,
-                modifier = Modifier.weight(1f)
-            )
+            Text("$speakerId")
+            Slider(value = speakerId.toFloat(), onValueChange = { speakerId = it.toInt(); saveCurrent() }, valueRange = 0f..186f, modifier = Modifier.weight(1f))
         }
 
-        OutlinedTextField(
-            value = speakerText,
-            onValueChange = {
-                speakerText = it
-                saveCurrent()
-            },
-            label = { Text("speaker（0~186）") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("speed: 语速。推荐 1.0。")
+        Row {
+            Text("${"%.2f".format(Locale.US, speed)}")
+            Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.weight(1f))
+        }
 
-        OutlinedTextField(
-            value = noiseScaleText,
-            onValueChange = {
-                noiseScaleText = it
-                saveCurrent()
-            },
-            label = { Text("noise_scale（暂不单独覆盖）") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("noiseScale: 发音随机度，越高越活泼。推荐 0.667。")
+        Row {
+            Text("${"%.3f".format(Locale.US, noiseScale)}")
+            Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
+        }
 
-        OutlinedTextField(
-            value = noiseWText,
-            onValueChange = {
-                noiseWText = it
-                saveCurrent()
-            },
-            label = { Text("noise_w（暂不单独覆盖）") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("noiseScaleW: 音素时长随机度。推荐 0.8。")
+        Row {
+            Text("${"%.3f".format(Locale.US, noiseScaleW)}")
+            Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
+        }
 
-        OutlinedTextField(
-            value = sentenceSilenceText,
-            onValueChange = {
-                sentenceSilenceText = it
-                saveCurrent()
-            },
-            label = { Text("sentence_silence（暂不单独覆盖）") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("lengthScale: 句子整体时长缩放，越大越慢。推荐 1.0。")
+        Row {
+            Text("${"%.2f".format(Locale.US, lengthScale)}")
+            Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.weight(1f))
+        }
+
+        Text("maxNumSentences: 单次切句上限。推荐 1。")
+        Row {
+            Text("$maxNumSentences")
+            Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.weight(1f))
+        }
+
+        Text("silenceScale: 句间停顿缩放。推荐 0.2。")
+        Row {
+            Text("${"%.2f".format(Locale.US, silenceScale)}")
+            Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.weight(1f))
+        }
 
         OutlinedTextField(
             value = previewText,
@@ -260,8 +241,10 @@ private fun RoleVoiceSettingRow(
                     val effective = baseProfile.copy(
                         speakerId = setting.speakerId,
                         noiseScale = setting.noiseScale,
-                        noiseW = setting.noiseW,
-                        sentenceSilence = setting.sentenceSilence
+                        noiseScaleW = setting.noiseScaleW,
+                        lengthScale = setting.lengthScale,
+                        maxNumSentences = setting.maxNumSentences,
+                        silenceScale = setting.silenceScale
                     )
                     scope.launch {
                         try {
@@ -275,24 +258,11 @@ private fun RoleVoiceSettingRow(
                     }
                 },
                 enabled = baseProfile != null
-            ) {
-                Text("预览朗读")
-            }
+            ) { Text("预览朗读") }
 
-            Button(
-                onClick = {
-                    scope.launch {
-                        speech.stop()
-                        statusText = "已停止"
-                    }
-                }
-            ) {
-                Text("停止")
-            }
+            Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }) { Text("停止") }
         }
 
-        if (statusText.isNotBlank()) {
-            Text(statusText)
-        }
+        if (statusText.isNotBlank()) Text(statusText)
     }
 }

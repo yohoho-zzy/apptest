@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -279,6 +280,7 @@ fun ResourcePreviewScreen(
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
+                                var readNarrationAndNotice by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 if (showMagicDrama) {
                                     MagicDramaScreen(
                                         title = liveResource.resource.title,
@@ -287,6 +289,9 @@ fun ResourcePreviewScreen(
                                         settings = MagicDramaSettings(
                                             defaultDelayMs = defaultDelayInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 1000L,
                                             imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L
+                                        ),
+                                        playbackOptions = MagicDramaPlaybackOptions(
+                                            readNarrationAndNotice = readNarrationAndNotice
                                         ),
                                         vm = vm,
                                         onClose = { showMagicDrama = false }
@@ -297,11 +302,18 @@ fun ResourcePreviewScreen(
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = readNarrationAndNotice,
+                                                onCheckedChange = { readNarrationAndNotice = it }
+                                            )
+                                            Text("朗读旁白和注意（关闭时仅角色朗读）")
+                                        }
                                         TextButton(onClick = { showMagicDrama = true }) {
                                             Text("开始魔剧")
                                         }
                                         Text(
-                                            text = "播放设置（声音请到标签页右上角“声音设置”中配置）",
+                                            text = "播放设置（声音请到标签页右上角“声音设置”中配置；注意可按角色单独配置）",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = Color(0xFF5F6280)
                                         )

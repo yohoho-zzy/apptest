@@ -20,6 +20,7 @@ import java.util.UUID
 data class VoiceSettingsUiState(
     val characterNames: List<String> = emptyList(),
     val narratorName: String = "旁白",
+    val noticeName: String = "注意",
     val settings: VoiceSettings = VoiceSettings()
 )
 
@@ -78,8 +79,10 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
         speechRate: Float,
         speakerId: Int?,
         noiseScale: Float?,
-        noiseW: Float?,
-        sentenceSilence: Float?
+        noiseScaleW: Float?,
+        lengthScale: Float?,
+        maxNumSentences: Int?,
+        silenceScale: Float?
     ) {
         localSettings.update { state ->
             val cleaned = state.roleSettings.filterNot { it.roleName == roleName }
@@ -90,8 +93,10 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
                     speechRate = speechRate,
                     speakerId = speakerId,
                     noiseScale = noiseScale,
-                    noiseW = noiseW,
-                    sentenceSilence = sentenceSilence
+                    noiseScaleW = noiseScaleW,
+                    lengthScale = lengthScale,
+                    maxNumSentences = maxNumSentences,
+                    silenceScale = silenceScale
                 )
             )
         }
