@@ -17,6 +17,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -104,6 +107,24 @@ class PiperSpeechEngine(private val context: Context) {
 
     suspend fun stop() = withContext(Dispatchers.IO) {
         stopInternal()
+    }
+
+    suspend fun synthesizeToTempWav(text: String, profile: VoiceProfile, speechRate: Float): File? {
+        if (text.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                ensureInit(profile)
+                val engine = tts ?: error("TTS engine not initialized")
+                val sid = normalizeSpeakerId(engine, profile.speakerId)
+                val speed = speechRate.coerceIn(0.5f, 2.0f)
+                val audio = engine.generate(text = text, sid = sid, speed = speed)
+                val pcm = floatToPcm16WithGain(audio.samples)
+                val tempDir = File(context.cacheDir, "voice-preview-audio").apply { mkdirs() }
+                val out = File(tempDir, "preview_${System.currentTimeMillis()}_${UUID.randomUUID()}.wav")
+                writePcmWav(out, pcm, audio.sampleRate)
+                out
+            }.getOrNull()
+        }
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
@@ -369,6 +390,32 @@ class PiperSpeechEngine(private val context: Context) {
             }
         } finally {
             audioTrack = null
+        }
+    }
+
+    private fun writePcmWav(target: File, pcm: ShortArray, sampleRate: Int) {
+        val dataSize = pcm.size * 2
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray())
+            putInt(36 + dataSize)
+            put("WAVE".toByteArray())
+            put("fmt ".toByteArray())
+            putInt(16)
+            putShort(1)
+            putShort(1)
+            putInt(sampleRate)
+            putInt(sampleRate * 2)
+            putShort(2)
+            putShort(16)
+            put("data".toByteArray())
+            putInt(dataSize)
+        }.array()
+        FileOutputStream(target).use { output ->
+            output.write(header)
+            val pcmBytes = ByteBuffer.allocate(dataSize).order(ByteOrder.LITTLE_ENDIAN)
+            pcm.forEach { pcmBytes.putShort(it) }
+            output.write(pcmBytes.array())
+            output.flush()
         }
     }
 }
