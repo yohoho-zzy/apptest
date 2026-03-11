@@ -43,7 +43,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,6 +73,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.data.ResourceWithTagsCharacters
+import com.example.quotepicker.ui.components.MagicDramaVoicePlaybackMode
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.sortTagsForDisplay
 import com.example.quotepicker.vm.ResourceViewModel
@@ -280,7 +280,9 @@ fun ResourcePreviewScreen(
                                 var showMagicDrama by remember(liveResource.resource.id) { mutableStateOf(false) }
                                 var defaultDelayInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
                                 var imageIntervalInput by remember(liveResource.resource.id) { mutableStateOf("3000") }
-                                var readNarrationAndNotice by remember(liveResource.resource.id) { mutableStateOf(false) }
+                                var voicePlaybackMode by remember(liveResource.resource.id) {
+                                    mutableStateOf(MagicDramaVoicePlaybackMode.ROLE_ONLY)
+                                }
                                 if (showMagicDrama) {
                                     MagicDramaScreen(
                                         title = liveResource.resource.title,
@@ -291,7 +293,7 @@ fun ResourcePreviewScreen(
                                             imageIntervalMs = imageIntervalInput.toLongOrNull()?.coerceIn(300L, 10_000L) ?: 3000L
                                         ),
                                         playbackOptions = MagicDramaPlaybackOptions(
-                                            readNarrationAndNotice = readNarrationAndNotice
+                                            voicePlaybackMode = voicePlaybackMode
                                         ),
                                         vm = vm,
                                         onClose = { showMagicDrama = false }
@@ -302,12 +304,32 @@ fun ResourcePreviewScreen(
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Checkbox(
-                                                checked = readNarrationAndNotice,
-                                                onCheckedChange = { readNarrationAndNotice = it }
-                                            )
-                                            Text("朗读旁白和注意（关闭时仅角色朗读）")
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text("开始前设置：角色朗读模式")
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                val options = listOf(
+                                                    MagicDramaVoicePlaybackMode.SILENT to "无声",
+                                                    MagicDramaVoicePlaybackMode.ROLE_ONLY to "角色",
+                                                    MagicDramaVoicePlaybackMode.ALL to "全部"
+                                                )
+                                                options.forEach { (mode, label) ->
+                                                    AssistChip(
+                                                        onClick = { voicePlaybackMode = mode },
+                                                        label = { Text(label) },
+                                                        modifier = Modifier.weight(1f),
+                                                        colors = ButtonDefaults.assistChipColors(
+                                                            containerColor = if (voicePlaybackMode == mode) Color(0xFFE5E8FF) else Color(0xFFF5F5F5),
+                                                            labelColor = if (voicePlaybackMode == mode) Color(0xFF2D3561) else Color(0xFF444444)
+                                                        )
+                                                    )
+                                                }
+                                            }
                                         }
                                         TextButton(onClick = { showMagicDrama = true }) {
                                             Text("开始魔剧")
