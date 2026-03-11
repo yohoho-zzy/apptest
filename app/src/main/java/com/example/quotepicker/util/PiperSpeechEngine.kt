@@ -6,7 +6,6 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.util.Log
-import com.k2fsa.sherpa.onnx.GeneratedAudio
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
@@ -23,8 +22,6 @@ import java.util.concurrent.TimeUnit
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
-
-private const val TTS_TAG = "PiperSpeech"
 
 class PiperSpeechEngine(private val context: Context) {
     companion object {
@@ -69,15 +66,6 @@ class PiperSpeechEngine(private val context: Context) {
                 val sid = normalizeSpeakerId(engine, profile.speakerId)
                 val speed = speechRate.coerceIn(0.5f, 2.0f)
 
-                Log.d(
-                    TTS_TAG,
-                    "input text=[$text], length=${text.length}, hash=${text.hashCode()}, sid=$sid, speed=$speed"
-                )
-                Log.d(
-                    TTS_TAG,
-                    "input codePoints=" + text.map { "U+%04X".format(it.code) }.joinToString(" ")
-                )
-
                 val audio = engine.generate(
                     text = text,
                     sid = sid,
@@ -92,10 +80,6 @@ class PiperSpeechEngine(private val context: Context) {
                 }
 
                 val peak = samples.maxOfOrNull { abs(it) } ?: 0f
-                Log.d(
-                    TTS_TAG,
-                    "generate ok. sid=$sid speed=$speed sampleRate=$sampleRate size=${samples.size} peak=$peak"
-                )
 
                 stopInternal()
 
@@ -104,7 +88,7 @@ class PiperSpeechEngine(private val context: Context) {
 
                 true
             }.onFailure { e ->
-                Log.e(TTS_TAG, "speak failed", e)
+                Log.e("TTS_TAG", "speak failed", e)
             }.getOrDefault(false)
         }
     }
@@ -193,18 +177,6 @@ class PiperSpeechEngine(private val context: Context) {
             val ruleFsts = buildRuleFsts(phoneFstPath, numberFstPath)
             val ruleFars = if (File(ruleFarPath).exists()) ruleFarPath else ""
 
-            Log.d(TTS_TAG, "init config (no dataDir):")
-            Log.d(TTS_TAG, "modelDir=${modelDir.absolutePath}")
-            Log.d(TTS_TAG, "model=$modelPath exists=${File(modelPath).exists()}")
-            Log.d(TTS_TAG, "lexicon=$lexiconPath exists=${File(lexiconPath).exists()}")
-            Log.d(TTS_TAG, "tokens=$tokensPath exists=${File(tokensPath).exists()}")
-            Log.d(TTS_TAG, "ruleFsts=$ruleFsts")
-            Log.d(
-                TTS_TAG,
-                "ruleFars=$ruleFars exists=${if (ruleFars.isNotEmpty()) File(ruleFars).exists() else false}"
-            )
-            Log.d(TTS_TAG, "dictExists=${File(dictDirPath).exists()}")
-
             val vits = OfflineTtsVitsModelConfig(
                 model = modelPath,
                 lexicon = lexiconPath,
@@ -219,7 +191,7 @@ class PiperSpeechEngine(private val context: Context) {
                 model = OfflineTtsModelConfig(
                     vits = vits,
                     numThreads = 2,
-                    debug = true,
+                    debug = false,
                     provider = "cpu"
                 ),
                 ruleFsts = ruleFsts,
@@ -230,28 +202,16 @@ class PiperSpeechEngine(private val context: Context) {
 
             tts = OfflineTts(config = config)
             configSignature = targetSignature
-
-            Log.d(
-                TTS_TAG,
-                "TTS initialized. speakers=${tts?.numSpeakers()}, sampleRate=${tts?.sampleRate()}"
-            )
         }
     }
 
     private fun prepareModelDir(): File {
         val outDir = File(context.filesDir, BASE_DIR)
         if (isModelPrepared(outDir)) {
-            Log.d(TTS_TAG, "model dir already prepared: ${outDir.absolutePath}")
             return outDir
         }
 
-        Log.d(TTS_TAG, "preparing model dir: ${outDir.absolutePath}")
         copyAssetDirRecursively(BASE_DIR, outDir)
-
-        Log.d(
-            TTS_TAG,
-            "prepared files: ${outDir.walkTopDown().joinToString { it.absolutePath }}"
-        )
 
         check(isModelPrepared(outDir)) {
             "Model files are not prepared correctly under ${outDir.absolutePath}"
@@ -308,11 +268,6 @@ class PiperSpeechEngine(private val context: Context) {
                 output.flush()
             }
         }
-
-        Log.d(
-            TTS_TAG,
-            "copied asset: $assetPath -> ${outFile.absolutePath} (${outFile.length()} bytes)"
-        )
     }
 
     private fun buildRuleFsts(phoneFstPath: String, numberFstPath: String): String {
@@ -335,8 +290,6 @@ class PiperSpeechEngine(private val context: Context) {
             peak <= 0f -> 1f
             else -> (TARGET_PEAK / peak).coerceIn(1f, MAX_GAIN)
         }
-
-        Log.d(TTS_TAG, "pcm16 convert. inputPeak=$peak gain=$gain")
 
         return ShortArray(samples.size) { i ->
             val normalized = (samples[i] * gain).coerceIn(-1f, 1f)
@@ -382,11 +335,6 @@ class PiperSpeechEngine(private val context: Context) {
         }
 
         track.play()
-
-        Log.d(
-            TTS_TAG,
-            "PCM_16BIT play ok. sampleRate=$sampleRate, samples=${samples.size}, written=$written"
-        )
     }
 
     private fun stopInternal() {
