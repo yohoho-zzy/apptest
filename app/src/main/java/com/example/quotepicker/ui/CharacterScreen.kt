@@ -582,7 +582,7 @@ fun CharacterScreen(
     }
 
     if (showTagPicker && selected != null) {
-        TagPickerDialog(
+        TagPickerDialogC(
             categories = ui.categories,
             tags = ui.tags,
             selectedIds = selected!!.tags.map { it.id }.toSet(),
@@ -1003,7 +1003,7 @@ private fun fillTemplate(template: String, values: List<String>): String {
 }
 
 @Composable
-private fun TagPickerDialog(
+private fun TagPickerDialogC(
     categories: List<TagCategoryEntity>,
     tags: List<com.example.quotepicker.data.TagEntity>,
     selectedIds: Set<Long>,

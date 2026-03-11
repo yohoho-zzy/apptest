@@ -296,6 +296,7 @@ private fun VoiceSettingEditor(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VoiceResourceSaveScreen(
     mode: VoiceSaveMode,
