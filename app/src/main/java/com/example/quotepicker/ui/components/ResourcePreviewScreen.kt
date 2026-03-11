@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -80,6 +81,7 @@ import com.example.quotepicker.vm.ResourceViewModel
 import org.json.JSONArray
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private data class SceneMessage(val speaker: String, val content: String)
 
@@ -596,33 +598,9 @@ private fun parseMediaPaths(raw: String): List<String> {
 
 @Composable
 private fun AudioPreviewList(uris: List<Uri>) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val playerState = remember { mutableStateOf<MediaPlayer?>(null) }
-    DisposableEffect(Unit) {
-        onDispose {
-            playerState.value?.release()
-            playerState.value = null
-        }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         uris.forEachIndexed { index, uri ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "音频 ${index + 1}", style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = {
-                    playerState.value?.release()
-                    playerState.value = MediaPlayer().apply {
-                        setDataSource(context, uri)
-                        setOnPreparedListener { it.start() }
-                        prepareAsync()
-                    }
-                }) {
-                    Text("播放")
-                }
-            }
+            AudioPreviewPlayer(uri = uri, label = "音频 ${index + 1}")
         }
     }
 }
@@ -814,31 +792,102 @@ private fun InlineFilePreview(
 
 @Composable
 private fun AudioPreviewSingle(uri: Uri) {
+    AudioPreviewPlayer(uri = uri, label = "音频文件")
+}
+
+@Composable
+private fun AudioPreviewPlayer(uri: Uri, label: String) {
     val context = LocalContext.current
-    val playerState = remember { mutableStateOf<MediaPlayer?>(null) }
-    DisposableEffect(Unit) {
-        onDispose {
-            playerState.value?.release()
-            playerState.value = null
-        }
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = "音频文件", style = MaterialTheme.typography.labelMedium)
-        TextButton(onClick = {
-            playerState.value?.release()
-            playerState.value = MediaPlayer().apply {
-                setDataSource(context, uri)
-                setOnPreparedListener { it.start() }
-                prepareAsync()
+    var player by remember(uri) { mutableStateOf<MediaPlayer?>(null) }
+    var prepared by remember(uri) { mutableStateOf(false) }
+    var playing by remember(uri) { mutableStateOf(false) }
+    var durationMs by remember(uri) { mutableStateOf(0) }
+    var positionMs by remember(uri) { mutableStateOf(0f) }
+    var sliderDragging by remember(uri) { mutableStateOf(false) }
+
+    DisposableEffect(uri) {
+        val mediaPlayer = MediaPlayer().apply {
+            setDataSource(context, uri)
+            setOnPreparedListener {
+                prepared = true
+                durationMs = it.duration.coerceAtLeast(0)
             }
-        }) {
-            Text("播放")
+            setOnCompletionListener {
+                playing = false
+                positionMs = durationMs.toFloat()
+            }
+            prepareAsync()
+        }
+        player = mediaPlayer
+        onDispose {
+            mediaPlayer.release()
+            player = null
         }
     }
+
+    LaunchedEffect(player, prepared, playing, sliderDragging) {
+        while (prepared && playing && !sliderDragging) {
+            positionMs = player?.currentPosition?.toFloat() ?: 0f
+            delay(250)
+        }
+    }
+
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = label, style = MaterialTheme.typography.labelMedium)
+                TextButton(
+                    enabled = prepared,
+                    onClick = {
+                        player?.let {
+                            if (it.isPlaying) {
+                                it.pause()
+                                playing = false
+                            } else {
+                                it.start()
+                                playing = true
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (playing) "暂停" else "播放")
+                }
+            }
+            Slider(
+                value = positionMs.coerceIn(0f, durationMs.toFloat().coerceAtLeast(1f)),
+                onValueChange = {
+                    sliderDragging = true
+                    positionMs = it
+                },
+                valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
+                enabled = prepared,
+                onValueChangeFinished = {
+                    player?.seekTo(positionMs.toInt())
+                    sliderDragging = false
+                }
+            )
+            Text(
+                text = "${formatDuration(positionMs.toInt())} / ${formatDuration(durationMs)}",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+private fun formatDuration(ms: Int): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
 
