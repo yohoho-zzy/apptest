@@ -35,7 +35,8 @@ data class RoleVoiceSetting(
 
 data class VoiceSettings(
     val profiles: List<VoiceProfile> = emptyList(),
-    val roleSettings: List<RoleVoiceSetting> = emptyList()
+    val roleSettings: List<RoleVoiceSetting> = emptyList(),
+    val rolePreviewTexts: Map<String, String> = emptyMap()
 )
 
 class VoiceSettingsStore(context: Context) {
@@ -50,7 +51,8 @@ class VoiceSettingsStore(context: Context) {
                 val root = JSONObject(raw)
                 val profiles = root.optJSONArray("profiles").toProfiles()
                 val roleSettings = root.optJSONArray("roleSettings").toRoleSettings()
-                VoiceSettings(profiles = profiles, roleSettings = roleSettings)
+                val rolePreviewTexts = root.optJSONObject("rolePreviewTexts").toPreviewTexts()
+                VoiceSettings(profiles = profiles, roleSettings = roleSettings, rolePreviewTexts = rolePreviewTexts)
             }.getOrDefault(VoiceSettings())
         }
         return parsed.withBuiltinProfile()
@@ -89,6 +91,11 @@ class VoiceSettingsStore(context: Context) {
                             .put("maxNumSentences", item.maxNumSentences)
                             .put("silenceScale", item.silenceScale)
                     )
+                }
+            })
+            .put("rolePreviewTexts", JSONObject().apply {
+                settings.rolePreviewTexts.forEach { (role, text) ->
+                    put(role, text)
                 }
             })
         prefs.edit().putString(KEY_PAYLOAD, root.toString()).apply()
@@ -170,4 +177,13 @@ private fun JSONArray?.toRoleSettings(): List<RoleVoiceSetting> {
             )
         }
     }
+}
+
+private fun JSONObject?.toPreviewTexts(): Map<String, String> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().mapNotNull { key ->
+        key?.takeIf { it.isNotBlank() }?.let { safeKey ->
+            safeKey to optString(safeKey)
+        }
+    }.toMap()
 }

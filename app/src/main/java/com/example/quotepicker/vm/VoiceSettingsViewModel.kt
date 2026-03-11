@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quotepicker.data.Repository
+import com.example.quotepicker.data.ResourceMarkState
+import com.example.quotepicker.data.ResourceType
+import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceProfile
 import com.example.quotepicker.util.VoiceSettings
@@ -15,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.util.UUID
 
 data class VoiceSettingsUiState(
@@ -25,6 +29,9 @@ data class VoiceSettingsUiState(
 )
 
 class VoiceSettingsViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        const val DEFAULT_ROLE_KEY = "__default_voice_setting__"
+    }
     private val repo = Repository.get(application)
     private val store = VoiceSettingsStore(application)
     private val localSettings = MutableStateFlow(store.load())
@@ -101,6 +108,63 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
             )
         }
         persist()
+    }
+
+    fun updatePreviewText(roleName: String, text: String) {
+        localSettings.update { state ->
+            state.copy(rolePreviewTexts = state.rolePreviewTexts.toMutableMap().apply { put(roleName, text) })
+        }
+        persist()
+    }
+
+
+    fun resolveRoleSettingFromResources(roleName: String, resources: List<ResourceWithTagsCharacters>): RoleVoiceSetting? {
+        val candidates = resources.filter { item ->
+            item.resource.type == ResourceType.TEXT &&
+                item.resource.title.contains("声音配置") &&
+                item.characters.any { it.name == roleName }
+        }
+        val picked = candidates
+            .filter { it.resource.markState == ResourceMarkState.FAVORITE }
+            .ifEmpty { candidates }
+            .firstOrNull()
+            ?: return null
+        return parseRoleSettingFromText(roleName, picked.resource.quoteText)
+    }
+
+    private fun parseRoleSettingFromText(roleName: String, content: String?): RoleVoiceSetting? {
+        if (content.isNullOrBlank()) return null
+        return runCatching {
+            val root = JSONObject(content)
+            RoleVoiceSetting(
+                roleName = roleName,
+                speechRate = root.optDouble("speechRate", 1.0).toFloat(),
+                speakerId = if (root.has("speakerId")) root.optInt("speakerId") else null,
+                noiseScale = if (root.has("noiseScale")) root.optDouble("noiseScale").toFloat() else null,
+                noiseScaleW = if (root.has("noiseScaleW")) root.optDouble("noiseScaleW").toFloat() else null,
+                lengthScale = if (root.has("lengthScale")) root.optDouble("lengthScale").toFloat() else null,
+                maxNumSentences = if (root.has("maxNumSentences")) root.optInt("maxNumSentences") else null,
+                silenceScale = if (root.has("silenceScale")) root.optDouble("silenceScale").toFloat() else null
+            )
+        }.getOrNull()
+    }
+
+
+    fun globalRoleSetting(settings: VoiceSettings = localSettings.value): RoleVoiceSetting? {
+        return settings.roleSettings.firstOrNull { it.roleName == DEFAULT_ROLE_KEY }
+    }
+
+    fun buildDefaultConfigText(): String {
+        val roleSetting = globalRoleSetting()
+        return JSONObject()
+            .put("speechRate", roleSetting?.speechRate ?: 1.0)
+            .put("speakerId", roleSetting?.speakerId ?: 0)
+            .put("noiseScale", roleSetting?.noiseScale ?: 0.667)
+            .put("noiseScaleW", roleSetting?.noiseScaleW ?: 0.8)
+            .put("lengthScale", roleSetting?.lengthScale ?: 1.0)
+            .put("maxNumSentences", roleSetting?.maxNumSentences ?: 1)
+            .put("silenceScale", roleSetting?.silenceScale ?: 0.2)
+            .toString(2)
     }
 
     private fun persist() {

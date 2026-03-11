@@ -49,8 +49,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.CharacterEntity
+import com.example.quotepicker.data.ResourceMarkState
 import com.example.quotepicker.data.ResourceType
 import com.example.quotepicker.util.PiperSpeechEngine
+import com.example.quotepicker.util.RoleVoiceSetting
 import com.example.quotepicker.util.VoiceSettingsStore
 import com.example.quotepicker.vm.ResourceViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -58,11 +60,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 
 data class MagicDramaSettings(
     val defaultDelayMs: Long = 1000L,
     val imageIntervalMs: Long = 3000L
 )
+
+private const val DEFAULT_VOICE_SETTING_ROLE = "__default_voice_setting__"
 
 data class MagicDramaPlaybackOptions(
     val readNarrationAndNotice: Boolean = false
@@ -138,7 +143,8 @@ fun MagicDramaScreen(
                             text = text,
                             roleName = voiceRole,
                             voiceSettings = voiceSettings,
-                            piperSpeechEngine = piperSpeechEngine
+                            piperSpeechEngine = piperSpeechEngine,
+                            vm = vm
                         )
                     }
                     messages += DramaMessage.Narration(text = text, important = cmd.important)
@@ -151,7 +157,8 @@ fun MagicDramaScreen(
                         text = text,
                         roleName = role,
                         voiceSettings = voiceSettings,
-                        piperSpeechEngine = piperSpeechEngine
+                        piperSpeechEngine = piperSpeechEngine,
+                        vm = vm
                     )
                     messages += DramaMessage.Role(role = role, text = text)
                     delay(if (cmd.delayMs > 0) cmd.delayMs else settings.defaultDelayMs)
@@ -263,9 +270,12 @@ private suspend fun speakByRole(
     text: String,
     roleName: String,
     voiceSettings: com.example.quotepicker.util.VoiceSettings,
-    piperSpeechEngine: PiperSpeechEngine
+    piperSpeechEngine: PiperSpeechEngine,
+    vm: ResourceViewModel
 ) {
-    val roleSetting = voiceSettings.roleSettings.firstOrNull { it.roleName == roleName }
+    val roleSetting = resolveRoleSettingFromTextResource(roleName, vm)
+        ?: voiceSettings.roleSettings.firstOrNull { it.roleName == roleName }
+        ?: voiceSettings.roleSettings.firstOrNull { it.roleName == DEFAULT_VOICE_SETTING_ROLE }
     val roleProfile = voiceSettings.profiles.firstOrNull { it.id == roleSetting?.profileId }
         ?: voiceSettings.profiles.firstOrNull { it.modelUri == "asset://tts/vits-zh-hf-fanchen-C.onnx" }
     if (roleProfile != null) {
@@ -279,6 +289,32 @@ private suspend fun speakByRole(
         )
         piperSpeechEngine.speak(text, effective, roleSetting?.speechRate ?: 1.0f)
     }
+}
+
+private fun resolveRoleSettingFromTextResource(roleName: String, vm: ResourceViewModel): RoleVoiceSetting? {
+    val candidates = vm.allResources.value.filter { item ->
+        item.resource.type == ResourceType.TEXT &&
+            item.resource.title.contains("声音配置") &&
+            item.characters.any { it.name == roleName }
+    }
+    val selected = candidates.filter { it.resource.markState == ResourceMarkState.FAVORITE }
+        .ifEmpty { candidates }
+        .firstOrNull()
+        ?: return null
+    val raw = selected.resource.quoteText ?: return null
+    return runCatching {
+        val json = JSONObject(raw)
+        RoleVoiceSetting(
+            roleName = roleName,
+            speechRate = json.optDouble("speechRate", 1.0).toFloat(),
+            speakerId = if (json.has("speakerId")) json.optInt("speakerId") else null,
+            noiseScale = if (json.has("noiseScale")) json.optDouble("noiseScale").toFloat() else null,
+            noiseScaleW = if (json.has("noiseScaleW")) json.optDouble("noiseScaleW").toFloat() else null,
+            lengthScale = if (json.has("lengthScale")) json.optDouble("lengthScale").toFloat() else null,
+            maxNumSentences = if (json.has("maxNumSentences")) json.optInt("maxNumSentences") else null,
+            silenceScale = if (json.has("silenceScale")) json.optDouble("silenceScale").toFloat() else null
+        )
+    }.getOrNull()
 }
 
 private suspend fun launchCountdown(total: Int, onTick: (Int?) -> Unit) {
@@ -392,7 +428,7 @@ private fun parseDramaCommand(raw: String): DramaCommand? {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = false)
         }
-        key == "重要" -> {
+        key == "重要" || key == "注意" -> {
             val (text, delay) = parseDelayText(value)
             DramaCommand.Narration(text, delay, important = true)
         }
