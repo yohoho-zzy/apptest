@@ -11,15 +11,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -35,8 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
@@ -189,49 +195,81 @@ private fun VoiceSettingEditor(
 
     fun saveCurrent() = onSave(currentSetting())
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("$title（每项都限制在安全区间）")
-
-        Text("speakerId>说话者(0-186)")
-        Row {
-            Text("$speakerId")
-            Slider(value = speakerId.toFloat(), onValueChange = { speakerId = it.toInt(); saveCurrent() }, valueRange = 0f..186f, modifier = Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(20.dp))
+                Column {
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("每项都限制在安全区间", style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
 
-        Text("speed>语速(0.6-1.8)")
-        Row {
-            Text("${"%.2f".format(Locale.US, speed)}")
-            Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "说话者",
+            hint = "speakerId · 0-186",
+            valueText = "$speakerId"
+        ) {
+            Slider(value = speakerId.toFloat(), onValueChange = { speakerId = it.toInt(); saveCurrent() }, valueRange = 0f..186f, modifier = Modifier.fillMaxWidth())
         }
 
-        Text("noiseScale>情绪:随机发音(0.1-2.0)")
-        Row {
-            Text("${"%.3f".format(Locale.US, noiseScale)}")
-            Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "语速",
+            hint = "speed · 0.6-1.8",
+            valueText = "${"%.2f".format(Locale.US, speed)}"
+        ) {
+            Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.fillMaxWidth())
         }
 
-        Text("noiseScaleW>音素:随机间隔(0.1-2.0)")
-        Row {
-            Text("${"%.3f".format(Locale.US, noiseScaleW)}")
-            Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "情绪随机度",
+            hint = "noiseScale · 0.1-2.0",
+            valueText = "${"%.3f".format(Locale.US, noiseScale)}"
+        ) {
+            Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
         }
 
-        Text("lengthScale>句子时长(0.5-2.0)")
-        Row {
-            Text("${"%.2f".format(Locale.US, lengthScale)}")
-            Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "音素随机间隔",
+            hint = "noiseScaleW · 0.1-2.0",
+            valueText = "${"%.3f".format(Locale.US, noiseScaleW)}"
+        ) {
+            Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
         }
 
-        Text("maxNumSentences>句子处理量(1-10)")
-        Row {
-            Text("$maxNumSentences")
-            Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "句子时长",
+            hint = "lengthScale · 0.5-2.0",
+            valueText = "${"%.2f".format(Locale.US, lengthScale)}"
+        ) {
+            Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.fillMaxWidth())
         }
 
-        Text("silenceScale>句子间隔(0-1)")
-        Row {
-            Text("${"%.2f".format(Locale.US, silenceScale)}")
-            Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.weight(1f))
+        SliderSettingRow(
+            label = "句子处理量",
+            hint = "maxNumSentences · 1-10",
+            valueText = "$maxNumSentences"
+        ) {
+            Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.fillMaxWidth())
+        }
+
+        SliderSettingRow(
+            label = "句子间隔",
+            hint = "silenceScale · 0-1",
+            valueText = "${"%.2f".format(Locale.US, silenceScale)}"
+        ) {
+            Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.fillMaxWidth())
         }
 
         OutlinedTextField(
@@ -244,7 +282,7 @@ private fun VoiceSettingEditor(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
                     if (baseProfile == null) return@Button
@@ -262,11 +300,15 @@ private fun VoiceSettingEditor(
                         statusText = if (speech.speak(previewText, effective, setting.speechRate)) "朗读中" else "朗读失败"
                     }
                 },
-                enabled = baseProfile != null
+                enabled = baseProfile != null,
+                modifier = Modifier.weight(1f)
             ) { Text("预览朗读") }
 
-            Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }) { Text("停止") }
-            Button(onClick = { onOpenSaveTextPage(buildConfigText()) }) { Text("保存") }
+            Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }, modifier = Modifier.weight(1f)) { Text("停止") }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onOpenSaveTextPage(buildConfigText()) }, modifier = Modifier.weight(1f)) { Text("保存文本") }
             Button(onClick = {
                 if (baseProfile == null) return@Button
                 val setting = currentSetting()
@@ -288,11 +330,48 @@ private fun VoiceSettingEditor(
                         statusText = "生成失败"
                     }
                 }
-            }) { Text("留声") }
+            }, modifier = Modifier.weight(1f)) { Text("导出声音") }
         }
 
-        if (statusText.isNotBlank()) Text(statusText)
+        if (statusText.isNotBlank()) {
+            Text(
+                statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
 
+    }
+}
+
+@Composable
+private fun SliderSettingRow(
+    label: String,
+    hint: String,
+    valueText: String,
+    slider: @Composable () -> Unit
+) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                    Text(hint, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(valueText, style = MaterialTheme.typography.titleSmall)
+            }
+            Divider()
+            slider()
+        }
     }
 }
 
