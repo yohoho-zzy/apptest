@@ -169,7 +169,7 @@ fun MagicDramaScreen(
 
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
-                    val text = renderRandomToken(cmd.text)
+                    val text = resolveVariablePlaceholders(renderRandomToken(cmd.text), variables)
                     if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
                         val narrationRoleName = if (cmd.important) "注意" else "旁白"
                         speakByRole(
@@ -186,7 +186,7 @@ fun MagicDramaScreen(
 
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
-                    val text = cmd.text.replace("nn", "\n")
+                    val text = resolveVariablePlaceholders(cmd.text, variables).replace("nn", "\n")
                     if (playbackOptions.voicePlaybackMode != MagicDramaVoicePlaybackMode.SILENT) {
                         speakByRole(
                             text = text,
@@ -200,7 +200,9 @@ fun MagicDramaScreen(
                     delay(settings.defaultDelayMs)
                 }
 
-                is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
+                is DramaCommand.ShowResource -> {
+                    currentMedia = DramaMedia.Resource(resolveVariablePlaceholders(cmd.source, variables))
+                }
                 is DramaCommand.WaitSeconds -> delay(cmd.seconds.coerceAtLeast(0) * 1000L)
                 is DramaCommand.SetVariable -> applyVariableExpression(cmd.expression, variables)
                 is DramaCommand.Jump -> jumpTo(cmd.blockId, queue)
@@ -218,7 +220,9 @@ fun MagicDramaScreen(
                 }
 
                 is DramaCommand.ShowButtons -> {
-                    buttonOptions = cmd.options
+                    buttonOptions = cmd.options.map { option ->
+                        option.copy(text = resolveVariablePlaceholders(option.text, variables))
+                    }
                     val waiter = CompletableDeferred<String>()
                     pendingBranch = waiter
                     val selected = waiter.await()
@@ -400,7 +404,7 @@ private suspend fun launchCountdown(total: Int, onTick: (Int?) -> Unit) {
 }
 
 private fun applyVariableExpression(expression: String, variables: MutableMap<String, String>) {
-    val raw = expression.trim()
+    val raw = normalizeScriptSymbols(expression).trim()
     when {
         raw.contains("+=") -> {
             val (name, deltaRaw) = raw.split("+=", limit = 2)
@@ -427,15 +431,17 @@ private fun applyVariableExpression(expression: String, variables: MutableMap<St
 }
 
 private fun evaluateCondition(condition: String, variables: Map<String, String>): Boolean {
-    val clauses = condition.split("&").map { it.trim() }.filter { it.isNotBlank() }
+    val normalized = normalizeScriptSymbols(condition)
+    val clauses = normalized.split("&").map { it.trim() }.filter { it.isNotBlank() }
     if (clauses.isEmpty()) return false
     return clauses.all { clause -> evaluateSingleCondition(clause, variables) }
 }
 
 private fun evaluateSingleCondition(condition: String, variables: Map<String, String>): Boolean {
+    val normalized = normalizeScriptSymbols(condition)
     val ops = listOf(">=", "<=", "!=", ">", "<", "=")
-    val op = ops.firstOrNull { condition.contains(it) } ?: return false
-    val parts = condition.split(op, limit = 2)
+    val op = ops.firstOrNull { normalized.contains(it) } ?: return false
+    val parts = normalized.split(op, limit = 2)
     if (parts.size != 2) return false
     val leftRaw = parts[0].trim()
     val rightRaw = parts[1].trim()
@@ -464,7 +470,7 @@ private fun evaluateSingleCondition(condition: String, variables: Map<String, St
 }
 
 private fun evaluateNumericExpression(expression: String, variables: Map<String, String>): Int? {
-    val normalized = expression.replace(" ", "")
+    val normalized = normalizeScriptSymbols(expression).replace(" ", "")
     if (normalized.isBlank()) return null
     val terms = Regex("[+-]?[^+-]+")
         .findAll(normalized)
@@ -590,8 +596,29 @@ private fun parseDramaScript(raw: String): ParsedDramaScript {
 }
 
 private fun sanitizeScriptLine(raw: String): String {
-    val trimmed = raw.trim()
+    val normalized = normalizeScriptSymbols(raw)
+    val trimmed = normalized.trim()
     return trimmed.replace(Regex("\\s\\[[^\\[\\]]*]$"), "").trim()
+}
+
+private fun normalizeScriptSymbols(raw: String): String {
+    val builder = StringBuilder(raw.length)
+    raw.forEach { ch ->
+        val converted = when {
+            ch == '　' -> ' '
+            ch.code in 0xFF01..0xFF5E -> (ch.code - 0xFEE0).toChar()
+            else -> ch
+        }
+        builder.append(converted)
+    }
+    return builder.toString()
+}
+
+private fun resolveVariablePlaceholders(text: String, variables: Map<String, String>): String {
+    return Regex("%([^%]+)%").replace(text) { match ->
+        val key = match.groupValues[1].trim()
+        variables[key] ?: match.value
+    }
 }
 
 private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
