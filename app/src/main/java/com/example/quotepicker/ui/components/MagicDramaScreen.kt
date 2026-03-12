@@ -405,35 +405,43 @@ private fun applyVariableExpression(expression: String, variables: MutableMap<St
         raw.contains("+=") -> {
             val (name, deltaRaw) = raw.split("+=", limit = 2)
             val key = name.trim()
-            val delta = deltaRaw.trim().toIntOrNull() ?: 0
+            val delta = evaluateNumericExpression(deltaRaw.trim(), variables) ?: 0
             val current = variables[key]?.toIntOrNull() ?: 0
             variables[key] = (current + delta).toString()
         }
         raw.contains("-=") -> {
             val (name, deltaRaw) = raw.split("-=", limit = 2)
             val key = name.trim()
-            val delta = deltaRaw.trim().toIntOrNull() ?: 0
+            val delta = evaluateNumericExpression(deltaRaw.trim(), variables) ?: 0
             val current = variables[key]?.toIntOrNull() ?: 0
             variables[key] = (current - delta).toString()
         }
         raw.contains("=") -> {
             val (name, value) = raw.split("=", limit = 2)
-            if (name.isNotBlank()) variables[name.trim()] = value.trim()
+            if (name.isNotBlank()) {
+                val resolved = evaluateNumericExpression(value.trim(), variables)?.toString() ?: value.trim()
+                variables[name.trim()] = resolved
+            }
         }
     }
 }
 
 private fun evaluateCondition(condition: String, variables: Map<String, String>): Boolean {
+    val clauses = condition.split("&").map { it.trim() }.filter { it.isNotBlank() }
+    if (clauses.isEmpty()) return false
+    return clauses.all { clause -> evaluateSingleCondition(clause, variables) }
+}
+
+private fun evaluateSingleCondition(condition: String, variables: Map<String, String>): Boolean {
     val ops = listOf(">=", "<=", "!=", ">", "<", "=")
     val op = ops.firstOrNull { condition.contains(it) } ?: return false
     val parts = condition.split(op, limit = 2)
     if (parts.size != 2) return false
-    val key = parts[0].trim()
-    val right = parts[1].trim()
-    val leftValue = variables[key] ?: ""
+    val leftRaw = parts[0].trim()
+    val rightRaw = parts[1].trim()
 
-    val leftInt = leftValue.toIntOrNull()
-    val rightInt = right.toIntOrNull()
+    val leftInt = evaluateNumericExpression(leftRaw, variables)
+    val rightInt = evaluateNumericExpression(rightRaw, variables)
     return if (leftInt != null && rightInt != null) {
         when (op) {
             "=" -> leftInt == rightInt
@@ -445,12 +453,49 @@ private fun evaluateCondition(condition: String, variables: Map<String, String>)
             else -> false
         }
     } else {
+        val leftValue = resolveTokenValue(leftRaw, variables)
+        val rightValue = resolveTokenValue(rightRaw, variables)
         when (op) {
-            "=" -> leftValue == right
-            "!=" -> leftValue != right
+            "=" -> leftValue == rightValue
+            "!=" -> leftValue != rightValue
             else -> false
         }
     }
+}
+
+private fun evaluateNumericExpression(expression: String, variables: Map<String, String>): Int? {
+    val normalized = expression.replace(" ", "")
+    if (normalized.isBlank()) return null
+    val terms = Regex("[+-]?[^+-]+")
+        .findAll(normalized)
+        .map { it.value }
+        .toList()
+    if (terms.isEmpty()) return null
+
+    var total = 0
+    for (term in terms) {
+        val sign = if (term.startsWith("-")) -1 else 1
+        val token = term.removePrefix("+").removePrefix("-")
+        val value = resolveNumericToken(token, variables) ?: return null
+        total += sign * value
+    }
+    return total
+}
+
+private fun resolveNumericToken(token: String, variables: Map<String, String>): Int? {
+    val dice = Regex("^(\\d+)d(\\d+)$", RegexOption.IGNORE_CASE).matchEntire(token)
+    if (dice != null) {
+        val count = dice.groupValues[1].toIntOrNull() ?: return null
+        val side = dice.groupValues[2].toIntOrNull() ?: return null
+        if (count <= 0 || side <= 0) return null
+        return (1..count).sumOf { (1..side).random() }
+    }
+    return token.toIntOrNull() ?: variables[token]?.toIntOrNull()
+}
+
+private fun resolveTokenValue(token: String, variables: Map<String, String>): String {
+    if (variables.containsKey(token)) return variables[token].orEmpty()
+    return token
 }
 
 @Composable
