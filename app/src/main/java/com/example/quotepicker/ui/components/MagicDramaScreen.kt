@@ -145,14 +145,14 @@ fun MagicDramaScreen(
     var currentThemeId by remember(playbackOptions.initialThemeId, availableThemes) {
         mutableStateOf(
             availableThemes.firstOrNull { it.id == playbackOptions.initialThemeId }?.id
-                ?: availableThemes.firstOrNull { it.name == "深夜" }?.id
+                ?: availableThemes.firstOrNull { it.name == "清新" }?.id
                 ?: availableThemes.firstOrNull()?.id
                 ?: DEFAULT_MAGIC_DRAMA_THEME_ID
         )
     }
     val currentTheme = remember(currentThemeId, availableThemes) {
         availableThemes.firstOrNull { it.id == currentThemeId }
-            ?: availableThemes.firstOrNull { it.name == "深夜" }
+            ?: availableThemes.firstOrNull { it.name == "清新" }
             ?: availableThemes.first()
     }
 
@@ -181,7 +181,7 @@ fun MagicDramaScreen(
         variables.clear()
         timeoutBlockToJump = null
         currentThemeId = availableThemes.firstOrNull { it.id == playbackOptions.initialThemeId }?.id
-            ?: availableThemes.firstOrNull { it.name == "深夜" }?.id
+            ?: availableThemes.firstOrNull { it.name == "清新" }?.id
             ?: availableThemes.first().id
         countdownJob?.cancel()
         countdownJob = null

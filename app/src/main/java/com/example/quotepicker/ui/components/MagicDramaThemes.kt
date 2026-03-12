@@ -26,27 +26,27 @@ data class MagicDramaTheme(
 )
 
 private const val MAGIC_DRAMA_THEME_ASSET = "magic_drama_themes.json"
-const val DEFAULT_MAGIC_DRAMA_THEME_ID = "lonely_night"
+const val DEFAULT_MAGIC_DRAMA_THEME_ID = "fresh"
 
 private val fallbackTheme = MagicDramaTheme(
     id = DEFAULT_MAGIC_DRAMA_THEME_ID,
-    name = "深夜",
-    resourceBackground = Color(0xFF020617),
-    resourceCountdownBubble = Color(0xFF334155),
-    resourceCountdownText = Color(0xFFE2E8F0),
-    statusBackground = Color(0xFF1E293B),
-    statusTitleText = Color(0xFFE2E8F0),
-    statusBubble = Color(0xFF475569),
-    statusBubbleText = Color(0xFFF1F5F9),
-    dialogBackground = Color(0xFF020617),
-    narrationBubble = Color(0xFF1E293B),
-    narrationText = Color(0xFFCBD5F5),
-    warningBubble = Color(0xFF7C2D12),
-    warningText = Color(0xFFFED7AA),
-    characterBubble = Color(0xFF1D4ED8),
-    characterText = Color(0xFFEFF6FF),
-    avatarBackground = Color(0xFF334155),
-    avatarText = Color(0xFFF8FAFC)
+    name = "清新",
+    resourceBackground = Color(0xFFA7F3D0),
+    resourceCountdownBubble = Color(0xFFF9E24E),
+    resourceCountdownText = Color(0xFF022C22),
+    statusBackground = Color(0xFF6EE7B7),
+    statusTitleText = Color(0xFF064E3B),
+    statusBubble = Color(0xFFDCFCE7),
+    statusBubbleText = Color(0xFF14532D),
+    dialogBackground = Color(0xFFF0FDF4),
+    narrationBubble = Color(0xFFBFFDD5),
+    narrationText = Color(0xFF14532D),
+    warningBubble = Color(0xFFF9E24E),
+    warningText = Color(0xFFC25D05),
+    characterBubble = Color(0xFFD1D1D1),
+    characterText = Color(0xFF6B6B6B),
+    avatarBackground = Color(0xFF6EE7B7),
+    avatarText = Color(0xFF022C22)
 )
 
 fun loadMagicDramaThemes(context: Context): List<MagicDramaTheme> {

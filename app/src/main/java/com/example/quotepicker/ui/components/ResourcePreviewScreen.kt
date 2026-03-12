@@ -70,6 +70,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.quotepicker.data.ResourceMarkState
@@ -286,7 +287,8 @@ fun ResourcePreviewScreen(
                                 var voicePlaybackMode by remember(liveResource.resource.id) {
                                     mutableStateOf(MagicDramaVoicePlaybackMode.ROLE_ONLY)
                                 }
-                                val availableThemes = remember { loadMagicDramaThemes(LocalContext.current) }
+                                val c = LocalContext.current
+                                val availableThemes = remember { loadMagicDramaThemes(c) }
                                 var selectedThemeId by remember(liveResource.resource.id) {
                                     mutableStateOf(DEFAULT_MAGIC_DRAMA_THEME_ID)
                                 }
@@ -321,16 +323,24 @@ fun ResourcePreviewScreen(
                                             Text("开始前设置：氛围")
                                             FlowRow(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 availableThemes.forEach { theme ->
                                                     AssistChip(
                                                         onClick = { selectedThemeId = theme.id },
-                                                        label = { Text(theme.name) },
+                                                        label = {
+                                                            Text(
+                                                                text = theme.name,
+                                                                fontSize = 12.sp
+                                                            )
+                                                        },
+                                                        modifier = Modifier.height(24.dp),
                                                         colors = AssistChipDefaults.assistChipColors(
-                                                            containerColor = if (selectedThemeId == theme.id) Color(0xFFE5E8FF) else Color(0xFFF5F5F5),
-                                                            labelColor = if (selectedThemeId == theme.id) Color(0xFF2D3561) else Color(0xFF444444)
+                                                            containerColor = if (selectedThemeId == theme.id)
+                                                                Color(0xFFE5E8FF) else Color(0xFFF5F5F5),
+                                                            labelColor = if (selectedThemeId == theme.id)
+                                                                Color(0xFF2D3561) else Color(0xFF444444)
                                                         )
                                                     )
                                                 }
