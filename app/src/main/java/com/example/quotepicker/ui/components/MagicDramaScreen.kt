@@ -169,7 +169,7 @@ fun MagicDramaScreen(
 
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
-                    val text = renderRandomToken(cmd.text)
+                    val text = resolveVariablePlaceholders(renderRandomToken(cmd.text), variables)
                     if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
                         val narrationRoleName = if (cmd.important) "注意" else "旁白"
                         speakByRole(
@@ -186,7 +186,7 @@ fun MagicDramaScreen(
 
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
-                    val text = cmd.text.replace("nn", "\n")
+                    val text = resolveVariablePlaceholders(cmd.text, variables).replace("nn", "\n")
                     if (playbackOptions.voicePlaybackMode != MagicDramaVoicePlaybackMode.SILENT) {
                         speakByRole(
                             text = text,
@@ -200,7 +200,9 @@ fun MagicDramaScreen(
                     delay(settings.defaultDelayMs)
                 }
 
-                is DramaCommand.ShowResource -> currentMedia = DramaMedia.Resource(cmd.source)
+                is DramaCommand.ShowResource -> {
+                    currentMedia = DramaMedia.Resource(resolveVariablePlaceholders(cmd.source, variables))
+                }
                 is DramaCommand.WaitSeconds -> delay(cmd.seconds.coerceAtLeast(0) * 1000L)
                 is DramaCommand.SetVariable -> applyVariableExpression(cmd.expression, variables)
                 is DramaCommand.Jump -> jumpTo(cmd.blockId, queue)
@@ -218,7 +220,9 @@ fun MagicDramaScreen(
                 }
 
                 is DramaCommand.ShowButtons -> {
-                    buttonOptions = cmd.options
+                    buttonOptions = cmd.options.map { option ->
+                        option.copy(text = resolveVariablePlaceholders(option.text, variables))
+                    }
                     val waiter = CompletableDeferred<String>()
                     pendingBranch = waiter
                     val selected = waiter.await()
@@ -590,8 +594,29 @@ private fun parseDramaScript(raw: String): ParsedDramaScript {
 }
 
 private fun sanitizeScriptLine(raw: String): String {
-    val trimmed = raw.trim()
+    val normalized = normalizeFullWidthSymbols(raw)
+    val trimmed = normalized.trim()
     return trimmed.replace(Regex("\\s\\[[^\\[\\]]*]$"), "").trim()
+}
+
+private fun normalizeFullWidthSymbols(raw: String): String {
+    val builder = StringBuilder(raw.length)
+    raw.forEach { ch ->
+        val converted = when {
+            ch == '　' -> ' '
+            ch.code in 0xFF01..0xFF5E -> (ch.code - 0xFEE0).toChar()
+            else -> ch
+        }
+        builder.append(converted)
+    }
+    return builder.toString()
+}
+
+private fun resolveVariablePlaceholders(text: String, variables: Map<String, String>): String {
+    return Regex("%([^%]+)%").replace(text) { match ->
+        val key = match.groupValues[1].trim()
+        variables[key] ?: match.value
+    }
 }
 
 private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
