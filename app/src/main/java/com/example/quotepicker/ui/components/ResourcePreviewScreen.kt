@@ -286,6 +286,10 @@ fun ResourcePreviewScreen(
                                 var voicePlaybackMode by remember(liveResource.resource.id) {
                                     mutableStateOf(MagicDramaVoicePlaybackMode.ROLE_ONLY)
                                 }
+                                val availableThemes = remember { loadMagicDramaThemes(LocalContext.current) }
+                                var selectedThemeId by remember(liveResource.resource.id) {
+                                    mutableStateOf(DEFAULT_MAGIC_DRAMA_THEME_ID)
+                                }
                                 if (showMagicDrama) {
                                     MagicDramaScreen(
                                         title = liveResource.resource.title,
@@ -298,7 +302,8 @@ fun ResourcePreviewScreen(
                                                 ?: 3L) * 1000L
                                         ),
                                         playbackOptions = MagicDramaPlaybackOptions(
-                                            voicePlaybackMode = voicePlaybackMode
+                                            voicePlaybackMode = voicePlaybackMode,
+                                            initialThemeId = selectedThemeId
                                         ),
                                         vm = vm,
                                         onClose = { showMagicDrama = false }
@@ -313,6 +318,23 @@ fun ResourcePreviewScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                            Text("开始前设置：氛围")
+                                            FlowRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                availableThemes.forEach { theme ->
+                                                    AssistChip(
+                                                        onClick = { selectedThemeId = theme.id },
+                                                        label = { Text(theme.name) },
+                                                        colors = AssistChipDefaults.assistChipColors(
+                                                            containerColor = if (selectedThemeId == theme.id) Color(0xFFE5E8FF) else Color(0xFFF5F5F5),
+                                                            labelColor = if (selectedThemeId == theme.id) Color(0xFF2D3561) else Color(0xFF444444)
+                                                        )
+                                                    )
+                                                }
+                                            }
                                             Text("开始前设置：角色朗读模式")
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),

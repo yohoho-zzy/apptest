@@ -74,7 +74,8 @@ data class MagicDramaSettings(
 private const val DEFAULT_VOICE_SETTING_ROLE = "__default_voice_setting__"
 
 data class MagicDramaPlaybackOptions(
-    val voicePlaybackMode: MagicDramaVoicePlaybackMode = MagicDramaVoicePlaybackMode.ROLE_ONLY
+    val voicePlaybackMode: MagicDramaVoicePlaybackMode = MagicDramaVoicePlaybackMode.ROLE_ONLY,
+    val initialThemeId: String = DEFAULT_MAGIC_DRAMA_THEME_ID
 )
 
 enum class MagicDramaVoicePlaybackMode {
@@ -94,6 +95,7 @@ private sealed interface DramaCommand {
     data class RemoveVariable(val variableName: String) : DramaCommand
     data class Jump(val blockId: String) : DramaCommand
     data class ConditionalJump(val condition: String, val targetBlock: String) : DramaCommand
+    data class SetAtmosphere(val themeKey: String) : DramaCommand
     data object ClearResourceArea : DramaCommand
     data object ClearAllVariables : DramaCommand
     data object ClearDialogue : DramaCommand
@@ -136,8 +138,23 @@ fun MagicDramaScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val voiceSettingsStore = remember(context) { VoiceSettingsStore(context) }
+    val availableThemes = remember(context) { loadMagicDramaThemes(context) }
+    val themeAliases = remember(availableThemes) { magicDramaAtmosphereAliases(availableThemes) }
     val piperSpeechEngine = remember(context) { PiperSpeechEngine(context) }
     val voiceSettings = remember { voiceSettingsStore.load() }
+    var currentThemeId by remember(playbackOptions.initialThemeId, availableThemes) {
+        mutableStateOf(
+            availableThemes.firstOrNull { it.id == playbackOptions.initialThemeId }?.id
+                ?: availableThemes.firstOrNull { it.name == "深夜" }?.id
+                ?: availableThemes.firstOrNull()?.id
+                ?: DEFAULT_MAGIC_DRAMA_THEME_ID
+        )
+    }
+    val currentTheme = remember(currentThemeId, availableThemes) {
+        availableThemes.firstOrNull { it.id == currentThemeId }
+            ?: availableThemes.firstOrNull { it.name == "深夜" }
+            ?: availableThemes.first()
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -163,6 +180,9 @@ fun MagicDramaScreen(
         pendingBranch = null
         variables.clear()
         timeoutBlockToJump = null
+        currentThemeId = availableThemes.firstOrNull { it.id == playbackOptions.initialThemeId }?.id
+            ?: availableThemes.firstOrNull { it.name == "深夜" }?.id
+            ?: availableThemes.first().id
         countdownJob?.cancel()
         countdownJob = null
         backgroundPlayer?.stop()
@@ -224,6 +244,11 @@ fun MagicDramaScreen(
                 is DramaCommand.ConditionalJump -> {
                     if (evaluateCondition(cmd.condition, variables)) jumpTo(cmd.targetBlock, queue)
                 }
+                is DramaCommand.SetAtmosphere -> {
+                    val normalized = cmd.themeKey.trim().lowercase()
+                    val target = themeAliases[normalized]
+                    if (!target.isNullOrBlank()) currentThemeId = target
+                }
                 is DramaCommand.ClearResourceArea -> currentMedia = null
                 is DramaCommand.ClearAllVariables -> variables.clear()
                 is DramaCommand.ClearDialogue -> messages.clear()
@@ -271,7 +296,7 @@ fun MagicDramaScreen(
         }
     }
 
-    LaunchedEffect(messages.size) {
+    LaunchedEffect(messages.size, currentThemeId) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
         }
@@ -284,14 +309,14 @@ fun MagicDramaScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF5F7FB))
+                .background(currentTheme.dialogBackground)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .weight(3f)
                     .fillMaxWidth()
-                    .background(Color(0xFFE8EEFF))
+                    .background(currentTheme.resourceBackground)
             ) {
                 DramaMediaArea(media = currentMedia, vm = vm, settings = settings)
                 countdownSeconds?.let { left ->
@@ -299,10 +324,10 @@ fun MagicDramaScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(12.dp)
-                            .background(Color(0xCC2E3A59), RoundedCornerShape(8.dp))
+                            .background(currentTheme.resourceCountdownBubble.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text(text = "倒数 ${left}s", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(text = "倒数 ${left}s", color = currentTheme.resourceCountdownText, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -310,20 +335,20 @@ fun MagicDramaScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF2F6FF))
+                        .background(currentTheme.statusBackground)
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = Color(0xFF42506A))
+                    Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = currentTheme.statusTitleText)
                     variables.forEach { (k, v) ->
                         Text(
                             text = "$k:$v",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF1F2433),
+                            color = currentTheme.statusBubbleText,
                             modifier = Modifier
-                                .background(Color.White, RoundedCornerShape(10.dp))
+                                .background(currentTheme.statusBubble, RoundedCornerShape(10.dp))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
@@ -333,10 +358,10 @@ fun MagicDramaScreen(
                 modifier = Modifier
                     .weight(2f)
                     .fillMaxWidth()
-                    .background(Color(0xFFFDF7EA))
+                    .background(currentTheme.dialogBackground)
                     .padding(10.dp)
             ) {
-                Text(text = title, color = Color(0xFF2D3561), style = MaterialTheme.typography.labelMedium)
+                Text(text = title, color = currentTheme.statusTitleText, style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn(
                     modifier = Modifier.weight(1f),
@@ -345,8 +370,8 @@ fun MagicDramaScreen(
                 ) {
                     items(messages) { message ->
                         when (message) {
-                            is DramaMessage.Narration -> NarrationBubble(message)
-                            is DramaMessage.Role -> RoleBubble(message)
+                            is DramaMessage.Narration -> NarrationBubble(message, currentTheme)
+                            is DramaMessage.Role -> RoleBubble(message, currentTheme)
                         }
                     }
                 }
@@ -567,20 +592,20 @@ private fun LoopVideo(uri: Uri, onCompleted: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun NarrationBubble(message: DramaMessage.Narration) {
+private fun NarrationBubble(message: DramaMessage.Narration, theme: MagicDramaTheme) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
             text = message.text,
-            color = if (message.important) Color(0xFFB33985) else Color(0xFF2B2F3A),
+            color = if (message.important) theme.warningText else theme.narrationText,
             modifier = Modifier
-                .background(Color(0xFFEAF1FF), RoundedCornerShape(10.dp))
+                .background(if (message.important) theme.warningBubble else theme.narrationBubble, RoundedCornerShape(10.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
 }
 
 @Composable
-private fun RoleBubble(message: DramaMessage.Role) {
+private fun RoleBubble(message: DramaMessage.Role, theme: MagicDramaTheme) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
@@ -589,19 +614,20 @@ private fun RoleBubble(message: DramaMessage.Role) {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .border(1.dp, Color(0xFFAAAAAA), CircleShape),
+                .border(1.dp, theme.statusBubble, CircleShape)
+                .background(theme.avatarBackground),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = message.role.take(4), color = Color(0xFF2B2F3A), style = MaterialTheme.typography.labelSmall)
+            Text(text = message.role.take(4), color = theme.avatarText, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(modifier = Modifier.width(8.dp))
         Column(
             modifier = Modifier
-                .background(Color(0xFFFFFFFF), RoundedCornerShape(10.dp))
+                .background(theme.characterBubble, RoundedCornerShape(10.dp))
                 .padding(8.dp)
         ) {
-            Text(text = message.role, color = Color(0xFF5C647A), style = MaterialTheme.typography.labelSmall)
-            Text(text = message.text, color = Color(0xFF1F2433))
+            Text(text = message.role, color = theme.avatarText, style = MaterialTheme.typography.labelSmall)
+            Text(text = message.text, color = theme.characterText)
         }
     }
 }
@@ -677,6 +703,10 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val body = line.substringAfter(':').trim()
                 val parts = body.split("--", limit = 2)
                 if (parts.size == 2) commands += DramaCommand.ConditionalJump(parts[0].trim(), parts[1].trim())
+            }
+            line.startsWith("氛围:") -> {
+                val key = line.substringAfter(':').trim()
+                if (key.isNotBlank()) commands += DramaCommand.SetAtmosphere(key)
             }
             line.startsWith("计时:") -> {
                 val body = line.substringAfter(':').trim()
