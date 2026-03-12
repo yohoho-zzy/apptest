@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -185,6 +186,15 @@ private fun VoiceSettingEditor(
     var lengthScale by remember(initial?.lengthScale) { mutableStateOf((initial?.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)) }
     var maxNumSentences by remember(initial?.maxNumSentences) { mutableStateOf((initial?.maxNumSentences ?: 1).coerceIn(1, 10)) }
     var silenceScale by remember(initial?.silenceScale) { mutableStateOf((initial?.silenceScale ?: 0.2f).coerceIn(0f, 1f)) }
+    var skipAdvancedConfig by remember(initial) {
+        mutableStateOf(
+            initial?.noiseScale == null &&
+                initial?.noiseScaleW == null &&
+                initial?.lengthScale == null &&
+                initial?.maxNumSentences == null &&
+                initial?.silenceScale == null
+        )
+    }
     var previewText by remember(initialPreviewText) { mutableStateOf(initialPreviewText ?: "这是一段语音预览。") }
     var statusText by remember { mutableStateOf("") }
     var previousSpeakerId by remember { mutableStateOf(speakerId) }
@@ -198,11 +208,11 @@ private fun VoiceSettingEditor(
         roleName = VoiceSettingsViewModel.DEFAULT_ROLE_KEY,
         speechRate = speed,
         speakerId = speakerId,
-        noiseScale = noiseScale,
-        noiseScaleW = noiseScaleW,
-        lengthScale = lengthScale,
-        maxNumSentences = maxNumSentences,
-        silenceScale = silenceScale
+        noiseScale = if (skipAdvancedConfig) null else noiseScale,
+        noiseScaleW = if (skipAdvancedConfig) null else noiseScaleW,
+        lengthScale = if (skipAdvancedConfig) null else lengthScale,
+        maxNumSentences = if (skipAdvancedConfig) null else maxNumSentences,
+        silenceScale = if (skipAdvancedConfig) null else silenceScale
     )
 
     fun saveCurrent() = onSave(currentSetting())
@@ -268,44 +278,70 @@ private fun VoiceSettingEditor(
             Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.fillMaxWidth())
         }
 
-        SliderSettingRow(
-            label = "情绪随机度",
-            hint = "noiseScale · 0.1-2.0",
-            valueText = "${"%.3f".format(Locale.US, noiseScale)}"
-        ) {
-            Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
+        Card {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = skipAdvancedConfig,
+                    onCheckedChange = {
+                        skipAdvancedConfig = it
+                        saveCurrent()
+                    }
+                )
+                Column {
+                    Text("不设置")
+                    Text(
+                        "选中后，仅保留说话者和语速",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
         }
 
-        SliderSettingRow(
-            label = "音素随机间隔",
-            hint = "noiseScaleW · 0.1-2.0",
-            valueText = "${"%.3f".format(Locale.US, noiseScaleW)}"
-        ) {
-            Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
-        }
+        if (!skipAdvancedConfig) {
+            SliderSettingRow(
+                label = "情绪随机度",
+                hint = "noiseScale · 0.1-2.0",
+                valueText = "${"%.3f".format(Locale.US, noiseScale)}"
+            ) {
+                Slider(value = noiseScale, onValueChange = { noiseScale = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
+            }
 
-        SliderSettingRow(
-            label = "句子时长",
-            hint = "lengthScale · 0.5-2.0",
-            valueText = "${"%.2f".format(Locale.US, lengthScale)}"
-        ) {
-            Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.fillMaxWidth())
-        }
+            SliderSettingRow(
+                label = "音素随机间隔",
+                hint = "noiseScaleW · 0.1-2.0",
+                valueText = "${"%.3f".format(Locale.US, noiseScaleW)}"
+            ) {
+                Slider(value = noiseScaleW, onValueChange = { noiseScaleW = it; saveCurrent() }, valueRange = 0.1f..2.0f, modifier = Modifier.fillMaxWidth())
+            }
 
-        SliderSettingRow(
-            label = "句子处理量",
-            hint = "maxNumSentences · 1-10",
-            valueText = "$maxNumSentences"
-        ) {
-            Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.fillMaxWidth())
-        }
+            SliderSettingRow(
+                label = "句子时长",
+                hint = "lengthScale · 0.5-2.0",
+                valueText = "${"%.2f".format(Locale.US, lengthScale)}"
+            ) {
+                Slider(value = lengthScale, onValueChange = { lengthScale = it; saveCurrent() }, valueRange = 0.5f..2.0f, modifier = Modifier.fillMaxWidth())
+            }
 
-        SliderSettingRow(
-            label = "句子间隔",
-            hint = "silenceScale · 0-1",
-            valueText = "${"%.2f".format(Locale.US, silenceScale)}"
-        ) {
-            Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.fillMaxWidth())
+            SliderSettingRow(
+                label = "句子处理量",
+                hint = "maxNumSentences · 1-10",
+                valueText = "$maxNumSentences"
+            ) {
+                Slider(value = maxNumSentences.toFloat(), onValueChange = { maxNumSentences = it.toInt().coerceIn(1, 10); saveCurrent() }, valueRange = 1f..10f, modifier = Modifier.fillMaxWidth())
+            }
+
+            SliderSettingRow(
+                label = "句子间隔",
+                hint = "silenceScale · 0-1",
+                valueText = "${"%.2f".format(Locale.US, silenceScale)}"
+            ) {
+                Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.fillMaxWidth())
+            }
         }
 
         OutlinedTextField(

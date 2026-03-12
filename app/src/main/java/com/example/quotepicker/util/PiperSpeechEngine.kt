@@ -29,10 +29,6 @@ class PiperSpeechEngine(private val context: Context) {
         private const val MODEL_FILE_NAME = "vits-zh-hf-fanchen-C.onnx"
         private const val LEXICON_FILE_NAME = "lexicon.txt"
         private const val TOKENS_FILE_NAME = "tokens.txt"
-        private const val PHONE_FST_FILE_NAME = "phone.fst"
-        private const val NUMBER_FST_FILE_NAME = "number.fst"
-        private const val RULE_FAR_FILE_NAME = "rule.far"
-        private const val DICT_DIR_NAME = "dict"
 
         private const val MAX_GAIN = 8.0f
         private const val TARGET_PEAK = 0.75f
@@ -145,18 +141,7 @@ class PiperSpeechEngine(private val context: Context) {
     }
 
     private suspend fun ensureInit(profile: VoiceProfile) = withContext(Dispatchers.IO) {
-        val effectiveNoiseScale = (profile.noiseScale ?: 0.2f).coerceIn(0.1f, 2.0f)
-        val effectiveNoiseScaleW = (profile.noiseScaleW ?: 0.2f).coerceIn(0.1f, 2.0f)
-        val effectiveLengthScale = (profile.lengthScale ?: 1.0f).coerceIn(0.5f, 2.0f)
-        val effectiveMaxNumSentences = (profile.maxNumSentences ?: 1).coerceIn(1, 10)
-        val effectiveSilenceScale = (profile.silenceScale ?: 0.2f).coerceIn(0f, 1f)
-        val targetSignature = listOf(
-            effectiveNoiseScale,
-            effectiveNoiseScaleW,
-            effectiveLengthScale,
-            effectiveMaxNumSentences,
-            effectiveSilenceScale
-        ).joinToString("|")
+        val targetSignature = "minimal-config"
 
         mutex.withLock {
             if (tts != null && configSignature == targetSignature) return@withLock
@@ -169,22 +154,11 @@ class PiperSpeechEngine(private val context: Context) {
             val modelPath = File(modelDir, MODEL_FILE_NAME).absolutePath
             val lexiconPath = File(modelDir, LEXICON_FILE_NAME).absolutePath
             val tokensPath = File(modelDir, TOKENS_FILE_NAME).absolutePath
-            val phoneFstPath = File(modelDir, PHONE_FST_FILE_NAME).absolutePath
-            val numberFstPath = File(modelDir, NUMBER_FST_FILE_NAME).absolutePath
-            val ruleFarPath = File(modelDir, RULE_FAR_FILE_NAME).absolutePath
-            val dictDirPath = File(modelDir, DICT_DIR_NAME).absolutePath
-
-            val ruleFsts = buildRuleFsts(phoneFstPath, numberFstPath)
-            val ruleFars = if (File(ruleFarPath).exists()) ruleFarPath else ""
 
             val vits = OfflineTtsVitsModelConfig(
                 model = modelPath,
                 lexicon = lexiconPath,
-                tokens = tokensPath,
-                dictDir = dictDirPath,
-                noiseScale = effectiveNoiseScale,
-                noiseScaleW = effectiveNoiseScaleW,
-                lengthScale = effectiveLengthScale
+                tokens = tokensPath
             )
 
             val config = OfflineTtsConfig(
@@ -193,11 +167,7 @@ class PiperSpeechEngine(private val context: Context) {
                     numThreads = 2,
                     debug = false,
                     provider = "cpu"
-                ),
-                ruleFsts = ruleFsts,
-                ruleFars = ruleFars,
-                maxNumSentences = effectiveMaxNumSentences,
-                silenceScale = effectiveSilenceScale
+                )
             )
 
             tts = OfflineTts(config = config)
@@ -268,13 +238,6 @@ class PiperSpeechEngine(private val context: Context) {
                 output.flush()
             }
         }
-    }
-
-    private fun buildRuleFsts(phoneFstPath: String, numberFstPath: String): String {
-        val list = mutableListOf<String>()
-        if (File(phoneFstPath).exists()) list += phoneFstPath
-        if (File(numberFstPath).exists()) list += numberFstPath
-        return list.joinToString(",")
     }
 
     private fun normalizeSpeakerId(engine: OfflineTts, speakerId: Int?): Int {

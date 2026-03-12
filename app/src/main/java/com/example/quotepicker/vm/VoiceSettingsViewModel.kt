@@ -178,15 +178,15 @@ class VoiceSettingsViewModel(application: Application) : AndroidViewModel(applic
 
     fun buildDefaultConfigText(): String {
         val roleSetting = globalRoleSetting()
-        return JSONObject()
-            .put("speechRate", roleSetting?.speechRate ?: 1.0)
-            .put("speakerId", roleSetting?.speakerId ?: 0)
-            .put("noiseScale", roleSetting?.noiseScale ?: 0.2)
-            .put("noiseScaleW", roleSetting?.noiseScaleW ?: 0.2)
-            .put("lengthScale", roleSetting?.lengthScale ?: 1.0)
-            .put("maxNumSentences", roleSetting?.maxNumSentences ?: 1)
-            .put("silenceScale", roleSetting?.silenceScale ?: 0.2)
-            .toString(2)
+        return JSONObject().apply {
+            put("speechRate", roleSetting?.speechRate ?: 1.0)
+            put("speakerId", roleSetting?.speakerId ?: 0)
+            roleSetting?.noiseScale?.let { put("noiseScale", it) }
+            roleSetting?.noiseScaleW?.let { put("noiseScaleW", it) }
+            roleSetting?.lengthScale?.let { put("lengthScale", it) }
+            roleSetting?.maxNumSentences?.let { put("maxNumSentences", it) }
+            roleSetting?.silenceScale?.let { put("silenceScale", it) }
+        }.toString(2)
     }
 
     private fun persist() {
