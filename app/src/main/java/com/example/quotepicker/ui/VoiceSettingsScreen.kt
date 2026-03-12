@@ -278,6 +278,48 @@ private fun VoiceSettingEditor(
             Slider(value = speed, onValueChange = { speed = it; saveCurrent() }, valueRange = 0.6f..1.8f, modifier = Modifier.fillMaxWidth())
         }
 
+        OutlinedTextField(
+            value = previewText,
+            onValueChange = {
+                previewText = it
+                onPersistPreviewText(it)
+            },
+            label = { Text("预览文本（可修改）") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    if (baseProfile == null) return@Button
+                    val setting = currentSetting()
+                    saveCurrent()
+                    val effective = baseProfile.copy(
+                        speakerId = setting.speakerId,
+                        noiseScale = setting.noiseScale,
+                        noiseScaleW = setting.noiseScaleW,
+                        lengthScale = setting.lengthScale,
+                        maxNumSentences = setting.maxNumSentences,
+                        silenceScale = setting.silenceScale
+                    )
+                    scope.launch {
+                        statusText = if (speech.speak(previewText, effective, setting.speechRate)) "朗读中" else "朗读失败"
+                    }
+                },
+                enabled = baseProfile != null,
+                modifier = Modifier.weight(1f)
+            ) { Text("预览朗读") }
+
+            Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }, modifier = Modifier.weight(1f)) { Text("停止") }
+        }
+        
+        if (statusText.isNotBlank()) {
+            Text(
+                statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
         Card {
             Row(
                 modifier = Modifier
@@ -342,41 +384,6 @@ private fun VoiceSettingEditor(
             ) {
                 Slider(value = silenceScale, onValueChange = { silenceScale = it; saveCurrent() }, valueRange = 0f..1f, modifier = Modifier.fillMaxWidth())
             }
-        }
-
-        OutlinedTextField(
-            value = previewText,
-            onValueChange = {
-                previewText = it
-                onPersistPreviewText(it)
-            },
-            label = { Text("预览文本（可修改）") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    if (baseProfile == null) return@Button
-                    val setting = currentSetting()
-                    saveCurrent()
-                    val effective = baseProfile.copy(
-                        speakerId = setting.speakerId,
-                        noiseScale = setting.noiseScale,
-                        noiseScaleW = setting.noiseScaleW,
-                        lengthScale = setting.lengthScale,
-                        maxNumSentences = setting.maxNumSentences,
-                        silenceScale = setting.silenceScale
-                    )
-                    scope.launch {
-                        statusText = if (speech.speak(previewText, effective, setting.speechRate)) "朗读中" else "朗读失败"
-                    }
-                },
-                enabled = baseProfile != null,
-                modifier = Modifier.weight(1f)
-            ) { Text("预览朗读") }
-
-            Button(onClick = { scope.launch { speech.stop(); statusText = "已停止" } }, modifier = Modifier.weight(1f)) { Text("停止") }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
