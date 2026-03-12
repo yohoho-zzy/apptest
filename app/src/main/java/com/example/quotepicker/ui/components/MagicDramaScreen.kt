@@ -1,6 +1,7 @@
 package com.example.quotepicker.ui.components
 
 import android.net.Uri
+import android.media.MediaPlayer
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,8 +91,15 @@ private sealed interface DramaCommand {
     data class Countdown(val seconds: Int, val timeoutBlock: String) : DramaCommand
     data class WaitSeconds(val seconds: Int) : DramaCommand
     data class SetVariable(val expression: String) : DramaCommand
+    data class RemoveVariable(val variableName: String) : DramaCommand
     data class Jump(val blockId: String) : DramaCommand
     data class ConditionalJump(val condition: String, val targetBlock: String) : DramaCommand
+    data object ClearResourceArea : DramaCommand
+    data object ClearAllVariables : DramaCommand
+    data object ClearDialogue : DramaCommand
+    data class SetBackgroundMusic(val source: String) : DramaCommand
+    data object StopBackgroundMusic : DramaCommand
+    data object StopCountdown : DramaCommand
 }
 
 private data class DramaButtonOption(val text: String, val branchId: String)
@@ -122,6 +130,7 @@ fun MagicDramaScreen(
     var buttonOptions by remember { mutableStateOf<List<DramaButtonOption>>(emptyList()) }
     var pendingBranch by remember { mutableStateOf<CompletableDeferred<String>?>(null) }
     var countdownJob by remember { mutableStateOf<Job?>(null) }
+    var backgroundPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     val parsed = remember(script) { parseDramaScript(script) }
     val coroutineScope = rememberCoroutineScope()
@@ -135,6 +144,8 @@ fun MagicDramaScreen(
             countdownJob?.cancel()
             pendingBranch?.cancel()
             coroutineScope.launch {
+                backgroundPlayer?.stop()
+                backgroundPlayer?.release()
                 piperSpeechEngine.stop()
                 piperSpeechEngine.cleanupPreviewTempFiles()
                 piperSpeechEngine.release()
@@ -154,6 +165,9 @@ fun MagicDramaScreen(
         timeoutBlockToJump = null
         countdownJob?.cancel()
         countdownJob = null
+        backgroundPlayer?.stop()
+        backgroundPlayer?.release()
+        backgroundPlayer = null
 
         fun jumpTo(blockId: String, queue: ArrayDeque<DramaCommand>) {
             queue.clear()
@@ -205,9 +219,29 @@ fun MagicDramaScreen(
                 }
                 is DramaCommand.WaitSeconds -> delay(cmd.seconds.coerceAtLeast(0) * 1000L)
                 is DramaCommand.SetVariable -> applyVariableExpression(cmd.expression, variables)
+                is DramaCommand.RemoveVariable -> variables.remove(cmd.variableName)
                 is DramaCommand.Jump -> jumpTo(cmd.blockId, queue)
                 is DramaCommand.ConditionalJump -> {
                     if (evaluateCondition(cmd.condition, variables)) jumpTo(cmd.targetBlock, queue)
+                }
+                is DramaCommand.ClearResourceArea -> currentMedia = null
+                is DramaCommand.ClearAllVariables -> variables.clear()
+                is DramaCommand.ClearDialogue -> messages.clear()
+                is DramaCommand.SetBackgroundMusic -> {
+                    backgroundPlayer?.stop()
+                    backgroundPlayer?.release()
+                    backgroundPlayer = createLoopMediaPlayer(resolveVariablePlaceholders(cmd.source, variables), vm)
+                }
+                is DramaCommand.StopBackgroundMusic -> {
+                    backgroundPlayer?.stop()
+                    backgroundPlayer?.release()
+                    backgroundPlayer = null
+                }
+                is DramaCommand.StopCountdown -> {
+                    countdownJob?.cancel()
+                    countdownJob = null
+                    countdownSeconds = null
+                    timeoutBlockToJump = null
                 }
 
                 is DramaCommand.Countdown -> {
@@ -634,6 +668,10 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
             line.startsWith("旁白:") -> commands += DramaCommand.Narration(line.substringAfter(':').trim(), important = false)
             line.startsWith("注意:") -> commands += DramaCommand.Narration(line.substringAfter(':').trim(), important = true)
             line.startsWith("设:") -> commands += DramaCommand.SetVariable(line.substringAfter(':').trim())
+            line.startsWith("删:") -> {
+                val name = line.substringAfter(':').trim()
+                if (name.isNotBlank()) commands += DramaCommand.RemoveVariable(name)
+            }
             line.startsWith("跳:") -> commands += DramaCommand.Jump(line.substringAfter(':').trim())
             line.startsWith("判:") -> {
                 val body = line.substringAfter(':').trim()
@@ -647,6 +685,15 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val target = parts.getOrNull(1)?.trim()
                 if (sec != null && !target.isNullOrBlank()) commands += DramaCommand.Countdown(sec, target)
             }
+            line.equals("c1", ignoreCase = true) -> commands += DramaCommand.ClearResourceArea
+            line.equals("c2", ignoreCase = true) -> commands += DramaCommand.ClearAllVariables
+            line.equals("c3", ignoreCase = true) -> commands += DramaCommand.ClearDialogue
+            line.startsWith("背景:") -> {
+                val source = line.substringAfter(':').trim()
+                if (source.isNotBlank()) commands += DramaCommand.SetBackgroundMusic(source)
+            }
+            line.equals("停:背景", ignoreCase = true) -> commands += DramaCommand.StopBackgroundMusic
+            line.equals("停:计时", ignoreCase = true) -> commands += DramaCommand.StopCountdown
             line.startsWith("按钮:") -> {
                 val options = mutableListOf<DramaButtonOption>()
                 var j = i + 1
@@ -669,6 +716,18 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
         i++
     }
     return commands
+}
+
+private fun createLoopMediaPlayer(source: String, vm: ResourceViewModel): MediaPlayer? {
+    val uri = vm.resolveMediaUriByCodeOrPath(source)
+        ?: runCatching { Uri.parse(source) }.getOrNull()?.takeIf { it.scheme != null }
+        ?: return null
+    return runCatching {
+        MediaPlayer.create(vm.getApplication(), uri)?.apply {
+            isLooping = true
+            start()
+        }
+    }.getOrNull()
 }
 
 private fun resolveRoleName(input: String, boundCharacters: List<CharacterEntity>): String {
