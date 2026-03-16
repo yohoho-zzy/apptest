@@ -10,6 +10,7 @@ import com.example.quotepicker.data.Repository
 import com.example.quotepicker.data.ResourceWithTagsCharacters
 import com.example.quotepicker.data.ResponseRecordEntity
 import com.example.quotepicker.data.TagEntity
+import com.example.quotepicker.ui.components.plainTagName
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
@@ -83,7 +84,7 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
                 tagId = record.tagId,
                 count = record.count,
                 characterName = characterMap[record.characterId]?.name ?: "角色",
-                tagName = tagMap[record.tagId]?.name ?: "标签"
+                tagName = tagMap[record.tagId]?.name?.let(::plainTagName) ?: "标签"
             )
         }
         val displayExecutionItems = executionItems.mapNotNull { item ->
