@@ -26,7 +26,8 @@ data class ResponseRecordDisplay(
     val tagId: Long,
     val count: Int,
     val characterName: String,
-    val tagName: String
+    val tagName: String,
+    val isTriggerCategory: Boolean = false
 )
 
 data class ExecutionUiState(
@@ -35,7 +36,8 @@ data class ExecutionUiState(
     val executionItems: List<ExecutionResourceDisplay> = emptyList(),
     val resources: List<ResourceWithTagsCharacters> = emptyList(),
     val characters: List<CharacterEntity> = emptyList(),
-    val tags: List<TagEntity> = emptyList()
+    val tags: List<TagEntity> = emptyList(),
+    val categories: List<com.example.quotepicker.data.TagCategoryEntity> = emptyList()
 )
 
 data class ExecutionResourceDisplay(
@@ -56,19 +58,25 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val baseExecutionFlow = combine(
-        repo.observeResponseRecords(),
-        repo.observeCharacters(),
-        repo.observeAllTags(),
-        repo.observeResourcesWithRelations(),
-        repo.observeExecutionSettings()
-    ) { records, characters, tags, resources, settings ->
-        BaseExecutionData(
-            records = records,
-            characters = characters,
-            tags = tags,
-            resources = resources,
-            settings = settings
-        )
+        combine(
+            repo.observeResponseRecords(),
+            repo.observeCharacters(),
+            repo.observeAllTags(),
+            repo.observeResourcesWithRelations(),
+            repo.observeExecutionSettings()
+        ) { records, characters, tags, resources, settings ->
+            BaseExecutionData(
+                records = records,
+                characters = characters,
+                tags = tags,
+                resources = resources,
+                settings = settings,
+                categories = emptyList<com.example.quotepicker.data.TagCategoryEntity>()
+            )
+        },
+        repo.observeCategories()
+    ) { partial, categories ->
+        partial.copy(categories = categories)
     }
 
     val uiState: StateFlow<ExecutionUiState> = combine(
@@ -77,6 +85,7 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
     ) { baseData, executionItems ->
         val characterMap = baseData.characters.associateBy { it.id }
         val tagMap = baseData.tags.associateBy { it.id }
+        val categoryMap = baseData.categories.associateBy { it.id }
         val resourcesById = baseData.resources.associateBy { it.resource.id }
         val displayRecords = baseData.records.map { record ->
             ResponseRecordDisplay(
@@ -84,7 +93,8 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
                 tagId = record.tagId,
                 count = record.count,
                 characterName = characterMap[record.characterId]?.name ?: "角色",
-                tagName = tagMap[record.tagId]?.name?.let(::plainTagName) ?: "标签"
+                tagName = tagMap[record.tagId]?.name?.let(::plainTagName) ?: "标签",
+                isTriggerCategory = categoryMap[tagMap[record.tagId]?.categoryId]?.name == "触发类别"
             )
         }
         val displayExecutionItems = executionItems.mapNotNull { item ->
@@ -97,7 +107,8 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
             executionItems = displayExecutionItems,
             resources = baseData.resources,
             characters = baseData.characters,
-            tags = baseData.tags
+            tags = baseData.tags,
+            categories = baseData.categories
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ExecutionUiState())
 
@@ -133,6 +144,18 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int) = viewModelScope.launch {
         repo.applyExecutionCompletion(characterId, completionScoreSum)
+    }
+
+    fun applyExecutionCompletionWithTrigger(characterId: Long, currentPoints: Int) = viewModelScope.launch {
+        repo.applyExecutionCompletion(characterId, 30)
+        when {
+            currentPoints < 10 -> repo.addResponseRecordByCategoryPrefix(characterId, "触发类别", "E")
+            currentPoints < 20 -> repo.addResponseRecordByCategoryPrefix(characterId, "触发类别", "D")
+        }
+    }
+
+    fun addTriggerRecordByPrefix(characterId: Long, prefix: String) = viewModelScope.launch {
+        repo.addResponseRecordByCategoryPrefix(characterId, "触发类别", prefix)
     }
 
     fun incrementCharacterFamiliarity(characterId: Long) = viewModelScope.launch {
@@ -188,7 +211,8 @@ private data class BaseExecutionData(
     val characters: List<CharacterEntity>,
     val tags: List<TagEntity>,
     val resources: List<ResourceWithTagsCharacters>,
-    val settings: ExecutionSettingsEntity?
+    val settings: ExecutionSettingsEntity?,
+    val categories: List<com.example.quotepicker.data.TagCategoryEntity>
 )
 
 private fun ExecutionResourceEntity.toDisplay(resource: ResourceWithTagsCharacters): ExecutionResourceDisplay =
