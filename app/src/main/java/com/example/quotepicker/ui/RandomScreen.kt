@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -153,9 +154,16 @@ fun ExecutionScreen(
                     ) {
                         ui.records.forEach { record ->
                             val label = buildString {
-                                append(record.characterName)
-                                append("的")
-                                append(record.tagName)
+                                if (record.isTriggerCategory) {
+                                    val triggerName = record.tagName.replaceFirst(Regex("^[A-Z]"), "").trim().ifBlank { record.tagName }
+                                    append("对")
+                                    append(record.characterName)
+                                    append(triggerName)
+                                } else {
+                                    append(record.characterName)
+                                    append("的")
+                                    append(record.tagName)
+                                }
                                 if (record.count > 1) {
                                     append("×")
                                     append(record.count)
@@ -195,7 +203,12 @@ fun ExecutionScreen(
                                     .defaultMinSize(minHeight = 24.dp) // ⭐关键：覆盖 Button 默认 minHeight
                                     .height(24.dp),                    // 固定高度（不想固定就用 heightIn）
                                 shape = RoundedCornerShape(6.dp),
-                                contentPadding = compactPadding
+                                contentPadding = compactPadding,
+                                colors = if (record.isTriggerCategory) {
+                                    ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F), contentColor = Color.White)
+                                } else {
+                                    ButtonDefaults.buttonColors()
+                                }
                             ) {
                                 Text(
                                     text = label,
@@ -249,9 +262,9 @@ fun ExecutionScreen(
     completionTarget?.let { target ->
         CompletionDialog(
             characterName = target.characterName,
-            onConfirm = { completion, belonging, emotion ->
-                val sum = completion + belonging + emotion
-                vm.applyExecutionCompletion(target.characterId, sum)
+            onConfirm = {
+                val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
+                vm.applyExecutionCompletionWithTrigger(target.characterId, currentPoints)
                 vm.removeExecutionResource(target.id)
                 completionTarget = null
             },
@@ -314,71 +327,20 @@ private fun SettingsDialog(
 @Composable
 private fun CompletionDialog(
     characterName: String,
-    onConfirm: (Int, Int, Int) -> Unit,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var completionText by remember { mutableStateOf("") }
-    var belongingText by remember { mutableStateOf("") }
-    var emotionText by remember { mutableStateOf("") }
-    var errorText by remember { mutableStateOf<String?>(null) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("完成记录") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("$characterName 的完成情况")
-                OutlinedTextField(
-                    value = completionText,
-                    onValueChange = {
-                        completionText = it
-                        errorText = null
-                    },
-                    label = { Text("完成度(0-10)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = belongingText,
-                    onValueChange = {
-                        belongingText = it
-                        errorText = null
-                    },
-                    label = { Text("归属感(0-10)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = emotionText,
-                    onValueChange = {
-                        emotionText = it
-                        errorText = null
-                    },
-                    label = { Text("情绪值(0-10)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                errorText?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                }
+                Text("完成度 +15，归属度 +15")
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val completion = completionText.toIntOrNull()
-                val belonging = belongingText.toIntOrNull()
-                val emotion = emotionText.toIntOrNull()
-                val isValid = completion != null && belonging != null && emotion != null &&
-                    completion in 0..10 && belonging in 0..10 && emotion in 0..10
-                if (!isValid) {
-                    errorText = "三个值都必须填写 0-10 之间的整数"
-                    return@TextButton
-                }
-                if (completion != null) {
-                    if (belonging != null) {
-                        if (emotion != null) {
-                            onConfirm(completion, belonging, emotion)
-                        }
-                    }
-                }
-            }) { Text("完成") }
+            TextButton(onClick = onConfirm) { Text("完成") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

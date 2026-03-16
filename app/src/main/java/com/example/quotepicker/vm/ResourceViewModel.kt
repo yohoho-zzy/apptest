@@ -160,6 +160,9 @@ class ResourceViewModel(app: Application) : AndroidViewModel(app) {
     fun updateMarkStateFilter(state: ResourceMarkState?) {
         filters.value = filters.value.copy(selectedMarkState = state)
     }
+    fun addResponseRecord(characterId: Long, tagId: Long, count: Int = 1) =
+        viewModelScope.launch { repo.addResponseRecord(characterId, tagId, count) }
+
     fun resolveMediaUri(type: ResourceType, name: String, resourceId: Long? = null): Uri? {
         val targetName = name.trim()
         if (targetName.isBlank()) return null
