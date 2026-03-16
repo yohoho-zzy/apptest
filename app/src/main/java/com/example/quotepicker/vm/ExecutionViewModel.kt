@@ -58,21 +58,25 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val baseExecutionFlow = combine(
-        repo.observeResponseRecords(),
-        repo.observeCharacters(),
-        repo.observeAllTags(),
-        repo.observeResourcesWithRelations(),
-        repo.observeExecutionSettings(),
+        combine(
+            repo.observeResponseRecords(),
+            repo.observeCharacters(),
+            repo.observeAllTags(),
+            repo.observeResourcesWithRelations(),
+            repo.observeExecutionSettings()
+        ) { records, characters, tags, resources, settings ->
+            BaseExecutionData(
+                records = records,
+                characters = characters,
+                tags = tags,
+                resources = resources,
+                settings = settings,
+                categories = emptyList<com.example.quotepicker.data.TagCategoryEntity>()
+            )
+        },
         repo.observeCategories()
-    ) { records, characters, tags, resources, settings, categories ->
-        BaseExecutionData(
-            records = records,
-            characters = characters,
-            tags = tags,
-            resources = resources,
-            settings = settings,
-            categories = categories
-        )
+    ) { partial, categories ->
+        partial.copy(categories = categories)
     }
 
     val uiState: StateFlow<ExecutionUiState> = combine(
