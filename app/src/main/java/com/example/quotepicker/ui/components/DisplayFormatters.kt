@@ -9,12 +9,26 @@ import kotlin.random.Random
 
 private val birthdayFormatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日")
 private val randomTokenRegex = Regex("【【(.*?)】】")
+private val tagWeightRegex = Regex("^(.*)\\+(\\d+)$")
 
-fun formatTagLabel(name: String, today: LocalDate = LocalDate.now()): String {
-    val birthday = runCatching { LocalDate.parse(name, birthdayFormatter) }.getOrNull() ?: return name
+fun formatTagLabel(name: String, today: LocalDate = LocalDate.now(), keepMeta: Boolean = false): String {
+    val cleanedName = if (keepMeta) name else plainTagName(name)
+    val birthday = runCatching { LocalDate.parse(cleanedName, birthdayFormatter) }.getOrNull() ?: return cleanedName
     val age = if (birthday.isAfter(today)) 0 else Period.between(birthday, today).years
-    return "$name($age)"
+    return "$cleanedName($age)"
 }
+
+fun plainTagName(name: String): String {
+    val withoutMarker = name.replace("#", "").trim()
+    return tagWeightRegex.matchEntire(withoutMarker)?.groupValues?.getOrNull(1)?.trim().orEmpty().ifBlank {
+        withoutMarker
+    }
+}
+
+fun tagWeight(name: String): Int? =
+    tagWeightRegex.matchEntire(name.replace("#", "").trim())?.groupValues?.getOrNull(2)?.toIntOrNull()
+
+fun hasResetMarker(name: String): Boolean = name.contains('#')
 
 fun formatDisplayText(text: String, random: Random = Random.Default): String {
     if (text.isBlank()) return text
