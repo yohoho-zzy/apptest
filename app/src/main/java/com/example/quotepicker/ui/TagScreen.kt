@@ -146,7 +146,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
             TopAppBar(
                 title = {
                     val title = when {
-                        isInSubTagPage -> formatTagLabel(selectedParentTag?.displayName.orEmpty())
+                        isInSubTagPage -> formatTagLabel(selectedParentTag?.displayName.orEmpty(), keepMeta = true)
                         isInCategory -> categoryDisplayName(ui.currentCategory?.name)
                         else -> "标签类别"
                     }
@@ -284,7 +284,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                     val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
                                     val displayName = parentTag?.let { ctx -> tag.name.substringAfter("${ctx.parentKey}-", tag.name) } ?: tag.name
                                     SquareGridItem(
-                                        title = formatTagLabel(displayName),
+                                        title = formatTagLabel(displayName, keepMeta = true),
                                         backgroundColor = bg,
                                         contentColor = textColor,
                                         itemAspectRatio = 1.55f,
@@ -322,7 +322,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                 val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
                                 val isUsed = tag.id in ui.usedTagIds
                                 SquareGridItem(
-                                    title = formatTagLabel(tag.name),
+                                    title = formatTagLabel(tag.name, keepMeta = true),
                                     backgroundColor = bg,
                                     contentColor = textColor,
                                     borderColor = if (isUsed) Color.Black else null,
@@ -379,7 +379,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                         val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
                                         val isUsed = tag.id in ui.usedTagIds
                                         SquareGridItem(
-                                            title = formatTagLabel(groupedTag.displayName),
+                                            title = formatTagLabel(groupedTag.displayName, keepMeta = true),
                                             backgroundColor = bg,
                                             contentColor = textColor,
                                             borderColor = if (isUsed) Color.Black else null,
@@ -415,7 +415,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                                     val textColor = if (bg.luminance() < 0.5f) Color.White else Color.Black
                                     val isUsed = tag.id in ui.usedTagIds
                                     SquareGridItem(
-                                        title = formatTagLabel(groupedTag.displayName),
+                                        title = formatTagLabel(groupedTag.displayName, keepMeta = true),
                                         backgroundColor = bg,
                                         contentColor = textColor,
                                         borderColor = if (isUsed) Color.Black else null,
@@ -537,7 +537,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
                         val tagsText = ui.allTags
                             .filter { it.categoryId == target.id }
                             .sortedBy { it.name.lowercase() }
-                            .joinToString("\n") { formatTagLabel(it.name) }
+                            .joinToString("\n") { formatTagLabel(it.name, keepMeta = true) }
                         clipboard.setText(AnnotatedString(tagsText))
                         Toast.makeText(context, "已复制${target.name}全部标签", Toast.LENGTH_SHORT).show()
                         bottomSheetTarget = null
@@ -564,7 +564,7 @@ fun TagScreen(modifier: Modifier = Modifier, vm: TagViewModel = viewModel()) {
     deleteTag?.let { tag ->
         ConfirmDeleteDialog(
             title = "删除标签",
-            message = "确定删除“${formatTagLabel(tag.name)}”吗？",
+            message = "确定删除“${formatTagLabel(tag.name, keepMeta = true)}”吗？",
             onConfirm = { vm.deleteTag(tag) },
             onDismiss = { deleteTag = null }
         )

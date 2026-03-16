@@ -82,6 +82,9 @@ import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.PreviewTextBlock
 import com.example.quotepicker.ui.components.NameDialog
 import com.example.quotepicker.ui.components.formatTagLabel
+import com.example.quotepicker.ui.components.hasResetMarker
+import com.example.quotepicker.ui.components.plainTagName
+import com.example.quotepicker.ui.components.tagWeight
 import com.example.quotepicker.ui.components.tagTextColor
 import com.example.quotepicker.ui.components.ResourceListRow
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
@@ -371,6 +374,9 @@ fun CharacterScreen(
                 val narrativeTags = narrativeCategory?.let { category ->
                     resourceUi.tags.filter { it.categoryId == category.id }
                 }.orEmpty()
+                val weightedNarrativeTags = remember(narrativeTags) {
+                    buildWeightedNarrativeTags(narrativeTags)
+                }
                 val introCandidates = resources.filter { res ->
                     res.characters.any { c -> c.id == char.id } &&
                         res.resource.type == ResourceType.TEXT &&
@@ -421,14 +427,14 @@ fun CharacterScreen(
                                             val current = char
                                             if (current.points <= 0) {
                                                 vm.updateCharacter(current.copy(points = 30))
-                                                val fallbackTag = narrativeTags.firstOrNull()
+                                                val fallbackTag = narrativeTags.firstOrNull { hasResetMarker(it.name) }
                                                 if (fallbackTag != null) {
                                                     vm.addResponseRecord(current.id, fallbackTag.id, count = 3)
                                                     Toast.makeText(
                                                         context,
                                                         fillTemplate(
                                                             ui.executionSettings.successToast,
-                                                            listOf(current.name, fallbackTag.name)
+                                                            listOf(current.name, plainTagName(fallbackTag.name))
                                                         ),
                                                         Toast.LENGTH_SHORT
                                                     ).show()
@@ -439,14 +445,14 @@ fun CharacterScreen(
                                                 vm.updateCharacterPoints(current.id, current.points - 1)
                                                 val hit = (1..100).random() <= current.probability
                                                 if (hit) {
-                                                    val pick = narrativeTags.randomOrNull()
+                                                    val pick = weightedRandomNarrativeTag(weightedNarrativeTags)
                                                     if (pick != null) {
                                                         vm.addResponseRecord(current.id, pick.id)
                                                         Toast.makeText(
                                                             context,
                                                             fillTemplate(
                                                                 ui.executionSettings.successToast,
-                                                                listOf(current.name, pick.name)
+                                                                listOf(current.name, plainTagName(pick.name))
                                                             ),
                                                             Toast.LENGTH_SHORT
                                                         ).show()
@@ -871,6 +877,35 @@ private fun CharacterResourceFilterBar(
             FilterChip(selected = groupLevel3Selected, onClick = onToggleLevel3, label = { Text("3") })
         }
     }
+}
+
+private data class WeightedNarrativeTag(
+    val tag: TagEntity,
+    val weight: Int
+)
+
+private fun buildWeightedNarrativeTags(tags: List<TagEntity>): List<WeightedNarrativeTag> {
+    if (tags.isEmpty()) return emptyList()
+    val explicitWeights = tags.mapNotNull { tagWeight(it.name) }
+    val fallbackWeight = explicitWeights.minOrNull() ?: 1
+    return tags.map { tag ->
+        WeightedNarrativeTag(
+            tag = tag,
+            weight = (tagWeight(tag.name) ?: fallbackWeight).coerceAtLeast(1)
+        )
+    }
+}
+
+private fun weightedRandomNarrativeTag(weightedTags: List<WeightedNarrativeTag>): TagEntity? {
+    if (weightedTags.isEmpty()) return null
+    val totalWeight = weightedTags.sumOf { it.weight }
+    if (totalWeight <= 0) return weightedTags.randomOrNull()?.tag
+    var draw = (1..totalWeight).random()
+    weightedTags.forEach { entry ->
+        draw -= entry.weight
+        if (draw <= 0) return entry.tag
+    }
+    return weightedTags.lastOrNull()?.tag
 }
 
 private data class CharacterResourceGroup(
