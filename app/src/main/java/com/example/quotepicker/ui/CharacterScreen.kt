@@ -134,6 +134,8 @@ fun CharacterScreen(
     val context = LocalContext.current
     var exportFormat by remember { mutableStateOf(ExportFormat.ENCRYPTED) }
     var importDialog by remember { mutableStateOf(false) }
+    var praySuccessDialogText by remember { mutableStateOf<String?>(null) }
+    var triggerChoiceDialogVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedId) {
         selectedTagIds = emptySet()
@@ -374,6 +376,12 @@ fun CharacterScreen(
                 val narrativeTags = narrativeCategory?.let { category ->
                     resourceUi.tags.filter { it.categoryId == category.id }
                 }.orEmpty()
+                val triggerCategory = resourceUi.categories.firstOrNull { it.name == "触发类别" }
+                val triggerTags = triggerCategory?.let { category ->
+                    resourceUi.tags.filter { it.categoryId == category.id }
+                }.orEmpty()
+                val triggerTagA = triggerTags.firstOrNull { it.name.trim().uppercase(Locale.getDefault()).startsWith("A") }
+                val triggerTagB = triggerTags.firstOrNull { it.name.trim().uppercase(Locale.getDefault()).startsWith("B") }
                 val weightedNarrativeTags = remember(narrativeTags) {
                     buildWeightedNarrativeTags(narrativeTags)
                 }
@@ -448,14 +456,10 @@ fun CharacterScreen(
                                                     val pick = weightedRandomNarrativeTag(weightedNarrativeTags)
                                                     if (pick != null) {
                                                         vm.addResponseRecord(current.id, pick.id)
-                                                        Toast.makeText(
-                                                            context,
-                                                            fillTemplate(
-                                                                ui.executionSettings.successToast,
-                                                                listOf(current.name, plainTagName(pick.name))
-                                                            ),
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
+                                                        praySuccessDialogText = fillTemplate(
+                                                            ui.executionSettings.successToast,
+                                                            listOf(current.name, plainTagName(pick.name))
+                                                        )
                                                     } else {
                                                         Toast.makeText(context, "未找到叙事类别标签", Toast.LENGTH_SHORT).show()
                                                     }
@@ -471,6 +475,18 @@ fun CharacterScreen(
                                                 }
                                             }
                                             vm.consumeExecutionRemaining()
+                                        },
+                                        shape = MaterialTheme.shapes.small
+                                    ) {
+                                        Text(ui.executionSettings.buttonLabel)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            if (triggerTagA == null && triggerTagB == null) {
+                                                Toast.makeText(context, "未找到触发类别的 A/B 标签", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                triggerChoiceDialogVisible = true
+                                            }
                                         },
                                         shape = MaterialTheme.shapes.small
                                     ) {
@@ -650,6 +666,66 @@ fun CharacterScreen(
                 }) { Text("删除") }
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
+        )
+    }
+
+    if (praySuccessDialogText != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("祈求结果") },
+            text = { Text(praySuccessDialogText.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { praySuccessDialogText = null }) { Text("OK") }
+            }
+        )
+    }
+
+    if (triggerChoiceDialogVisible && selected != null) {
+        val triggerCategory = resourceUi.categories.firstOrNull { it.name == "触发类别" }
+        val triggerTags = triggerCategory?.let { category ->
+            resourceUi.tags.filter { it.categoryId == category.id }
+        }.orEmpty()
+        val triggerTagA = triggerTags.firstOrNull { it.name.trim().uppercase(Locale.getDefault()).startsWith("A") }
+        val triggerTagB = triggerTags.firstOrNull { it.name.trim().uppercase(Locale.getDefault()).startsWith("B") }
+        var selectedPrefix by remember(triggerChoiceDialogVisible) {
+            mutableStateOf(if (triggerTagA != null) "A" else "B")
+        }
+        AlertDialog(
+            onDismissRequest = { triggerChoiceDialogVisible = false },
+            title = { Text("触发类型") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    triggerTagA?.let {
+                        FilterChip(
+                            selected = selectedPrefix == "A",
+                            onClick = { selectedPrefix = "A" },
+                            label = { Text(plainTagName(it.name)) }
+                        )
+                    }
+                    triggerTagB?.let {
+                        FilterChip(
+                            selected = selectedPrefix == "B",
+                            onClick = { selectedPrefix = "B" },
+                            label = { Text(plainTagName(it.name)) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val current = selected.character
+                    val picked = if (selectedPrefix == "A") triggerTagA else triggerTagB
+                    if (picked == null) {
+                        Toast.makeText(context, "未找到对应触发标签", Toast.LENGTH_SHORT).show()
+                    } else {
+                        vm.addResponseRecord(current.id, picked.id)
+                    }
+                    triggerChoiceDialogVisible = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { triggerChoiceDialogVisible = false }) { Text("取消") }
+            }
         )
     }
 }

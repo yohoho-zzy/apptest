@@ -470,6 +470,20 @@ class Repository private constructor(context: Context) {
         )
     }
 
+
+    suspend fun addResponseRecordByCategoryPrefix(
+        characterId: Long,
+        categoryName: String,
+        prefix: String,
+        count: Int = 1
+    ) {
+        val category = categoryDao.findByName(categoryName, TagCategoryType.RESOURCE) ?: return
+        val target = tagDao.listAll().firstOrNull {
+            it.categoryId == category.id && it.name.trim().uppercase().startsWith(prefix.uppercase())
+        } ?: return
+        addResponseRecord(characterId, target.id, count)
+    }
+
     suspend fun consumeResponseRecord(characterId: Long, tagId: Long) {
         val existing = responseRecordDao.findRecord(characterId, tagId) ?: return
         val nextCount = existing.count - 1

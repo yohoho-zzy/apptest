@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -131,6 +132,12 @@ fun ResourcePreviewScreen(
         uiState.characters.firstOrNull { it.id == id }?.name
     }
     val eventRunner = rememberEventSequenceRunner()
+    val triggerCategory = uiState.categories.firstOrNull { it.name == "触发类别" }
+    val triggerTagC = liveResource.tags.firstOrNull {
+        it.categoryId == triggerCategory?.id && it.name.trim().uppercase(Locale.getDefault()).startsWith("C")
+    }
+    var pendingTriggerC by remember(liveResource.resource.id) { mutableStateOf(false) }
+    var triggerCDialogVisible by remember(liveResource.resource.id) { mutableStateOf(false) }
 
     LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
         val res = liveResource.resource
@@ -180,6 +187,15 @@ fun ResourcePreviewScreen(
         sceneMessages = if (res.type == ResourceType.SCENE) parseSceneMessages(res.sceneJson.orEmpty()) else emptyList()
     }
 
+    LaunchedEffect(pendingTriggerC, liveResource.resource.id) {
+        if (pendingTriggerC && triggerTagC != null) {
+            delay(30_000)
+            if (pendingTriggerC) {
+                triggerCDialogVisible = true
+            }
+        }
+    }
+
     val handleEventSequence: (EventSequence) -> Unit = { sequence ->
         eventRunner.start(sequence)
     }
@@ -221,6 +237,7 @@ fun ResourcePreviewScreen(
                             if (liveResource.tags.isNotEmpty()) {
                                 val next = if (liveResource.resource.markState == ResourceMarkState.CHECKED) ResourceMarkState.NONE else ResourceMarkState.CHECKED
                                 vm.updateResource(liveResource.resource.copy(markState = next))
+                                pendingTriggerC = next == ResourceMarkState.CHECKED && triggerTagC != null
                             }
                         }
                     )
@@ -231,8 +248,10 @@ fun ResourcePreviewScreen(
                         onClick = {
                             if (liveResource.tags.isNotEmpty() && liveResource.resource.markState == ResourceMarkState.CHECKED) {
                                 vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.FAVORITE))
+                                pendingTriggerC = triggerTagC != null
                             } else if (liveResource.resource.markState == ResourceMarkState.FAVORITE) {
                                 vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.CHECKED))
+                                pendingTriggerC = triggerTagC != null
                             }
                         }
                     )
@@ -529,6 +548,21 @@ fun ResourcePreviewScreen(
                 }
             }
         }
+    }
+
+    if (triggerCDialogVisible && triggerTagC != null && liveResource.characters.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("触发提醒") },
+            text = { Text("触发事件已记录") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.addResponseRecord(liveResource.characters.first().id, triggerTagC.id)
+                    pendingTriggerC = false
+                    triggerCDialogVisible = false
+                }) { Text("OK") }
+            }
+        )
     }
 }
 
