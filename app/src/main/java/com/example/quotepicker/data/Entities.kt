@@ -68,6 +68,7 @@ data class ResponseRecordEntity(
 data class ExecutionSettingsEntity(
     @PrimaryKey val id: Long = 1,
     val buttonLabel: String = "祈求",
+    val secondaryButtonLabel: String = "祈求",
     val successToast: String = "[]赐予了你[]",
     val failureToast: String = "[]无视了你",
     val pastAverage: Int = 100,

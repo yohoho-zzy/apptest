@@ -110,7 +110,8 @@ private data class FlowPreviewItem(
 fun ResourcePreviewScreen(
     resource: ResourceWithTagsCharacters,
     vm: ResourceViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    triggerCEnabled: Boolean = true
 ) {
     var quoteImages by remember { mutableStateOf<List<ImagePreviewItem>>(emptyList()) }
     var mediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -133,9 +134,10 @@ fun ResourcePreviewScreen(
     }
     val eventRunner = rememberEventSequenceRunner()
     val triggerCategory = uiState.categories.firstOrNull { it.name == "触发类别" }
-    val triggerTagC = liveResource.tags.firstOrNull {
+    val triggerTagC = uiState.tags.firstOrNull {
         it.categoryId == triggerCategory?.id && it.name.trim().uppercase(Locale.getDefault()).startsWith("C")
     }
+    val isTriggerCEligible = triggerCEnabled && liveResource.resource.markState != ResourceMarkState.NONE
     var pendingTriggerC by remember(liveResource.resource.id) { mutableStateOf(false) }
     var triggerCDialogVisible by remember(liveResource.resource.id) { mutableStateOf(false) }
 
@@ -187,10 +189,12 @@ fun ResourcePreviewScreen(
         sceneMessages = if (res.type == ResourceType.SCENE) parseSceneMessages(res.sceneJson.orEmpty()) else emptyList()
     }
 
-    LaunchedEffect(pendingTriggerC, liveResource.resource.id) {
-        if (pendingTriggerC && triggerTagC != null) {
+    LaunchedEffect(isTriggerCEligible, liveResource.resource.id) {
+        pendingTriggerC = isTriggerCEligible
+        triggerCDialogVisible = false
+        if (isTriggerCEligible) {
             delay(30_000)
-            if (pendingTriggerC) {
+            if (pendingTriggerC && liveResource.resource.markState != ResourceMarkState.NONE) {
                 triggerCDialogVisible = true
             }
         }
@@ -237,7 +241,7 @@ fun ResourcePreviewScreen(
                             if (liveResource.tags.isNotEmpty()) {
                                 val next = if (liveResource.resource.markState == ResourceMarkState.CHECKED) ResourceMarkState.NONE else ResourceMarkState.CHECKED
                                 vm.updateResource(liveResource.resource.copy(markState = next))
-                                pendingTriggerC = next == ResourceMarkState.CHECKED && triggerTagC != null
+                                pendingTriggerC = next != ResourceMarkState.NONE
                             }
                         }
                     )
@@ -248,10 +252,10 @@ fun ResourcePreviewScreen(
                         onClick = {
                             if (liveResource.tags.isNotEmpty() && liveResource.resource.markState == ResourceMarkState.CHECKED) {
                                 vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.FAVORITE))
-                                pendingTriggerC = triggerTagC != null
+                                pendingTriggerC = true
                             } else if (liveResource.resource.markState == ResourceMarkState.FAVORITE) {
                                 vm.updateResource(liveResource.resource.copy(markState = ResourceMarkState.CHECKED))
-                                pendingTriggerC = triggerTagC != null
+                                pendingTriggerC = true
                             }
                         }
                     )
