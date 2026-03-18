@@ -157,18 +157,21 @@ fun MagicDramaScreen(
             ?: availableThemes.first()
     }
 
+    fun stopBackgroundPlayback() {
+        backgroundPlayer?.stop()
+        backgroundPlayer?.release()
+        backgroundPlayer = null
+        backgroundVideoUri = null
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             countdownJob?.cancel()
             pendingBranch?.cancel()
-            coroutineScope.launch {
-                backgroundPlayer?.stop()
-                backgroundPlayer?.release()
-                backgroundVideoUri = null
-                piperSpeechEngine.stop()
-                piperSpeechEngine.cleanupPreviewTempFiles()
-                piperSpeechEngine.release()
-            }
+            stopBackgroundPlayback()
+            piperSpeechEngine.stop()
+            piperSpeechEngine.cleanupPreviewTempFiles()
+            piperSpeechEngine.release()
         }
     }
     val variables = remember { mutableStateMapOf<String, String>() }
@@ -187,10 +190,7 @@ fun MagicDramaScreen(
             ?: availableThemes.first().id
         countdownJob?.cancel()
         countdownJob = null
-        backgroundPlayer?.stop()
-        backgroundPlayer?.release()
-        backgroundPlayer = null
-        backgroundVideoUri = null
+        stopBackgroundPlayback()
 
         fun jumpTo(blockId: String, queue: ArrayDeque<DramaCommand>) {
             queue.clear()
@@ -256,9 +256,7 @@ fun MagicDramaScreen(
                 is DramaCommand.ClearAllVariables -> variables.clear()
                 is DramaCommand.ClearDialogue -> messages.clear()
                 is DramaCommand.SetBackgroundMusic -> {
-                    backgroundPlayer?.stop()
-                    backgroundPlayer?.release()
-                    backgroundPlayer = null
+                    stopBackgroundPlayback()
                     val backgroundSource = resolveVariablePlaceholders(cmd.source, variables)
                     val resolvedUri = resolveMediaPlaybackUri(backgroundSource, vm)
                     if (resolvedUri != null && vm.isVideoUri(resolvedUri)) {
@@ -269,10 +267,7 @@ fun MagicDramaScreen(
                     }
                 }
                 is DramaCommand.StopBackgroundMusic -> {
-                    backgroundPlayer?.stop()
-                    backgroundPlayer?.release()
-                    backgroundPlayer = null
-                    backgroundVideoUri = null
+                    stopBackgroundPlayback()
                 }
                 is DramaCommand.StopCountdown -> {
                     countdownJob?.cancel()
@@ -402,7 +397,10 @@ fun MagicDramaScreen(
             }
         }
             IconButton(
-                onClick = onClose,
+                onClick = {
+                    stopBackgroundPlayback()
+                    onClose()
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp)
