@@ -133,6 +133,7 @@ fun MagicDramaScreen(
     var pendingBranch by remember { mutableStateOf<CompletableDeferred<String>?>(null) }
     var countdownJob by remember { mutableStateOf<Job?>(null) }
     var backgroundPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var backgroundVideoUri by remember { mutableStateOf<Uri?>(null) }
 
     val parsed = remember(script) { parseDramaScript(script) }
     val coroutineScope = rememberCoroutineScope()
@@ -163,6 +164,7 @@ fun MagicDramaScreen(
             coroutineScope.launch {
                 backgroundPlayer?.stop()
                 backgroundPlayer?.release()
+                backgroundVideoUri = null
                 piperSpeechEngine.stop()
                 piperSpeechEngine.cleanupPreviewTempFiles()
                 piperSpeechEngine.release()
@@ -188,6 +190,7 @@ fun MagicDramaScreen(
         backgroundPlayer?.stop()
         backgroundPlayer?.release()
         backgroundPlayer = null
+        backgroundVideoUri = null
 
         fun jumpTo(blockId: String, queue: ArrayDeque<DramaCommand>) {
             queue.clear()
@@ -255,12 +258,21 @@ fun MagicDramaScreen(
                 is DramaCommand.SetBackgroundMusic -> {
                     backgroundPlayer?.stop()
                     backgroundPlayer?.release()
-                    backgroundPlayer = createLoopMediaPlayer(resolveVariablePlaceholders(cmd.source, variables), vm)
+                    backgroundPlayer = null
+                    val backgroundSource = resolveVariablePlaceholders(cmd.source, variables)
+                    val resolvedUri = resolveMediaPlaybackUri(backgroundSource, vm)
+                    if (resolvedUri != null && vm.isVideoUri(resolvedUri)) {
+                        backgroundVideoUri = resolvedUri
+                    } else {
+                        backgroundVideoUri = null
+                        backgroundPlayer = createLoopMediaPlayer(backgroundSource, vm)
+                    }
                 }
                 is DramaCommand.StopBackgroundMusic -> {
                     backgroundPlayer?.stop()
                     backgroundPlayer?.release()
                     backgroundPlayer = null
+                    backgroundVideoUri = null
                 }
                 is DramaCommand.StopCountdown -> {
                     countdownJob?.cancel()
@@ -311,6 +323,7 @@ fun MagicDramaScreen(
                 .fillMaxSize()
                 .background(currentTheme.dialogBackground)
         ) {
+            backgroundVideoUri?.let { HiddenBackgroundVideoPlayer(uri = it) }
             Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -563,6 +576,39 @@ private fun resolveTokenValue(token: String, variables: Map<String, String>): St
     return token
 }
 
+
+@Composable
+private fun HiddenBackgroundVideoPlayer(uri: Uri) {
+    val holder = remember { mutableStateOf<VideoView?>(null) }
+    DisposableEffect(uri) {
+        onDispose {
+            holder.value?.stopPlayback()
+            holder.value = null
+        }
+    }
+    AndroidView(
+        factory = { context ->
+            VideoView(context).apply {
+                alpha = 0f
+                setVideoURI(uri)
+                setOnPreparedListener { player ->
+                    player.isLooping = true
+                    start()
+                }
+                holder.value = this
+            }
+        },
+        update = { view ->
+            if (view.tag != uri) {
+                view.tag = uri
+                view.setVideoURI(uri)
+                view.start()
+            }
+        },
+        modifier = Modifier.size(1.dp)
+    )
+}
+
 @Composable
 private fun LoopVideo(uri: Uri, onCompleted: (() -> Unit)? = null) {
     val holder = remember { mutableStateOf<VideoView?>(null) }
@@ -748,10 +794,13 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
     return commands
 }
 
-private fun createLoopMediaPlayer(source: String, vm: ResourceViewModel): MediaPlayer? {
-    val uri = vm.resolveMediaUriByCodeOrPath(source)
+private fun resolveMediaPlaybackUri(source: String, vm: ResourceViewModel): Uri? {
+    return vm.resolveMediaUriByCodeOrPath(source)
         ?: runCatching { Uri.parse(source) }.getOrNull()?.takeIf { it.scheme != null }
-        ?: return null
+}
+
+private fun createLoopMediaPlayer(source: String, vm: ResourceViewModel): MediaPlayer? {
+    val uri = resolveMediaPlaybackUri(source, vm) ?: return null
     return runCatching {
         MediaPlayer.create(vm.getApplication(), uri)?.apply {
             isLooping = true
