@@ -105,6 +105,12 @@ private data class FlowPreviewItem(
     val mediaFailed: Boolean = false
 )
 
+private data class AudioPreviewItem(
+    val uri: Uri,
+    val resourceCode: String? = null,
+    val sizeMbText: String = "0.0M"
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ResourcePreviewScreen(
@@ -115,7 +121,7 @@ fun ResourcePreviewScreen(
 ) {
     var quoteImages by remember { mutableStateOf<List<ImagePreviewItem>>(emptyList()) }
     var mediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-    var soundUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var soundItems by remember { mutableStateOf<List<AudioPreviewItem>>(emptyList()) }
     var mediaLoadFailed by remember { mutableStateOf(false) }
     var mediaReloadKey by remember { mutableStateOf(0) }
     var sceneMessages by remember { mutableStateOf<List<SceneMessage>>(emptyList()) }
@@ -144,6 +150,8 @@ fun ResourcePreviewScreen(
     LaunchedEffect(resource.resource.id, mediaReloadKey, allResources) {
         val res = liveResource.resource
         quoteImages = emptyList()
+        mediaUris = emptyList()
+        soundItems = emptyList()
         mediaLoadFailed = false
         flowItems = emptyList()
         if (res.type == ResourceType.IMAGE) {
@@ -173,7 +181,7 @@ fun ResourcePreviewScreen(
             }
             else -> emptyList()
         }
-        soundUris = when (res.type) {
+        soundItems = when (res.type) {
             ResourceType.SOUND -> {
                 val raw = res.contentUriOrPath
                 if (raw.isNullOrBlank()) {
@@ -181,8 +189,15 @@ fun ResourcePreviewScreen(
                     mediaLoadFailed = true
                     return@LaunchedEffect
                 }
-                val paths = parseMediaPaths(raw)
-                paths.mapNotNull { path -> path.takeIf { it.isNotBlank() }?.let(Uri::parse) }
+                parseMediaPaths(raw).mapIndexedNotNull { index, path ->
+                    path.takeIf { it.isNotBlank() }?.let {
+                        AudioPreviewItem(
+                            uri = Uri.parse(it),
+                            resourceCode = indexedResourceFileId(res.resourceCode, index),
+                            sizeMbText = formatSizeMb(it)
+                        )
+                    }
+                }
             }
             else -> emptyList()
         }
@@ -457,8 +472,8 @@ fun ResourcePreviewScreen(
                                 }
                             }
                             ResourceType.SOUND -> {
-                                if (soundUris.isNotEmpty()) {
-                                    AudioPreviewList(uris = soundUris)
+                                if (soundItems.isNotEmpty()) {
+                                    AudioPreviewList(items = soundItems)
                                 } else if (mediaLoadFailed) {
                                     Text("音频加载失败")
                                 } else {
@@ -677,10 +692,14 @@ private fun parseMediaPaths(raw: String): List<String> {
 }
 
 @Composable
-private fun AudioPreviewList(uris: List<Uri>) {
+private fun AudioPreviewList(items: List<AudioPreviewItem>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        uris.forEachIndexed { index, uri ->
-            AudioPreviewPlayer(uri = uri, label = "音频 ${index + 1}")
+        items.forEachIndexed { index, item ->
+            AudioPreviewPlayer(
+                uri = item.uri,
+                label = "音频 ${index + 1}",
+                footerText = "${index + 1}/${items.size} ${item.resourceCode.orEmpty()} (${item.sizeMbText})".trim()
+            )
         }
     }
 }
@@ -872,11 +891,11 @@ private fun InlineFilePreview(
 
 @Composable
 private fun AudioPreviewSingle(uri: Uri) {
-    AudioPreviewPlayer(uri = uri, label = "音频文件")
+    AudioPreviewPlayer(uri = uri, label = "音频文件", footerText = null)
 }
 
 @Composable
-private fun AudioPreviewPlayer(uri: Uri, label: String) {
+private fun AudioPreviewPlayer(uri: Uri, label: String, footerText: String?) {
     val context = LocalContext.current
     var player by remember(uri) { mutableStateOf<MediaPlayer?>(null) }
     var prepared by remember(uri) { mutableStateOf(false) }
@@ -955,10 +974,24 @@ private fun AudioPreviewPlayer(uri: Uri, label: String) {
                     sliderDragging = false
                 }
             )
-            Text(
-                text = "${formatDuration(positionMs.toInt())} / ${formatDuration(durationMs)}",
-                style = MaterialTheme.typography.labelSmall
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!footerText.isNullOrBlank()) {
+                    Text(
+                        text = footerText,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                } else {
+                    Spacer(modifier = Modifier)
+                }
+                Text(
+                    text = "${formatDuration(positionMs.toInt())} / ${formatDuration(durationMs)}",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }
