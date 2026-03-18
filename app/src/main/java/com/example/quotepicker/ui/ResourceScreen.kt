@@ -3565,6 +3565,7 @@ private data class DramaCommandEditorState(
     val initialCommand: DramaEditorCommand? = null
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MagicDramaScriptEditorScreen(
     initialScript: String,

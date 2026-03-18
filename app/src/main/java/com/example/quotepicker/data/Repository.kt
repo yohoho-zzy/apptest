@@ -397,9 +397,7 @@ class Repository private constructor(context: Context) {
             val normalizedCompletion = completionValue.coerceIn(0, 15)
             val normalizedBelonging = belongingValue.coerceIn(0, 15)
             val scoreSum = normalizedCompletion + normalizedBelonging
-            val nextPoints = ((normalizedCompletion + normalizedBelonging + (target.points / 2.0)) / 3.0)
-                .roundToInt()
-                .coerceIn(0, 30)
+            val nextPoints = ((scoreSum + target.points) / 2.0).roundToInt().coerceIn(0, 30)
             val nextFamiliarity = when {
                 scoreSum < 10 -> target.familiarity - 1
                 scoreSum > 20 -> target.familiarity + 1
