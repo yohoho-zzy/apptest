@@ -41,7 +41,7 @@ class Converters {
         ExecutionResourceEntity::class,
         TextResourceUsageHistoryEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
