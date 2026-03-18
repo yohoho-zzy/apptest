@@ -164,14 +164,16 @@ fun MagicDramaScreen(
         backgroundVideoUri = null
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(piperSpeechEngine) {
         onDispose {
             countdownJob?.cancel()
             pendingBranch?.cancel()
             stopBackgroundPlayback()
-            piperSpeechEngine.stop()
-            piperSpeechEngine.cleanupPreviewTempFiles()
-            piperSpeechEngine.release()
+            coroutineScope.launch {
+                piperSpeechEngine.stop()
+                piperSpeechEngine.cleanupPreviewTempFiles()
+                piperSpeechEngine.release()
+            }
         }
     }
     val variables = remember { mutableStateMapOf<String, String>() }
