@@ -3560,6 +3560,7 @@ private enum class DramaDialogType {
     BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, JUMP, BUTTONS
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MagicDramaScriptEditorScreen(
     initialScript: String,
