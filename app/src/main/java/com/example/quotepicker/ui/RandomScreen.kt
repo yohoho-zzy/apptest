@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -87,7 +88,8 @@ fun ExecutionScreen(
             onBack = {
                 showPreview = false
                 previewTarget = null
-            }
+            },
+            triggerCEnabled = false
         )
         return
     }
@@ -262,9 +264,14 @@ fun ExecutionScreen(
     completionTarget?.let { target ->
         CompletionDialog(
             characterName = target.characterName,
-            onConfirm = {
+            onConfirm = { completionScore, familiarityIncrement ->
                 val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
-                vm.applyExecutionCompletionWithTrigger(target.characterId, currentPoints)
+                vm.applyExecutionCompletionWithTrigger(
+                    characterId = target.characterId,
+                    currentPoints = currentPoints,
+                    completionScoreSum = completionScore,
+                    familiarityIncrement = familiarityIncrement
+                )
                 vm.removeExecutionResource(target.id)
                 completionTarget = null
             },
@@ -280,6 +287,7 @@ private fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     var buttonLabel by remember { mutableStateOf(settings.buttonLabel) }
+    var secondaryButtonLabel by remember { mutableStateOf(settings.secondaryButtonLabel) }
     var successToast by remember { mutableStateOf(settings.successToast) }
     var failureToast by remember { mutableStateOf(settings.failureToast) }
 
@@ -291,7 +299,13 @@ private fun SettingsDialog(
                 OutlinedTextField(
                     value = buttonLabel,
                     onValueChange = { buttonLabel = it },
-                    label = { Text("按钮名") },
+                    label = { Text("按钮1名") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = secondaryButtonLabel,
+                    onValueChange = { secondaryButtonLabel = it },
+                    label = { Text("按钮2名") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -314,6 +328,7 @@ private fun SettingsDialog(
                 onConfirm(
                     settings.copy(
                         buttonLabel = buttonLabel.trim().ifBlank { settings.buttonLabel },
+                        secondaryButtonLabel = secondaryButtonLabel.trim().ifBlank { settings.secondaryButtonLabel },
                         successToast = successToast.trim().ifBlank { settings.successToast },
                         failureToast = failureToast.trim().ifBlank { settings.failureToast }
                     )
@@ -327,20 +342,40 @@ private fun SettingsDialog(
 @Composable
 private fun CompletionDialog(
     characterName: String,
-    onConfirm: () -> Unit,
+    onConfirm: (Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var completionScore by remember { mutableStateOf(15f) }
+    var familiarityIncrement by remember { mutableStateOf(15f) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("完成记录") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("$characterName 的完成情况")
-                Text("完成度 +15，归属度 +15")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("完成度 +${completionScore.toInt()}")
+                    Slider(
+                        value = completionScore,
+                        onValueChange = { completionScore = it },
+                        valueRange = 0f..30f,
+                        steps = 29
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("归属度 +${familiarityIncrement.toInt()}")
+                    Slider(
+                        value = familiarityIncrement,
+                        onValueChange = { familiarityIncrement = it },
+                        valueRange = 0f..30f,
+                        steps = 29
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("完成") }
+            TextButton(onClick = { onConfirm(completionScore.toInt(), familiarityIncrement.toInt()) }) { Text("完成") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

@@ -130,6 +130,7 @@ private fun executionSettingsToJson(settings: ExecutionSettingsEntity): JSONObje
     JSONObject()
         .put("id", settings.id)
         .put("buttonLabel", settings.buttonLabel)
+        .put("secondaryButtonLabel", settings.secondaryButtonLabel)
         .put("successToast", settings.successToast)
         .put("failureToast", settings.failureToast)
         .put("pastAverage", settings.pastAverage)
@@ -235,6 +236,7 @@ private fun executionSettingsFromJson(obj: JSONObject): ExecutionSettingsEntity 
     ExecutionSettingsEntity(
         id = obj.optLong("id", 1),
         buttonLabel = obj.optString("buttonLabel", "祈求"),
+        secondaryButtonLabel = obj.optString("secondaryButtonLabel", "祈求"),
         successToast = obj.optString("successToast", "[]赐予了你[]"),
         failureToast = obj.optString("failureToast", "[]无视了你"),
         pastAverage = obj.optInt("pastAverage", 100),
