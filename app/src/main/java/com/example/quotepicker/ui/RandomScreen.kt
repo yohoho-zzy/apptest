@@ -265,10 +265,8 @@ fun ExecutionScreen(
         CompletionDialog(
             characterName = target.characterName,
             onConfirm = { completionScore, familiarityIncrement ->
-                val currentPoints = ui.characters.firstOrNull { it.id == target.characterId }?.points ?: 0
                 vm.applyExecutionCompletionWithTrigger(
                     characterId = target.characterId,
-                    currentPoints = currentPoints,
                     completionScoreSum = completionScore,
                     familiarityIncrement = familiarityIncrement
                 )
