@@ -3560,6 +3560,11 @@ private enum class DramaDialogType {
     BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, JUMP, BUTTONS
 }
 
+private data class DramaCommandEditorState(
+    val index: Int? = null,
+    val initialCommand: DramaEditorCommand? = null
+)
+
 @Composable
 private fun MagicDramaScriptEditorScreen(
     initialScript: String,
@@ -3571,6 +3576,8 @@ private fun MagicDramaScriptEditorScreen(
     var blocks by remember(initialScript) { mutableStateOf(parseDramaEditorBlocks(initialScript)) }
     var selectedBlockIndex by remember { mutableStateOf(if (blocks.isEmpty()) -1 else 0) }
     var activeDialog by remember { mutableStateOf<DramaDialogType?>(null) }
+    var commandEditorState by remember { mutableStateOf<DramaCommandEditorState?>(null) }
+    var showBlockDetail by remember { mutableStateOf(false) }
     val selectedBlock = blocks.getOrNull(selectedBlockIndex)
     val scriptPreview = remember(blocks) { buildDramaEditorScript(blocks) }
     val resourceOptions = remember(availableResources) {
@@ -3588,12 +3595,14 @@ private fun MagicDramaScriptEditorScreen(
         if (selectedBlockIndex !in blocks.indices) {
             selectedBlockIndex = if (blocks.isEmpty()) -1 else blocks.lastIndex
         }
+        if (blocks.isEmpty()) showBlockDetail = false
     }
 
     fun addBlock(name: String) {
         if (name.isBlank()) return
         blocks = blocks + DramaEditorBlock(name = name.trim(), commands = emptyList())
         selectedBlockIndex = blocks.lastIndex
+        showBlockDetail = false
     }
 
     fun addCommand(command: DramaEditorCommand) {
@@ -3601,6 +3610,35 @@ private fun MagicDramaScriptEditorScreen(
         blocks = blocks.toMutableList().also { list ->
             val block = list[index]
             list[index] = block.copy(commands = block.commands + command)
+        }
+        showBlockDetail = true
+    }
+
+    fun updateCommand(targetIndex: Int, command: DramaEditorCommand) {
+        val index = selectedBlockIndex.takeIf { it in blocks.indices } ?: return
+        blocks = blocks.toMutableList().also { list ->
+            val block = list[index]
+            list[index] = block.copy(commands = block.commands.toMutableList().also { it[targetIndex] = command })
+        }
+    }
+
+    fun moveCommand(from: Int, offset: Int) {
+        val index = selectedBlockIndex.takeIf { it in blocks.indices } ?: return
+        blocks = blocks.toMutableList().also { list ->
+            val block = list[index]
+            val commands = block.commands.toMutableList()
+            val to = from + offset
+            if (from !in commands.indices || to !in commands.indices) return@also
+            commands.add(to, commands.removeAt(from))
+            list[index] = block.copy(commands = commands)
+        }
+    }
+
+    fun removeCommand(commandIndex: Int) {
+        val index = selectedBlockIndex.takeIf { it in blocks.indices } ?: return
+        blocks = blocks.toMutableList().also { list ->
+            val block = list[index]
+            list[index] = block.copy(commands = block.commands.toMutableList().also { it.removeAt(commandIndex) })
         }
     }
 
@@ -3669,12 +3707,36 @@ private fun MagicDramaScriptEditorScreen(
         }
     }
 
+    commandEditorState?.let { state ->
+        DramaCommandEditDialog(
+            command = state.initialCommand,
+            roleOptions = characters.map { it.name }.ifEmpty { listOf("角色A", "角色B") },
+            resourceOptions = resourceOptions,
+            blockNames = blockNames,
+            onConfirm = { updated ->
+                if (state.index == null) addCommand(updated) else updateCommand(state.index, updated)
+                commandEditorState = null
+            },
+            onDismiss = { commandEditorState = null }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("魔剧脚本编辑") },
+                title = {
+                    Text(
+                        if (showBlockDetail && selectedBlock != null) "@${selectedBlock.name}" else "魔剧脚本编辑"
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (showBlockDetail) {
+                            showBlockDetail = false
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -3697,84 +3759,125 @@ private fun MagicDramaScriptEditorScreen(
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("左侧脚本预览", style = MaterialTheme.typography.titleMedium)
-                if (blocks.isEmpty()) {
-                    Text("暂无脚本块，请先从右侧添加分段。", style = MaterialTheme.typography.labelMedium)
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(blocks.size) { index ->
-                            val block = blocks[index]
-                            OutlinedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedBlockIndex = index }
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = "@${block.name}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = if (index == selectedBlockIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                if (!showBlockDetail) {
+                    Text("左侧模块一览", style = MaterialTheme.typography.titleMedium)
+                    if (blocks.isEmpty()) {
+                        Text("暂无脚本块，请先从右侧添加分段。", style = MaterialTheme.typography.labelMedium)
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(blocks.size) { index ->
+                                val block = blocks[index]
+                                val isSelected = index == selectedBlockIndex
+                                OutlinedCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectedBlockIndex = index },
+                                    colors = androidx.compose.material3.CardDefaults.outlinedCardColors(
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface
                                     )
-                                    if (block.commands.isEmpty()) {
-                                        Text("空分段", style = MaterialTheme.typography.labelSmall)
-                                    } else {
-                                        block.commands.forEach { command ->
-                                            Text(
-                                                text = summarizeDramaEditorCommand(command),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "@${block.name}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.clickable {
+                                                selectedBlockIndex = index
+                                                showBlockDetail = true
+                                            }
+                                        )
+                                        Text(
+                                            text = block.commands.firstOrNull()?.let(::summarizeDramaEditorCommand) ?: "空分段",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            TextButton(
+                                                onClick = {
+                                                    if (index > 0) {
+                                                        blocks = blocks.toMutableList().also { list ->
+                                                            list.add(index - 1, list.removeAt(index))
+                                                        }
+                                                        selectedBlockIndex = index - 1
+                                                    }
+                                                }
+                                            ) { Text("上移") }
+                                            TextButton(
+                                                onClick = {
+                                                    if (index < blocks.lastIndex) {
+                                                        blocks = blocks.toMutableList().also { list ->
+                                                            list.add(index + 1, list.removeAt(index))
+                                                        }
+                                                        selectedBlockIndex = index + 1
+                                                    }
+                                                }
+                                            ) { Text("下移") }
+                                            TextButton(
+                                                onClick = {
+                                                    blocks = blocks.toMutableList().also { it.removeAt(index) }
+                                                    normalizeSelection()
+                                                }
+                                            ) { Text("删除") }
                                         }
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        TextButton(
-                                            onClick = {
-                                                if (index > 0) {
-                                                    blocks = blocks.toMutableList().also { list ->
-                                                        list.add(index - 1, list.removeAt(index))
-                                                    }
-                                                    selectedBlockIndex = index - 1
-                                                }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    selectedBlock?.let { block ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("模块内容", style = MaterialTheme.typography.titleMedium)
+                                Text("@${block.name}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                            TextButton(onClick = { showBlockDetail = false }) { Text("返回模块一览") }
+                        }
+                        if (block.commands.isEmpty()) {
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                Text("当前模块还没有内容，先从右侧添加指令。", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(block.commands.size) { commandIndex ->
+                                    val command = block.commands[commandIndex]
+                                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = summarizeDramaEditorCommand(command),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }) { Text("上移") }
+                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }) { Text("下移") }
+                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }) { Text("编辑") }
+                                                TextButton(onClick = { removeCommand(commandIndex) }) { Text("删除") }
                                             }
-                                        ) { Text("上移") }
-                                        TextButton(
-                                            onClick = {
-                                                if (index < blocks.lastIndex) {
-                                                    blocks = blocks.toMutableList().also { list ->
-                                                        list.add(index + 1, list.removeAt(index))
-                                                    }
-                                                    selectedBlockIndex = index + 1
-                                                }
-                                            }
-                                        ) { Text("下移") }
-                                        TextButton(
-                                            onClick = {
-                                                blocks = blocks.toMutableList().also { it.removeAt(index) }
-                                                normalizeSelection()
-                                            }
-                                        ) { Text("删除") }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = scriptPreview,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("脚本输出") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                )
             }
             Column(
                 modifier = Modifier
@@ -3793,6 +3896,112 @@ private fun MagicDramaScriptEditorScreen(
                 TextButton(onClick = { activeDialog = DramaDialogType.BUTTONS }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("添加按钮") }
             }
         }
+    }
+}
+
+@Composable
+private fun DramaCommandEditDialog(
+    command: DramaEditorCommand?,
+    roleOptions: List<String>,
+    resourceOptions: List<String>,
+    blockNames: List<String>,
+    onConfirm: (DramaEditorCommand) -> Unit,
+    onDismiss: () -> Unit
+) {
+    when (command) {
+        is DramaEditorCommand.RoleLine -> DramaRoleLineDialog(
+            roleOptions = roleOptions,
+            initialRole = command.role,
+            initialText = command.text,
+            title = "编辑对白",
+            onConfirm = { role, text -> onConfirm(DramaEditorCommand.RoleLine(role.trim(), text.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Narration -> DramaNarrationDialog(
+            initialText = command.text,
+            initialImportant = command.important,
+            title = "编辑旁白",
+            onConfirm = { text, important -> onConfirm(DramaEditorCommand.Narration(text.trim(), important)) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Resource -> DramaResourceDialog(
+            resourceOptions = resourceOptions,
+            initialSource = command.source,
+            title = "编辑资源",
+            onConfirm = { onConfirm(DramaEditorCommand.Resource(it.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Variable -> DramaVariableDialog(
+            initialExpression = command.expression,
+            title = "编辑变量",
+            onConfirm = { onConfirm(DramaEditorCommand.Variable(it.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.RemoveVariable -> DramaVariableDialog(
+            initialExpression = command.name,
+            title = "编辑删变量",
+            description = "示例：好感",
+            fieldLabel = "变量名",
+            onConfirm = { onConfirm(DramaEditorCommand.RemoveVariable(it.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Jump -> DramaJumpDialog(
+            blockNames = blockNames,
+            initialMode = "jump",
+            initialPrimary = command.target,
+            title = "编辑跳转",
+            onConfirm = { _, primary, _ -> onConfirm(DramaEditorCommand.Jump(primary.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Conditional -> DramaJumpDialog(
+            blockNames = blockNames,
+            initialMode = "condition",
+            initialPrimary = command.expression,
+            initialSecondary = command.target,
+            title = "编辑条件",
+            onConfirm = { _, primary, secondary -> onConfirm(DramaEditorCommand.Conditional(primary.trim(), secondary.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Countdown -> DramaJumpDialog(
+            blockNames = blockNames,
+            initialMode = "countdown",
+            initialPrimary = command.seconds.toString(),
+            initialSecondary = command.target,
+            title = "编辑计时",
+            onConfirm = { _, primary, secondary -> onConfirm(DramaEditorCommand.Countdown(primary.trim().toIntOrNull() ?: 0, secondary.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Wait -> DramaJumpDialog(
+            blockNames = blockNames,
+            initialMode = "wait",
+            initialPrimary = command.seconds.toString(),
+            title = "编辑等待",
+            onConfirm = { _, primary, _ -> onConfirm(DramaEditorCommand.Wait(primary.trim().toIntOrNull() ?: 0)) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Buttons -> DramaButtonsDialog(
+            blockNames = blockNames,
+            initialOptions = command.options,
+            title = "编辑按钮组",
+            onConfirm = { onConfirm(DramaEditorCommand.Buttons(it)) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Background -> DramaResourceDialog(
+            resourceOptions = resourceOptions,
+            initialSource = command.source,
+            title = "编辑背景",
+            onConfirm = { onConfirm(DramaEditorCommand.Background(it.trim())) },
+            onDismiss = onDismiss
+        )
+        is DramaEditorCommand.Raw -> DramaVariableDialog(
+            initialExpression = command.line,
+            title = "编辑原始行",
+            description = "直接编辑原始脚本行",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.Raw(it.trim())) },
+            onDismiss = onDismiss
+        )
+        null -> Unit
     }
 }
 
@@ -3827,14 +4036,17 @@ private fun DramaBlockDialog(
 @Composable
 private fun DramaRoleLineDialog(
     roleOptions: List<String>,
+    initialRole: String = roleOptions.firstOrNull().orEmpty(),
+    initialText: String = "",
+    title: String = "添加对白",
     onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var role by remember(roleOptions) { mutableStateOf(roleOptions.firstOrNull().orEmpty()) }
-    var text by remember { mutableStateOf("") }
+    var role by remember(roleOptions, initialRole) { mutableStateOf(initialRole) }
+    var text by remember(initialText) { mutableStateOf(initialText) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加对白") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3853,14 +4065,17 @@ private fun DramaRoleLineDialog(
 
 @Composable
 private fun DramaNarrationDialog(
+    initialText: String = "",
+    initialImportant: Boolean = false,
+    title: String = "添加旁白",
     onConfirm: (String, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var important by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
+    var important by remember(initialImportant) { mutableStateOf(initialImportant) }
+    var text by remember(initialText) { mutableStateOf(initialText) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加旁白") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3878,13 +4093,15 @@ private fun DramaNarrationDialog(
 @Composable
 private fun DramaResourceDialog(
     resourceOptions: List<String>,
+    initialSource: String = resourceOptions.firstOrNull().orEmpty(),
+    title: String = "添加资源",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var source by remember { mutableStateOf(resourceOptions.firstOrNull().orEmpty()) }
+    var source by remember(initialSource, resourceOptions) { mutableStateOf(initialSource) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加资源") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (resourceOptions.isNotEmpty()) {
@@ -3904,17 +4121,21 @@ private fun DramaResourceDialog(
 
 @Composable
 private fun DramaVariableDialog(
+    initialExpression: String = "",
+    title: String = "变量设定",
+    description: String = "示例：好感=1、好感+=1、路线=普通",
+    fieldLabel: String = "设定内容",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var expression by remember { mutableStateOf("") }
+    var expression by remember(initialExpression) { mutableStateOf(initialExpression) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("变量设定") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("示例：好感=1、好感+=1、路线=普通", style = MaterialTheme.typography.labelSmall)
-                OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text("设定内容") }, modifier = Modifier.fillMaxWidth())
+                Text(description, style = MaterialTheme.typography.labelSmall)
+                OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text(fieldLabel) }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(expression) }, enabled = expression.isNotBlank()) { Text("确定") } },
@@ -3925,15 +4146,19 @@ private fun DramaVariableDialog(
 @Composable
 private fun DramaJumpDialog(
     blockNames: List<String>,
+    initialMode: String = "jump",
+    initialPrimary: String = blockNames.firstOrNull().orEmpty(),
+    initialSecondary: String = blockNames.firstOrNull().orEmpty(),
+    title: String = "跳转/计时",
     onConfirm: (String, String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var mode by remember { mutableStateOf("jump") }
-    var primary by remember { mutableStateOf(blockNames.firstOrNull().orEmpty()) }
-    var secondary by remember { mutableStateOf(blockNames.firstOrNull().orEmpty()) }
+    var mode by remember(initialMode) { mutableStateOf(initialMode) }
+    var primary by remember(initialPrimary) { mutableStateOf(initialPrimary) }
+    var secondary by remember(initialSecondary) { mutableStateOf(initialSecondary) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("跳转/计时") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3972,16 +4197,18 @@ private fun DramaJumpDialog(
 @Composable
 private fun DramaButtonsDialog(
     blockNames: List<String>,
+    initialOptions: List<Pair<String, String>> = emptyList(),
+    title: String = "添加按钮组",
     onConfirm: (List<Pair<String, String>>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text1 by remember { mutableStateOf("") }
-    var target1 by remember { mutableStateOf(blockNames.firstOrNull().orEmpty()) }
-    var text2 by remember { mutableStateOf("") }
-    var target2 by remember { mutableStateOf(blockNames.getOrNull(1).orEmpty()) }
+    var text1 by remember(initialOptions) { mutableStateOf(initialOptions.getOrNull(0)?.first.orEmpty()) }
+    var target1 by remember(initialOptions, blockNames) { mutableStateOf(initialOptions.getOrNull(0)?.second ?: blockNames.firstOrNull().orEmpty()) }
+    var text2 by remember(initialOptions) { mutableStateOf(initialOptions.getOrNull(1)?.first.orEmpty()) }
+    var target2 by remember(initialOptions, blockNames) { mutableStateOf(initialOptions.getOrNull(1)?.second ?: blockNames.getOrNull(1).orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加按钮组") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = text1, onValueChange = { text1 = it }, label = { Text("按钮一文案") }, modifier = Modifier.fillMaxWidth())
