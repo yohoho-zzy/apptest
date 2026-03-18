@@ -142,12 +142,17 @@ class ExecutionViewModel(app: Application) : AndroidViewModel(app) {
         repo.updateCharacterPoints(characterId, points)
     }
 
-    fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int) = viewModelScope.launch {
-        repo.applyExecutionCompletion(characterId, completionScoreSum)
+    fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int, familiarityIncrement: Int = 1) = viewModelScope.launch {
+        repo.applyExecutionCompletion(characterId, completionScoreSum, familiarityIncrement)
     }
 
-    fun applyExecutionCompletionWithTrigger(characterId: Long, currentPoints: Int) = viewModelScope.launch {
-        repo.applyExecutionCompletion(characterId, 30)
+    fun applyExecutionCompletionWithTrigger(
+        characterId: Long,
+        currentPoints: Int,
+        completionScoreSum: Int,
+        familiarityIncrement: Int
+    ) = viewModelScope.launch {
+        repo.applyExecutionCompletion(characterId, completionScoreSum, familiarityIncrement)
         when {
             currentPoints < 10 -> repo.addResponseRecordByCategoryPrefix(characterId, "触发类别", "E")
             currentPoints < 20 -> repo.addResponseRecordByCategoryPrefix(characterId, "触发类别", "D")

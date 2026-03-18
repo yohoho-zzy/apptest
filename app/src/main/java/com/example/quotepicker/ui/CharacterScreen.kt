@@ -478,7 +478,7 @@ fun CharacterScreen(
                                         },
                                         shape = MaterialTheme.shapes.small
                                     ) {
-                                        Text(ui.executionSettings.buttonLabel)
+                                        Text(ui.executionSettings.secondaryButtonLabel)
                                     }
                                     Button(
                                         onClick = {

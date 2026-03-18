@@ -390,7 +390,7 @@ class Repository private constructor(context: Context) {
         characterDao.update(target.copy(points = points.coerceIn(0, 30), updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int) {
+    suspend fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int, familiarityIncrement: Int = 1) {
         db.withTransaction {
             val characters = characterDao.listAll()
             val target = characters.firstOrNull { it.id == characterId } ?: return@withTransaction
@@ -398,7 +398,7 @@ class Repository private constructor(context: Context) {
             characterDao.update(
                 target.copy(
                     points = nextPoints.coerceIn(0, 30),
-                    familiarity = target.familiarity + 1,
+                    familiarity = (target.familiarity + familiarityIncrement).coerceAtLeast(0),
                     updatedAt = System.currentTimeMillis()
                 )
             )
