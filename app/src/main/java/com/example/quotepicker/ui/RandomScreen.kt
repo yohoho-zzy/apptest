@@ -264,11 +264,11 @@ fun ExecutionScreen(
     completionTarget?.let { target ->
         CompletionDialog(
             characterName = target.characterName,
-            onConfirm = { completionScore, familiarityIncrement ->
+            onConfirm = { completionValue, belongingValue ->
                 vm.applyExecutionCompletionWithTrigger(
                     characterId = target.characterId,
-                    completionScoreSum = completionScore,
-                    familiarityIncrement = familiarityIncrement
+                    completionValue = completionValue,
+                    belongingValue = belongingValue
                 )
                 vm.removeExecutionResource(target.id)
                 completionTarget = null
@@ -343,8 +343,8 @@ private fun CompletionDialog(
     onConfirm: (Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var completionScore by remember { mutableStateOf(15f) }
-    var familiarityIncrement by remember { mutableStateOf(15f) }
+    var completionValue by remember { mutableStateOf(7f) }
+    var belongingValue by remember { mutableStateOf(7f) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -353,27 +353,28 @@ private fun CompletionDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("$characterName 的完成情况")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("完成度 +${completionScore.toInt()}")
+                    Text("完成度 ${completionValue.toInt()} / 15")
                     Slider(
-                        value = completionScore,
-                        onValueChange = { completionScore = it },
-                        valueRange = 0f..30f,
-                        steps = 29
+                        value = completionValue,
+                        onValueChange = { completionValue = it },
+                        valueRange = 0f..15f,
+                        steps = 14
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("归属度 +${familiarityIncrement.toInt()}")
+                    Text("归属度 ${belongingValue.toInt()} / 15")
                     Slider(
-                        value = familiarityIncrement,
-                        onValueChange = { familiarityIncrement = it },
-                        valueRange = 0f..30f,
-                        steps = 29
+                        value = belongingValue,
+                        onValueChange = { belongingValue = it },
+                        valueRange = 0f..15f,
+                        steps = 14
                     )
                 }
+                Text("合计 ${(completionValue + belongingValue).toInt()} / 30")
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(completionScore.toInt(), familiarityIncrement.toInt()) }) { Text("完成") }
+            TextButton(onClick = { onConfirm(completionValue.toInt(), belongingValue.toInt()) }) { Text("完成") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

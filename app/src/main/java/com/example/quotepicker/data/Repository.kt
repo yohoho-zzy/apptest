@@ -390,15 +390,25 @@ class Repository private constructor(context: Context) {
         characterDao.update(target.copy(points = points.coerceIn(0, 30), updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun applyExecutionCompletion(characterId: Long, completionScoreSum: Int, familiarityIncrement: Int = 1) {
+    suspend fun applyExecutionCompletion(characterId: Long, completionValue: Int, belongingValue: Int) {
         db.withTransaction {
             val characters = characterDao.listAll()
             val target = characters.firstOrNull { it.id == characterId } ?: return@withTransaction
-            val nextPoints = ((target.points + completionScoreSum) / 2.0).roundToInt()
+            val normalizedCompletion = completionValue.coerceIn(0, 15)
+            val normalizedBelonging = belongingValue.coerceIn(0, 15)
+            val scoreSum = normalizedCompletion + normalizedBelonging
+            val nextPoints = ((normalizedCompletion + normalizedBelonging + (target.points / 2.0)) / 3.0)
+                .roundToInt()
+                .coerceIn(0, 30)
+            val nextFamiliarity = when {
+                scoreSum < 10 -> target.familiarity - 1
+                scoreSum > 20 -> target.familiarity + 1
+                else -> target.familiarity
+            }.coerceAtLeast(0)
             characterDao.update(
                 target.copy(
-                    points = nextPoints.coerceIn(0, 30),
-                    familiarity = (target.familiarity + familiarityIncrement).coerceAtLeast(0),
+                    points = nextPoints,
+                    familiarity = nextFamiliarity,
                     updatedAt = System.currentTimeMillis()
                 )
             )
