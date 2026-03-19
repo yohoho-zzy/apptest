@@ -3557,7 +3557,7 @@ private sealed interface DramaEditorCommand {
 }
 
 private enum class DramaDialogType {
-    BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, JUMP, BUTTONS
+    BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, REMOVE_VARIABLE, JUMP, WAIT, BUTTONS, BACKGROUND, RAW
 }
 
 private data class DramaCommandEditorState(
@@ -3581,14 +3581,10 @@ private fun MagicDramaScriptEditorScreen(
     var showBlockDetail by remember { mutableStateOf(false) }
     val selectedBlock = blocks.getOrNull(selectedBlockIndex)
     val scriptPreview = remember(blocks) { buildDramaEditorScript(blocks) }
-    val resourceOptions = remember(availableResources) {
-        availableResources
-            .filter { it.resource.type == ResourceType.IMAGE || it.resource.type == ResourceType.VIDEO || it.resource.type == ResourceType.SOUND }
-            .mapNotNull { item ->
-                item.resource.resourceCode?.takeIf { it.isNotBlank() }
-                    ?: item.resource.title.takeIf { it.isNotBlank() }
-            }
-            .distinct()
+    val mediaResources = remember(availableResources) {
+        availableResources.filter {
+            it.resource.type == ResourceType.IMAGE || it.resource.type == ResourceType.VIDEO || it.resource.type == ResourceType.SOUND
+        }
     }
     val blockNames = remember(blocks) { blocks.map { it.name } }
 
@@ -3669,7 +3665,8 @@ private fun MagicDramaScriptEditorScreen(
                 onDismiss = { activeDialog = null }
             )
             DramaDialogType.RESOURCE -> DramaResourceDialog(
-                resourceOptions = resourceOptions,
+                resourceOptions = mediaResources,
+                vm = vm,
                 onConfirm = {
                     addCommand(DramaEditorCommand.Resource(it.trim()))
                     activeDialog = null
@@ -3679,6 +3676,16 @@ private fun MagicDramaScriptEditorScreen(
             DramaDialogType.VARIABLE -> DramaVariableDialog(
                 onConfirm = {
                     addCommand(DramaEditorCommand.Variable(it.trim()))
+                    activeDialog = null
+                },
+                onDismiss = { activeDialog = null }
+            )
+            DramaDialogType.REMOVE_VARIABLE -> DramaVariableDialog(
+                title = "删除变量",
+                description = "输入要删除的变量名，例如：好感",
+                fieldLabel = "变量名",
+                onConfirm = {
+                    addCommand(DramaEditorCommand.RemoveVariable(it.trim()))
                     activeDialog = null
                 },
                 onDismiss = { activeDialog = null }
@@ -3697,10 +3704,40 @@ private fun MagicDramaScriptEditorScreen(
                 },
                 onDismiss = { activeDialog = null }
             )
+            DramaDialogType.WAIT -> DramaJumpDialog(
+                blockNames = blockNames,
+                initialMode = "wait",
+                title = "添加等待",
+                onConfirm = { _, primary, _ ->
+                    addCommand(DramaEditorCommand.Wait(primary.trim().toIntOrNull() ?: 0))
+                    activeDialog = null
+                },
+                onDismiss = { activeDialog = null }
+            )
             DramaDialogType.BUTTONS -> DramaButtonsDialog(
                 blockNames = blockNames,
                 onConfirm = {
                     addCommand(DramaEditorCommand.Buttons(it))
+                    activeDialog = null
+                },
+                onDismiss = { activeDialog = null }
+            )
+            DramaDialogType.BACKGROUND -> DramaResourceDialog(
+                resourceOptions = mediaResources,
+                vm = vm,
+                title = "添加背景",
+                onConfirm = {
+                    addCommand(DramaEditorCommand.Background(it.trim()))
+                    activeDialog = null
+                },
+                onDismiss = { activeDialog = null }
+            )
+            DramaDialogType.RAW -> DramaVariableDialog(
+                title = "添加原始行",
+                description = "直接输入未封装的脚本命令行，适合临时补充特殊语法。",
+                fieldLabel = "脚本行",
+                onConfirm = {
+                    addCommand(DramaEditorCommand.Raw(it.trim()))
                     activeDialog = null
                 },
                 onDismiss = { activeDialog = null }
@@ -3712,8 +3749,9 @@ private fun MagicDramaScriptEditorScreen(
         DramaCommandEditDialog(
             command = state.initialCommand,
             roleOptions = characters.map { it.name }.ifEmpty { listOf("角色A", "角色B") },
-            resourceOptions = resourceOptions,
+            resourceOptions = mediaResources,
             blockNames = blockNames,
+            vm = vm,
             onConfirm = { updated ->
                 if (state.index == null) addCommand(updated) else updateCommand(state.index, updated)
                 commandEditorState = null
@@ -3751,14 +3789,14 @@ private fun MagicDramaScriptEditorScreen(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.25f)
                     .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (!showBlockDetail) {
                     Text("左侧模块一览", style = MaterialTheme.typography.titleMedium)
@@ -3880,21 +3918,50 @@ private fun MagicDramaScriptEditorScreen(
                     }
                 }
             }
-            Column(
+            OutlinedCard(
                 modifier = Modifier
-                    .width(138.dp)
+                    .width(184.dp)
                     .fillMaxSize()
-                    .navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .navigationBarsPadding()
             ) {
-                Text("右侧操作", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { activeDialog = DramaDialogType.BLOCK }, modifier = Modifier.fillMaxWidth()) { Text("添加分段") }
-                TextButton(onClick = { activeDialog = DramaDialogType.ROLE }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("添加对白") }
-                TextButton(onClick = { activeDialog = DramaDialogType.NARRATION }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("添加旁白") }
-                TextButton(onClick = { activeDialog = DramaDialogType.RESOURCE }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("添加资源") }
-                TextButton(onClick = { activeDialog = DramaDialogType.VARIABLE }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("变量设定") }
-                TextButton(onClick = { activeDialog = DramaDialogType.JUMP }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("跳转/计时") }
-                TextButton(onClick = { activeDialog = DramaDialogType.BUTTONS }, enabled = selectedBlock != null, modifier = Modifier.fillMaxWidth()) { Text("添加按钮") }
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("命令面板", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (selectedBlock == null) "先选择或新建分段，再插入命令。" else "当前分段：@${selectedBlock.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val commandButtons = listOf(
+                        "添加分段" to DramaDialogType.BLOCK,
+                        "对白" to DramaDialogType.ROLE,
+                        "旁白" to DramaDialogType.NARRATION,
+                        "资源" to DramaDialogType.RESOURCE,
+                        "背景" to DramaDialogType.BACKGROUND,
+                        "设变量" to DramaDialogType.VARIABLE,
+                        "删变量" to DramaDialogType.REMOVE_VARIABLE,
+                        "跳转/条件/计时" to DramaDialogType.JUMP,
+                        "等待" to DramaDialogType.WAIT,
+                        "按钮组" to DramaDialogType.BUTTONS,
+                        "原始行" to DramaDialogType.RAW
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        commandButtons.forEach { (label, type) ->
+                            val enabled = type == DramaDialogType.BLOCK || selectedBlock != null
+                            FilterChip(
+                                selected = false,
+                                onClick = { activeDialog = type },
+                                enabled = enabled,
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -3904,8 +3971,9 @@ private fun MagicDramaScriptEditorScreen(
 private fun DramaCommandEditDialog(
     command: DramaEditorCommand?,
     roleOptions: List<String>,
-    resourceOptions: List<String>,
+    resourceOptions: List<ResourceWithTagsCharacters>,
     blockNames: List<String>,
+    vm: ResourceViewModel,
     onConfirm: (DramaEditorCommand) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -3927,6 +3995,7 @@ private fun DramaCommandEditDialog(
         )
         is DramaEditorCommand.Resource -> DramaResourceDialog(
             resourceOptions = resourceOptions,
+            vm = vm,
             initialSource = command.source,
             title = "编辑资源",
             onConfirm = { onConfirm(DramaEditorCommand.Resource(it.trim())) },
@@ -3989,6 +4058,7 @@ private fun DramaCommandEditDialog(
         )
         is DramaEditorCommand.Background -> DramaResourceDialog(
             resourceOptions = resourceOptions,
+            vm = vm,
             initialSource = command.source,
             title = "编辑背景",
             onConfirm = { onConfirm(DramaEditorCommand.Background(it.trim())) },
@@ -4049,14 +4119,40 @@ private fun DramaRoleLineDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    roleOptions.forEach { option ->
-                        FilterChip(selected = role == option, onClick = { role = option }, label = { Text(option) })
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("对白内容") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                OutlinedTextField(
+                    value = role,
+                    onValueChange = { role = it },
+                    label = { Text("角色名") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (roleOptions.isNotEmpty()) {
+                    Text(
+                        "快捷角色",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        roleOptions.forEach { option ->
+                            FilterChip(
+                                selected = role == option,
+                                onClick = { role = option },
+                                label = { Text(option, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            )
+                        }
                     }
                 }
-                OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("角色名") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("对白内容") }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(role, text) }, enabled = role.isNotBlank() && text.isNotBlank()) { Text("确定") } },
@@ -4093,26 +4189,134 @@ private fun DramaNarrationDialog(
 
 @Composable
 private fun DramaResourceDialog(
-    resourceOptions: List<String>,
-    initialSource: String = resourceOptions.firstOrNull().orEmpty(),
+    resourceOptions: List<ResourceWithTagsCharacters>,
+    vm: ResourceViewModel,
+    initialSource: String = resourceOptions.firstOrNull()?.resource?.resourceCode
+        ?: resourceOptions.firstOrNull()?.resource?.title.orEmpty(),
     title: String = "添加资源",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var source by remember(initialSource, resourceOptions) { mutableStateOf(initialSource) }
+    val query = source.trim()
+    val filteredResources = remember(query, resourceOptions) {
+        resourceOptions.filter { item ->
+            val resource = item.resource
+            query.isBlank() || listOfNotNull(resource.title, resource.resourceCode)
+                .any { it.contains(query, ignoreCase = true) }
+        }.sortedBy { it.resource.title }
+    }
+    var selectedResourceId by remember(resourceOptions, initialSource) {
+        mutableStateOf(
+            resourceOptions.firstOrNull { item ->
+                item.resource.resourceCode == initialSource || item.resource.title == initialSource
+            }?.resource?.id
+        )
+    }
+    val selectedResource = filteredResources.firstOrNull { it.resource.id == selectedResourceId }
+        ?: resourceOptions.firstOrNull { it.resource.id == selectedResourceId }
+    val previewBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, selectedResource?.resource?.id) {
+        value = withContext(Dispatchers.IO) {
+            val resource = selectedResource?.resource ?: return@withContext null
+            when (resource.type) {
+                ResourceType.IMAGE -> {
+                    val image = parseImageItems(resource.contentUriOrPath, resource.quoteImageBase64).firstOrNull { !it.path.isNullOrBlank() }
+                    image?.path?.let { vm.decodeUriToBitmap(Uri.parse(it)) }
+                }
+                ResourceType.VIDEO -> {
+                    val video = parseVideoItems(resource.contentUriOrPath).firstOrNull { !it.path.isNullOrBlank() }
+                    video?.path?.let { vm.decodeVideoFrame(Uri.parse(it)) }
+                }
+                else -> null
+            }
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (resourceOptions.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        resourceOptions.take(12).forEach { option ->
-                            AssistChip(onClick = { source = option }, label = { Text(option) })
+                OutlinedTextField(
+                    value = source,
+                    onValueChange = {
+                        source = it
+                        selectedResourceId = null
+                    },
+                    label = { Text("输入资源名 / 资源ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (selectedResource != null && (selectedResource.resource.type == ResourceType.IMAGE || selectedResource.resource.type == ResourceType.VIDEO)) {
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (previewBitmap != null) {
+                                Image(
+                                    bitmap = previewBitmap!!.asImageBitmap(),
+                                    contentDescription = "资源缩略图",
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(MaterialTheme.shapes.small)
+                                )
+                            } else {
+                                Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (selectedResource.resource.type == ResourceType.IMAGE) Icons.Default.Image else Icons.Default.Videocam,
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(selectedResource.resource.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    selectedResource.resource.resourceCode ?: "ID ${selectedResource.resource.id}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
-                OutlinedTextField(value = source, onValueChange = { source = it }, label = { Text("资源标识或名称") }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    "匹配资源 ${filteredResources.size} 个",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(filteredResources.take(30), key = { it.resource.id }) { item ->
+                        val resource = item.resource
+                        val displayId = resource.resourceCode ?: "ID ${resource.id}"
+                        val selected = selectedResourceId == resource.id
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedResourceId = resource.id
+                                    source = resource.resourceCode ?: resource.title
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(resource.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (selected) Text("已选", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Text(
+                                    "${when (resource.type) { ResourceType.IMAGE -> "图片组"; ResourceType.VIDEO -> "视频组"; ResourceType.SOUND -> "音频"; else -> "资源" }} · ${displayId}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(source) }, enabled = source.isNotBlank()) { Text("确定") } },
