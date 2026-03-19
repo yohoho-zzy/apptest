@@ -3553,13 +3553,19 @@ private sealed interface DramaEditorCommand {
     data class Conditional(val expression: String, val target: String) : DramaEditorCommand
     data class Countdown(val seconds: Int, val target: String) : DramaEditorCommand
     data class Wait(val seconds: Int) : DramaEditorCommand
+    data class Atmosphere(val key: String) : DramaEditorCommand
+    data object ClearResourceArea : DramaEditorCommand
+    data object ClearAllVariables : DramaEditorCommand
+    data object ClearDialogue : DramaEditorCommand
     data class Background(val source: String) : DramaEditorCommand
+    data object StopBackgroundMusic : DramaEditorCommand
+    data object StopCountdown : DramaEditorCommand
     data class Buttons(val options: List<Pair<String, String>>) : DramaEditorCommand
     data class Raw(val line: String) : DramaEditorCommand
 }
 
 private enum class DramaDialogType {
-    BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, REMOVE_VARIABLE, JUMP, WAIT, BUTTONS, BACKGROUND, RAW
+    BLOCK, ROLE, NARRATION, RESOURCE, VARIABLE, REMOVE_VARIABLE, JUMP, WAIT, BUTTONS, ATMOSPHERE, CLEAR_RESOURCE, CLEAR_VARIABLES, CLEAR_DIALOGUE, BACKGROUND, STOP_BACKGROUND, STOP_COUNTDOWN, RAW
 }
 
 private data class DramaCommandEditorState(
@@ -3725,6 +3731,28 @@ private fun MagicDramaScriptEditorScreen(
                 },
                 onDismiss = { activeDialog = null }
             )
+            DramaDialogType.ATMOSPHERE -> DramaVariableDialog(
+                title = "添加氛围",
+                description = "输入氛围 key，例如：forest、dream、night。",
+                fieldLabel = "氛围 key",
+                onConfirm = {
+                    addCommand(DramaEditorCommand.Atmosphere(it.trim()))
+                    activeDialog = null
+                },
+                onDismiss = { activeDialog = null }
+            )
+            DramaDialogType.CLEAR_RESOURCE -> {
+                addCommand(DramaEditorCommand.ClearResourceArea)
+                activeDialog = null
+            }
+            DramaDialogType.CLEAR_VARIABLES -> {
+                addCommand(DramaEditorCommand.ClearAllVariables)
+                activeDialog = null
+            }
+            DramaDialogType.CLEAR_DIALOGUE -> {
+                addCommand(DramaEditorCommand.ClearDialogue)
+                activeDialog = null
+            }
             DramaDialogType.BACKGROUND -> DramaResourceDialog(
                 resourceOptions = mediaResources,
                 vm = vm,
@@ -3735,6 +3763,14 @@ private fun MagicDramaScriptEditorScreen(
                 },
                 onDismiss = { activeDialog = null }
             )
+            DramaDialogType.STOP_BACKGROUND -> {
+                addCommand(DramaEditorCommand.StopBackgroundMusic)
+                activeDialog = null
+            }
+            DramaDialogType.STOP_COUNTDOWN -> {
+                addCommand(DramaEditorCommand.StopCountdown)
+                activeDialog = null
+            }
             DramaDialogType.RAW -> DramaVariableDialog(
                 title = "添加原始行",
                 description = "直接输入未封装的脚本命令行，适合临时补充特殊语法。",
@@ -3792,23 +3828,23 @@ private fun MagicDramaScriptEditorScreen(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(
                 modifier = Modifier
                     .weight(1.25f)
                     .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (!showBlockDetail) {
-                    Text("左侧模块一览", style = MaterialTheme.typography.titleMedium)
+                    Text("左侧模块一览", style = MaterialTheme.typography.titleSmall)
                     if (blocks.isEmpty()) {
                         Text("暂无脚本块，请先从右侧添加分段。", style = MaterialTheme.typography.labelMedium)
                     } else {
                         LazyColumn(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             items(blocks.size) { index ->
                                 val block = blocks[index]
@@ -3822,12 +3858,12 @@ private fun MagicDramaScriptEditorScreen(
                                     )
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Text(
                                             text = "@${block.name}",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            style = MaterialTheme.typography.titleSmall,
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                             modifier = Modifier.clickable {
                                                 selectedBlockIndex = index
@@ -3841,7 +3877,10 @@ private fun MagicDramaScriptEditorScreen(
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
                                             TextButton(
                                                 onClick = {
                                                     if (index > 0) {
@@ -3850,7 +3889,8 @@ private fun MagicDramaScriptEditorScreen(
                                                         }
                                                         selectedBlockIndex = index - 1
                                                     }
-                                                }
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             ) { Text("上移") }
                                             TextButton(
                                                 onClick = {
@@ -3860,13 +3900,15 @@ private fun MagicDramaScriptEditorScreen(
                                                         }
                                                         selectedBlockIndex = index + 1
                                                     }
-                                                }
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             ) { Text("下移") }
                                             TextButton(
                                                 onClick = {
                                                     blocks = blocks.toMutableList().also { it.removeAt(index) }
                                                     normalizeSelection()
-                                                }
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             ) { Text("删除") }
                                         }
                                     }
@@ -3882,10 +3924,10 @@ private fun MagicDramaScriptEditorScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("模块内容", style = MaterialTheme.typography.titleMedium)
+                                Text("模块内容", style = MaterialTheme.typography.titleSmall)
                                 Text("@${block.name}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            TextButton(onClick = { showBlockDetail = false }) { Text("返回模块一览") }
+                            TextButton(onClick = { showBlockDetail = false }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("返回模块一览") }
                         }
                         if (block.commands.isEmpty()) {
                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -3894,24 +3936,24 @@ private fun MagicDramaScriptEditorScreen(
                         } else {
                             LazyColumn(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(block.commands.size) { commandIndex ->
                                     val command = block.commands[commandIndex]
                                     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                                         Column(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
                                                 text = summarizeDramaEditorCommand(command),
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }) { Text("上移") }
-                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }) { Text("下移") }
-                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }) { Text("编辑") }
-                                                TextButton(onClick = { removeCommand(commandIndex) }) { Text("删除") }
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("上移") }
+                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("下移") }
+                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("编辑") }
+                                                TextButton(onClick = { removeCommand(commandIndex) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("删除") }
                                             }
                                         }
                                     }
@@ -3923,44 +3965,50 @@ private fun MagicDramaScriptEditorScreen(
             }
             OutlinedCard(
                 modifier = Modifier
-                    .width(184.dp)
+                    .width(220.dp)
                     .fillMaxSize()
                     .navigationBarsPadding()
             ) {
                 Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("命令面板", style = MaterialTheme.typography.titleMedium)
+                    Text("命令面板", style = MaterialTheme.typography.titleSmall)
                     Text(
                         if (selectedBlock == null) "先选择或新建分段，再插入命令。" else "当前分段：@${selectedBlock.name}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     val commandButtons = listOf(
-                        "添加分段" to DramaDialogType.BLOCK,
-                        "对白" to DramaDialogType.ROLE,
-                        "旁白" to DramaDialogType.NARRATION,
-                        "资源" to DramaDialogType.RESOURCE,
-                        "背景" to DramaDialogType.BACKGROUND,
-                        "设变量" to DramaDialogType.VARIABLE,
-                        "删变量" to DramaDialogType.REMOVE_VARIABLE,
-                        "跳转/条件/计时" to DramaDialogType.JUMP,
-                        "等待" to DramaDialogType.WAIT,
-                        "按钮组" to DramaDialogType.BUTTONS,
-                        "原始行" to DramaDialogType.RAW
+                        "添加分段 @block" to DramaDialogType.BLOCK,
+                        "角色对白 角色:内容" to DramaDialogType.ROLE,
+                        "旁白 / 注意" to DramaDialogType.NARRATION,
+                        "资源 资源:id" to DramaDialogType.RESOURCE,
+                        "设变量 设:值" to DramaDialogType.VARIABLE,
+                        "删变量 删:name" to DramaDialogType.REMOVE_VARIABLE,
+                        "跳转 / 条件 / 计时" to DramaDialogType.JUMP,
+                        "等待 w秒数" to DramaDialogType.WAIT,
+                        "氛围 氛围:key" to DramaDialogType.ATMOSPHERE,
+                        "清资源 c1" to DramaDialogType.CLEAR_RESOURCE,
+                        "清变量 c2" to DramaDialogType.CLEAR_VARIABLES,
+                        "清对白 c3" to DramaDialogType.CLEAR_DIALOGUE,
+                        "背景 背景:source" to DramaDialogType.BACKGROUND,
+                        "停背景 停:背景" to DramaDialogType.STOP_BACKGROUND,
+                        "停计时 停:计时" to DramaDialogType.STOP_COUNTDOWN,
+                        "按钮组 按钮:+选项" to DramaDialogType.BUTTONS,
+                        "原始行 自定义" to DramaDialogType.RAW
                     )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        commandButtons.forEach { (label, type) ->
+                        items(commandButtons) { (label, type) ->
                             val enabled = type == DramaDialogType.BLOCK || selectedBlock != null
-                            FilterChip(
-                                selected = false,
+                            AssistChip(
+                                modifier = Modifier.fillMaxWidth(),
                                 onClick = { activeDialog = type },
                                 enabled = enabled,
-                                label = { Text(label) }
+                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
                             )
                         }
                     }
@@ -4052,6 +4100,38 @@ private fun DramaCommandEditDialog(
             onConfirm = { _, primary, _ -> onConfirm(DramaEditorCommand.Wait(primary.trim().toIntOrNull() ?: 0)) },
             onDismiss = onDismiss
         )
+        is DramaEditorCommand.Atmosphere -> DramaVariableDialog(
+            initialExpression = command.key,
+            title = "编辑氛围",
+            description = "输入氛围 key。",
+            fieldLabel = "氛围 key",
+            onConfirm = { onConfirm(DramaEditorCommand.Atmosphere(it.trim())) },
+            onDismiss = onDismiss
+        )
+        DramaEditorCommand.ClearResourceArea -> DramaVariableDialog(
+            initialExpression = "c1",
+            title = "查看清资源命令",
+            description = "该命令会清空资源区，保持为 c1 即可。",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.ClearResourceArea) },
+            onDismiss = onDismiss
+        )
+        DramaEditorCommand.ClearAllVariables -> DramaVariableDialog(
+            initialExpression = "c2",
+            title = "查看清变量命令",
+            description = "该命令会清空全部变量，保持为 c2 即可。",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.ClearAllVariables) },
+            onDismiss = onDismiss
+        )
+        DramaEditorCommand.ClearDialogue -> DramaVariableDialog(
+            initialExpression = "c3",
+            title = "查看清对白命令",
+            description = "该命令会清空对白区，保持为 c3 即可。",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.ClearDialogue) },
+            onDismiss = onDismiss
+        )
         is DramaEditorCommand.Buttons -> DramaButtonsDialog(
             blockNames = blockNames,
             initialOptions = command.options,
@@ -4065,6 +4145,22 @@ private fun DramaCommandEditDialog(
             initialSource = command.source,
             title = "编辑背景",
             onConfirm = { onConfirm(DramaEditorCommand.Background(it.trim())) },
+            onDismiss = onDismiss
+        )
+        DramaEditorCommand.StopBackgroundMusic -> DramaVariableDialog(
+            initialExpression = "停:背景",
+            title = "查看停背景命令",
+            description = "该命令会停止背景音乐，保持为 停:背景 即可。",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.StopBackgroundMusic) },
+            onDismiss = onDismiss
+        )
+        DramaEditorCommand.StopCountdown -> DramaVariableDialog(
+            initialExpression = "停:计时",
+            title = "查看停计时命令",
+            description = "该命令会停止倒计时，保持为 停:计时 即可。",
+            fieldLabel = "脚本行",
+            onConfirm = { onConfirm(DramaEditorCommand.StopCountdown) },
             onDismiss = onDismiss
         )
         is DramaEditorCommand.Raw -> DramaVariableDialog(
@@ -4122,7 +4218,7 @@ private fun DramaRoleLineDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -4144,14 +4240,14 @@ private fun DramaRoleLineDialog(
                     )
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         roleOptions.forEach { option ->
                             FilterChip(
                                 selected = role == option,
                                 onClick = { role = option },
-                                label = { Text(option, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                label = { Text(option, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall) }
                             )
                         }
                     }
@@ -4410,26 +4506,43 @@ private fun DramaButtonsDialog(
     onConfirm: (List<Pair<String, String>>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text1 by remember(initialOptions) { mutableStateOf(initialOptions.getOrNull(0)?.first.orEmpty()) }
-    var target1 by remember(initialOptions, blockNames) { mutableStateOf(initialOptions.getOrNull(0)?.second ?: blockNames.firstOrNull().orEmpty()) }
-    var text2 by remember(initialOptions) { mutableStateOf(initialOptions.getOrNull(1)?.first.orEmpty()) }
-    var target2 by remember(initialOptions, blockNames) { mutableStateOf(initialOptions.getOrNull(1)?.second ?: blockNames.getOrNull(1).orEmpty()) }
+    val optionCount = maxOf(4, initialOptions.size.coerceAtLeast(2))
+    val optionsState = remember(initialOptions, blockNames) {
+        mutableStateListOf<Pair<String, String>>().apply {
+            repeat(optionCount) { index ->
+                add(
+                    initialOptions.getOrNull(index)
+                        ?: ("" to blockNames.getOrNull(index).orEmpty())
+                )
+            }
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = text1, onValueChange = { text1 = it }, label = { Text("按钮一文案") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = target1, onValueChange = { target1 = it }, label = { Text("按钮一跳转") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = text2, onValueChange = { text2 = it }, label = { Text("按钮二文案") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = target2, onValueChange = { target2 = it }, label = { Text("按钮二跳转") }, modifier = Modifier.fillMaxWidth())
+                optionsState.forEachIndexed { index, option ->
+                    OutlinedTextField(
+                        value = option.first,
+                        onValueChange = { optionsState[index] = it to optionsState[index].second },
+                        label = { Text("按钮${index + 1}文案") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = option.second,
+                        onValueChange = { optionsState[index] = optionsState[index].first to it },
+                        label = { Text("按钮${index + 1}跳转") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 if (blockNames.isNotEmpty()) {
                     Text("可用分段：${blockNames.joinToString("、")}", style = MaterialTheme.typography.labelSmall)
                 }
             }
         },
         confirmButton = {
-            val options = listOf(text1 to target1, text2 to target2).filter { it.first.isNotBlank() && it.second.isNotBlank() }
+            val options = optionsState.filter { it.first.isNotBlank() && it.second.isNotBlank() }
             TextButton(onClick = { onConfirm(options) }, enabled = options.isNotEmpty()) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
@@ -4499,7 +4612,13 @@ private fun parseDramaEditorCommands(lines: List<String>): List<DramaEditorComma
                 val target = parts.getOrNull(1)?.trim().orEmpty()
                 commands += if (seconds != null && target.isNotBlank()) DramaEditorCommand.Countdown(seconds, target) else DramaEditorCommand.Raw(line)
             }
+            line.startsWith("氛围:") -> commands += DramaEditorCommand.Atmosphere(line.substringAfter(':').trim())
+            line.equals("c1", ignoreCase = true) -> commands += DramaEditorCommand.ClearResourceArea
+            line.equals("c2", ignoreCase = true) -> commands += DramaEditorCommand.ClearAllVariables
+            line.equals("c3", ignoreCase = true) -> commands += DramaEditorCommand.ClearDialogue
             line.startsWith("背景:") -> commands += DramaEditorCommand.Background(line.substringAfter(':').trim())
+            line.equals("停:背景", ignoreCase = true) -> commands += DramaEditorCommand.StopBackgroundMusic
+            line.equals("停:计时", ignoreCase = true) -> commands += DramaEditorCommand.StopCountdown
             line.startsWith("按钮:") -> {
                 val options = mutableListOf<Pair<String, String>>()
                 var buttonIndex = index + 1
@@ -4540,7 +4659,13 @@ private fun buildDramaEditorScript(blocks: List<DramaEditorBlock>): String {
                     is DramaEditorCommand.Conditional -> add("判:${command.expression}--${command.target}")
                     is DramaEditorCommand.Countdown -> add("计时:${command.seconds}--${command.target}")
                     is DramaEditorCommand.Wait -> add("w${command.seconds}")
+                    is DramaEditorCommand.Atmosphere -> add("氛围:${command.key}")
+                    DramaEditorCommand.ClearResourceArea -> add("c1")
+                    DramaEditorCommand.ClearAllVariables -> add("c2")
+                    DramaEditorCommand.ClearDialogue -> add("c3")
                     is DramaEditorCommand.Background -> add("背景:${command.source}")
+                    DramaEditorCommand.StopBackgroundMusic -> add("停:背景")
+                    DramaEditorCommand.StopCountdown -> add("停:计时")
                     is DramaEditorCommand.Buttons -> {
                         add("按钮:")
                         command.options.forEach { (label, target) -> add("$label--$target") }
@@ -4563,7 +4688,13 @@ private fun summarizeDramaEditorCommand(command: DramaEditorCommand): String {
         is DramaEditorCommand.Conditional -> "判：${command.expression} -> ${command.target}"
         is DramaEditorCommand.Countdown -> "计时：${command.seconds}s -> ${command.target}"
         is DramaEditorCommand.Wait -> "等待：${command.seconds}s"
+        is DramaEditorCommand.Atmosphere -> "氛围：${command.key}"
+        DramaEditorCommand.ClearResourceArea -> "清资源：c1"
+        DramaEditorCommand.ClearAllVariables -> "清变量：c2"
+        DramaEditorCommand.ClearDialogue -> "清对白：c3"
         is DramaEditorCommand.Background -> "背景：${command.source}"
+        DramaEditorCommand.StopBackgroundMusic -> "停止背景：停:背景"
+        DramaEditorCommand.StopCountdown -> "停止计时：停:计时"
         is DramaEditorCommand.Buttons -> "按钮：${command.options.joinToString { "${it.first}→${it.second}" }}"
         is DramaEditorCommand.Raw -> command.line
     }
