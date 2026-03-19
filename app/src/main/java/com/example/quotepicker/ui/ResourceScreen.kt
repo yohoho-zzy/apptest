@@ -3589,7 +3589,6 @@ private fun MagicDramaScriptEditorScreen(
     var selectedBlockIndex by remember { mutableStateOf(if (blocks.isEmpty()) -1 else 0) }
     var activeDialog by remember { mutableStateOf<DramaDialogType?>(null) }
     var commandEditorState by remember { mutableStateOf<DramaCommandEditorState?>(null) }
-    var showBlockDetail by remember { mutableStateOf(false) }
     val selectedBlock = blocks.getOrNull(selectedBlockIndex)
     val scriptPreview = remember(blocks) { buildDramaEditorScript(blocks) }
     val mediaResources = remember(availableResources) {
@@ -3598,19 +3597,41 @@ private fun MagicDramaScriptEditorScreen(
         }
     }
     val blockNames = remember(blocks) { blocks.map { it.name } }
+    val commandGroups = remember {
+        listOf(
+            "结构" to listOf(
+                "添加分段" to DramaDialogType.BLOCK,
+                "角色对白" to DramaDialogType.ROLE,
+                "旁白/注意" to DramaDialogType.NARRATION,
+                "资源" to DramaDialogType.RESOURCE,
+                "按钮组" to DramaDialogType.BUTTONS
+            ),
+            "流程" to listOf(
+                "设变量" to DramaDialogType.VARIABLE,
+                "删变量" to DramaDialogType.REMOVE_VARIABLE,
+                "跳转/条件/计时" to DramaDialogType.JUMP,
+                "等待" to DramaDialogType.WAIT,
+                "氛围" to DramaDialogType.ATMOSPHERE
+            ),
+            "收尾" to listOf(
+                "背景" to DramaDialogType.BACKGROUND,
+                "停背景" to DramaDialogType.STOP_BACKGROUND,
+                "停计时" to DramaDialogType.STOP_COUNTDOWN,
+                "原始行" to DramaDialogType.RAW
+            )
+        )
+    }
 
     fun normalizeSelection() {
         if (selectedBlockIndex !in blocks.indices) {
             selectedBlockIndex = if (blocks.isEmpty()) -1 else blocks.lastIndex
         }
-        if (blocks.isEmpty()) showBlockDetail = false
     }
 
     fun addBlock(name: String) {
         if (name.isBlank()) return
         blocks = blocks + DramaEditorBlock(name = name.trim(), commands = emptyList())
         selectedBlockIndex = blocks.lastIndex
-        showBlockDetail = false
     }
 
     fun addCommand(command: DramaEditorCommand) {
@@ -3619,7 +3640,6 @@ private fun MagicDramaScriptEditorScreen(
             val block = list[index]
             list[index] = block.copy(commands = block.commands + command)
         }
-        showBlockDetail = true
     }
 
     fun updateCommand(targetIndex: Int, command: DramaEditorCommand) {
@@ -3805,18 +3825,17 @@ private fun MagicDramaScriptEditorScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        if (showBlockDetail && selectedBlock != null) "@${selectedBlock.name}" else "魔剧脚本编辑"
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("魔剧脚本编辑")
+                        Text(
+                            text = selectedBlock?.let { "当前分段：@${it.name}" } ?: "先建立分段，再逐段添加命令。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (showBlockDetail) {
-                            showBlockDetail = false
-                        } else {
-                            onBack()
-                        }
-                    }) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -3826,206 +3845,96 @@ private fun MagicDramaScriptEditorScreen(
             )
         }
     ) { inner ->
-        Row(
+        LazyColumn(
             modifier = Modifier
                 .padding(inner)
-                .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1.55f)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (!showBlockDetail) {
-                    Text("左侧模块一览", style = MaterialTheme.typography.titleSmall)
-                    if (blocks.isEmpty()) {
-                        Text("暂无脚本块，请先从右侧添加分段。", style = MaterialTheme.typography.labelMedium)
-                    } else {
-                        LazyColumn(
+            item {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(blocks.size) { index ->
-                                val block = blocks[index]
-                                val isSelected = index == selectedBlockIndex
-                                OutlinedCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedBlockIndex = index },
-                                    colors = androidx.compose.material3.CardDefaults.outlinedCardColors(
-                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface
-                                    )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "@${block.name}",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.clickable {
-                                                selectedBlockIndex = index
-                                                showBlockDetail = true
-                                            }
-                                        )
-                                        Text(
-                                            text = block.commands.firstOrNull()?.let(::summarizeDramaEditorCommand) ?: "空分段",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            TextButton(
-                                                onClick = {
-                                                    if (index > 0) {
-                                                        blocks = blocks.toMutableList().also { list ->
-                                                            list.add(index - 1, list.removeAt(index))
-                                                        }
-                                                        selectedBlockIndex = index - 1
-                                                    }
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                            ) { Text("上移") }
-                                            TextButton(
-                                                onClick = {
-                                                    if (index < blocks.lastIndex) {
-                                                        blocks = blocks.toMutableList().also { list ->
-                                                            list.add(index + 1, list.removeAt(index))
-                                                        }
-                                                        selectedBlockIndex = index + 1
-                                                    }
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                            ) { Text("下移") }
-                                            TextButton(
-                                                onClick = {
-                                                    blocks = blocks.toMutableList().also { it.removeAt(index) }
-                                                    normalizeSelection()
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                            ) { Text("删除") }
-                                        }
-                                    }
-                                }
-                            }
+                            Text("编辑总览", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "共 ${blocks.size} 个分段，已写入 ${blocks.sumOf { it.commands.size }} 条命令。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                        TextButton(onClick = { activeDialog = DramaDialogType.BLOCK }) { Text("新建分段") }
                     }
-                } else {
-                    selectedBlock?.let { block ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("模块内容", style = MaterialTheme.typography.titleSmall)
-                                Text("@${block.name}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                            TextButton(onClick = { showBlockDetail = false }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("返回模块一览") }
-                        }
-                        if (block.commands.isEmpty()) {
-                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                Text("当前模块还没有内容，先从右侧添加指令。", style = MaterialTheme.typography.bodyMedium)
-                            }
+                }
+            }
+            item {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("分段导航", style = MaterialTheme.typography.titleSmall)
+                        if (blocks.isEmpty()) {
+                            Text("暂无脚本块，请先创建一个分段。", style = MaterialTheme.typography.bodyMedium)
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(block.commands.size) { commandIndex ->
-                                    val command = block.commands[commandIndex]
-                                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
+                                blocks.forEachIndexed { index, block ->
+                                    FilterChip(
+                                        selected = index == selectedBlockIndex,
+                                        onClick = {
+                                            selectedBlockIndex = index
+                                                                            },
+                                        label = {
                                             Text(
-                                                text = summarizeDramaEditorCommand(command),
-                                                style = MaterialTheme.typography.bodyMedium
+                                                "@${block.name} · ${block.commands.size}",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("上移") }
-                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("下移") }
-                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("编辑") }
-                                                TextButton(onClick = { removeCommand(commandIndex) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("删除") }
-                                            }
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
                     }
                 }
             }
-            OutlinedCard(
-                modifier = Modifier
-                    .weight(0.72f)
-                    .fillMaxSize()
-                    .widthIn(max = 188.dp)
-                    .navigationBarsPadding()
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("命令面板", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        if (selectedBlock == null) "先选择或新建分段，再插入命令。" else "当前分段：@${selectedBlock.name}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val commandGroups = listOf(
-                        "基础" to listOf(
-                            "添加分段" to DramaDialogType.BLOCK,
-                            "角色对白" to DramaDialogType.ROLE,
-                            "旁白/注意" to DramaDialogType.NARRATION,
-                            "资源" to DramaDialogType.RESOURCE,
-                            "按钮组" to DramaDialogType.BUTTONS
-                        ),
-                        "变量/流程" to listOf(
-                            "设变量" to DramaDialogType.VARIABLE,
-                            "删变量" to DramaDialogType.REMOVE_VARIABLE,
-                            "跳转/条件/计时" to DramaDialogType.JUMP,
-                            "等待" to DramaDialogType.WAIT,
-                            "氛围" to DramaDialogType.ATMOSPHERE
-                        ),
-                        "背景/停止" to listOf(
-                            "背景" to DramaDialogType.BACKGROUND,
-                            "停背景" to DramaDialogType.STOP_BACKGROUND,
-                            "停计时" to DramaDialogType.STOP_COUNTDOWN,
-                            "原始行" to DramaDialogType.RAW
-                        )
-                    )
+            item {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        Text("快捷命令", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            if (selectedBlock == null) "只有“添加分段”可用；选中分段后即可继续写内容。" else "命令会追加到 @${selectedBlock.name} 末尾。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         commandGroups.forEach { (groupTitle, groupButtons) ->
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     text = groupTitle,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     groupButtons.forEach { (label, type) ->
                                         val enabled = type == DramaDialogType.BLOCK || selectedBlock != null
@@ -4038,29 +3947,158 @@ private fun MagicDramaScriptEditorScreen(
                                 }
                             }
                         }
-                    }
-                    Text(
-                        "快捷清理",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        listOf(
-                            "c1" to DramaDialogType.CLEAR_RESOURCE,
-                            "c2" to DramaDialogType.CLEAR_VARIABLES,
-                            "c3" to DramaDialogType.CLEAR_DIALOGUE
-                        ).forEach { (label, type) ->
-                            AssistChip(
-                                onClick = { activeDialog = type },
-                                enabled = selectedBlock != null,
-                                modifier = Modifier.weight(1f),
-                                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "快捷清理",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf(
+                                    "清资源 c1" to DramaDialogType.CLEAR_RESOURCE,
+                                    "清变量 c2" to DramaDialogType.CLEAR_VARIABLES,
+                                    "清对白 c3" to DramaDialogType.CLEAR_DIALOGUE
+                                ).forEach { (label, type) ->
+                                    AssistChip(
+                                        onClick = { activeDialog = type },
+                                        enabled = selectedBlock != null,
+                                        label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                }
+                            }
                         }
+                    }
+                }
+            }
+            item {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("分段内容", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    selectedBlock?.let { "正在编辑 @${it.name}" } ?: "请选择一个分段",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (selectedBlock != null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    TextButton(
+                                        onClick = {
+                                            val index = selectedBlockIndex
+                                            if (index > 0) {
+                                                blocks = blocks.toMutableList().also { list ->
+                                                    list.add(index - 1, list.removeAt(index))
+                                                }
+                                                selectedBlockIndex = index - 1
+                                            }
+                                        }
+                                    ) { Text("分段上移") }
+                                    TextButton(
+                                        onClick = {
+                                            val index = selectedBlockIndex
+                                            if (index in 0 until blocks.lastIndex) {
+                                                blocks = blocks.toMutableList().also { list ->
+                                                    list.add(index + 1, list.removeAt(index))
+                                                }
+                                                selectedBlockIndex = index + 1
+                                            }
+                                        }
+                                    ) { Text("分段下移") }
+                                    TextButton(
+                                        onClick = {
+                                            blocks = blocks.toMutableList().also { it.removeAt(selectedBlockIndex) }
+                                            normalizeSelection()
+                                        }
+                                    ) { Text("删除分段") }
+                                }
+                            }
+                        }
+                        if (selectedBlock == null) {
+                            Text("从上方“分段导航”选择一个分段后，这里会显示可编辑的命令列表。", style = MaterialTheme.typography.bodyMedium)
+                        } else if (selectedBlock.commands.isEmpty()) {
+                            Text("当前分段还是空的，可以先从上面的快捷命令开始。", style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                selectedBlock.commands.forEachIndexed { commandIndex, command ->
+                                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "${commandIndex + 1}. ${summarizeDramaEditorCommand(command)}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            FlowRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                AssistChip(
+                                                    onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) },
+                                                    label = { Text("上移") }
+                                                )
+                                                AssistChip(
+                                                    onClick = { if (commandIndex < selectedBlock.commands.lastIndex) moveCommand(commandIndex, 1) },
+                                                    label = { Text("下移") }
+                                                )
+                                                AssistChip(
+                                                    onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) },
+                                                    label = { Text("编辑") }
+                                                )
+                                                AssistChip(
+                                                    onClick = { removeCommand(commandIndex) },
+                                                    label = { Text("删除") }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("脚本预览", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "保存前可快速检查最终脚本结构，避免分段名和跳转目标写错。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = scriptPreview,
+                            onValueChange = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            minLines = 8,
+                            maxLines = 14,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            label = { Text("生成后的脚本") }
+                        )
                     }
                 }
             }
