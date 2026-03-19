@@ -87,9 +87,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.quotepicker.data.CharacterEntity
@@ -3856,8 +3858,11 @@ private fun MagicDramaScriptEditorScreen(
                 onClick = onClick,
                 enabled = enabled,
                 shape = RoundedCornerShape(4.dp),
-                modifier = Modifier.height(26.dp),
-                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 0.dp), // ⭐更小
+                modifier = Modifier
+                    .height(22.dp)
+                    .width(40.dp)
+                    .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp), // ⭐更小
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -3893,7 +3898,10 @@ private fun MagicDramaScriptEditorScreen(
             item {
                 OutlinedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = Color(0xFFE8F5E9)
+                    )
                 ) {
                     Row(
                         modifier = Modifier
@@ -3925,7 +3933,10 @@ private fun MagicDramaScriptEditorScreen(
             item {
                 OutlinedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = Color(0xFFE3F2FD)
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(6.dp),
@@ -3946,7 +3957,7 @@ private fun MagicDramaScriptEditorScreen(
                                     Button(
                                         onClick = { selectedBlockIndex = index },
                                         shape = RoundedCornerShape(4.dp),
-                                        modifier = Modifier.height(26.dp),
+                                        modifier = Modifier.height(24.dp),
                                         contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (selected) Color(0xFFE3F2FD) else Color.White,
@@ -3976,7 +3987,10 @@ private fun MagicDramaScriptEditorScreen(
             item {
                 OutlinedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = Color(0xFFFFEBEE)
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(6.dp),
@@ -3993,7 +4007,7 @@ private fun MagicDramaScriptEditorScreen(
                                 )
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     groupButtons.forEach { (label, type) ->
@@ -4010,7 +4024,7 @@ private fun MagicDramaScriptEditorScreen(
 
                         FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             listOf(
@@ -4033,7 +4047,10 @@ private fun MagicDramaScriptEditorScreen(
             item {
                 OutlinedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = Color(0xFFF3E5F5)
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(6.dp),
@@ -4110,7 +4127,7 @@ private fun MagicDramaScriptEditorScreen(
 
                                             FlowRow(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp),
                                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
                                                 MiniButton(
@@ -4152,7 +4169,10 @@ private fun MagicDramaScriptEditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding(),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = Color(0xFFEFEBE9)
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(6.dp),
@@ -4166,7 +4186,7 @@ private fun MagicDramaScriptEditorScreen(
                             modifier = Modifier.fillMaxWidth(),
                             readOnly = true,
                             minLines = 4,
-                            maxLines = 8,
+                            maxLines = 16,
                             textStyle = MaterialTheme.typography.bodySmall,
                             shape = RoundedCornerShape(4.dp)
                         )
