@@ -1722,6 +1722,7 @@ private fun ResourceCreateScreen(
             initialScript = textContent,
             availableResources = availableResources,
             characters = characters,
+            vm = vm,
             onSave = {
                 textContent = it
                 showMagicDramaEditor = false
@@ -2222,6 +2223,7 @@ private fun ResourceEditScreen(
             initialScript = textContent,
             availableResources = availableResources,
             characters = characters,
+            vm = vm,
             onSave = {
                 textContent = it
                 showMagicDramaEditor = false
@@ -3571,6 +3573,7 @@ private fun MagicDramaScriptEditorScreen(
     initialScript: String,
     availableResources: List<ResourceWithTagsCharacters>,
     characters: List<CharacterEntity>,
+    vm: ResourceViewModel,
     onSave: (String) -> Unit,
     onBack: () -> Unit
 ) {
