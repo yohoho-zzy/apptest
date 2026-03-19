@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -77,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -3833,7 +3835,7 @@ private fun MagicDramaScriptEditorScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1.25f)
+                    .weight(1.55f)
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -3877,9 +3879,9 @@ private fun MagicDramaScriptEditorScreen(
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             TextButton(
                                                 onClick = {
@@ -3890,7 +3892,8 @@ private fun MagicDramaScriptEditorScreen(
                                                         selectedBlockIndex = index - 1
                                                     }
                                                 },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                             ) { Text("上移") }
                                             TextButton(
                                                 onClick = {
@@ -3901,14 +3904,16 @@ private fun MagicDramaScriptEditorScreen(
                                                         selectedBlockIndex = index + 1
                                                     }
                                                 },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                             ) { Text("下移") }
                                             TextButton(
                                                 onClick = {
                                                     blocks = blocks.toMutableList().also { it.removeAt(index) }
                                                     normalizeSelection()
                                                 },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                             ) { Text("删除") }
                                         }
                                     }
@@ -3949,11 +3954,14 @@ private fun MagicDramaScriptEditorScreen(
                                                 text = summarizeDramaEditorCommand(command),
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
-                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("上移") }
-                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("下移") }
-                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("编辑") }
-                                                TextButton(onClick = { removeCommand(commandIndex) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("删除") }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                TextButton(onClick = { if (commandIndex > 0) moveCommand(commandIndex, -1) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("上移") }
+                                                TextButton(onClick = { if (commandIndex < block.commands.lastIndex) moveCommand(commandIndex, 1) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("下移") }
+                                                TextButton(onClick = { commandEditorState = DramaCommandEditorState(commandIndex, command) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("编辑") }
+                                                TextButton(onClick = { removeCommand(commandIndex) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) { Text("删除") }
                                             }
                                         }
                                     }
@@ -3965,8 +3973,9 @@ private fun MagicDramaScriptEditorScreen(
             }
             OutlinedCard(
                 modifier = Modifier
-                    .width(220.dp)
+                    .weight(0.72f)
                     .fillMaxSize()
+                    .widthIn(max = 188.dp)
                     .navigationBarsPadding()
             ) {
                 Column(
@@ -3979,36 +3988,77 @@ private fun MagicDramaScriptEditorScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val commandButtons = listOf(
-                        "添加分段 @block" to DramaDialogType.BLOCK,
-                        "角色对白 角色:内容" to DramaDialogType.ROLE,
-                        "旁白 / 注意" to DramaDialogType.NARRATION,
-                        "资源 资源:id" to DramaDialogType.RESOURCE,
-                        "设变量 设:值" to DramaDialogType.VARIABLE,
-                        "删变量 删:name" to DramaDialogType.REMOVE_VARIABLE,
-                        "跳转 / 条件 / 计时" to DramaDialogType.JUMP,
-                        "等待 w秒数" to DramaDialogType.WAIT,
-                        "氛围 氛围:key" to DramaDialogType.ATMOSPHERE,
-                        "清资源 c1" to DramaDialogType.CLEAR_RESOURCE,
-                        "清变量 c2" to DramaDialogType.CLEAR_VARIABLES,
-                        "清对白 c3" to DramaDialogType.CLEAR_DIALOGUE,
-                        "背景 背景:source" to DramaDialogType.BACKGROUND,
-                        "停背景 停:背景" to DramaDialogType.STOP_BACKGROUND,
-                        "停计时 停:计时" to DramaDialogType.STOP_COUNTDOWN,
-                        "按钮组 按钮:+选项" to DramaDialogType.BUTTONS,
-                        "原始行 自定义" to DramaDialogType.RAW
+                    val commandGroups = listOf(
+                        "基础" to listOf(
+                            "添加分段" to DramaDialogType.BLOCK,
+                            "角色对白" to DramaDialogType.ROLE,
+                            "旁白/注意" to DramaDialogType.NARRATION,
+                            "资源" to DramaDialogType.RESOURCE,
+                            "按钮组" to DramaDialogType.BUTTONS
+                        ),
+                        "变量/流程" to listOf(
+                            "设变量" to DramaDialogType.VARIABLE,
+                            "删变量" to DramaDialogType.REMOVE_VARIABLE,
+                            "跳转/条件/计时" to DramaDialogType.JUMP,
+                            "等待" to DramaDialogType.WAIT,
+                            "氛围" to DramaDialogType.ATMOSPHERE
+                        ),
+                        "背景/停止" to listOf(
+                            "背景" to DramaDialogType.BACKGROUND,
+                            "停背景" to DramaDialogType.STOP_BACKGROUND,
+                            "停计时" to DramaDialogType.STOP_COUNTDOWN,
+                            "原始行" to DramaDialogType.RAW
+                        )
                     )
-                    LazyColumn(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(commandButtons) { (label, type) ->
-                            val enabled = type == DramaDialogType.BLOCK || selectedBlock != null
+                        commandGroups.forEach { (groupTitle, groupButtons) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = groupTitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    groupButtons.forEach { (label, type) ->
+                                        val enabled = type == DramaDialogType.BLOCK || selectedBlock != null
+                                        AssistChip(
+                                            onClick = { activeDialog = type },
+                                            enabled = enabled,
+                                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        "快捷清理",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(
+                            "c1" to DramaDialogType.CLEAR_RESOURCE,
+                            "c2" to DramaDialogType.CLEAR_VARIABLES,
+                            "c3" to DramaDialogType.CLEAR_DIALOGUE
+                        ).forEach { (label, type) ->
                             AssistChip(
-                                modifier = Modifier.fillMaxWidth(),
                                 onClick = { activeDialog = type },
-                                enabled = enabled,
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                                enabled = selectedBlock != null,
+                                modifier = Modifier.weight(1f),
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
                             )
                         }
                     }
@@ -4017,6 +4067,10 @@ private fun MagicDramaScriptEditorScreen(
         }
     }
 }
+
+private val dramaDialogModifier = Modifier
+    .fillMaxWidth()
+    .widthIn(max = 420.dp)
 
 @Composable
 private fun DramaCommandEditDialog(
@@ -4184,9 +4238,10 @@ private fun DramaBlockDialog(
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text("添加分段") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -4216,6 +4271,7 @@ private fun DramaRoleLineDialog(
     var text by remember(initialText) { mutableStateOf(initialText) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -4224,7 +4280,7 @@ private fun DramaRoleLineDialog(
                     onValueChange = { text = it },
                     label = { Text("对白内容") },
                     modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
+                    minLines = 2
                 )
                 OutlinedTextField(
                     value = role,
@@ -4271,10 +4327,11 @@ private fun DramaNarrationDialog(
     var text by remember(initialText) { mutableStateOf(initialText) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = !important, onClick = { important = false }, label = { Text("旁白") })
                     FilterChip(selected = important, onClick = { important = true }, label = { Text("注意") })
                 }
@@ -4332,9 +4389,10 @@ private fun DramaResourceDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = source,
                     onValueChange = {
@@ -4348,8 +4406,8 @@ private fun DramaResourceDialog(
                 if (selectedResource != null && (selectedResource.resource.type == ResourceType.IMAGE || selectedResource.resource.type == ResourceType.VIDEO)) {
                     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (previewBitmap != null) {
@@ -4387,8 +4445,8 @@ private fun DramaResourceDialog(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 260.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .heightIn(max = 220.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filteredResources.take(30), key = { it.resource.id }) { item ->
                         val resource = item.resource
@@ -4402,7 +4460,7 @@ private fun DramaResourceDialog(
                                     source = resource.resourceCode ?: resource.title
                                 }
                         ) {
-                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(resource.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (selected) Text("已选", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -4435,9 +4493,10 @@ private fun DramaVariableDialog(
     var expression by remember(initialExpression) { mutableStateOf(initialExpression) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(description, style = MaterialTheme.typography.labelSmall)
                 OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text(fieldLabel) }, modifier = Modifier.fillMaxWidth())
             }
@@ -4462,12 +4521,15 @@ private fun DramaJumpDialog(
     var secondary by remember(initialSecondary) { mutableStateOf(initialSecondary) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("jump" to "跳转", "condition" to "条件", "countdown" to "计时", "wait" to "等待").forEach { (value, label) ->
-                        FilterChip(selected = mode == value, onClick = { mode = value }, label = { Text(label) })
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (initialMode != "wait") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("jump" to "跳转", "condition" to "条件", "countdown" to "计时").forEach { (value, label) ->
+                            FilterChip(selected = mode == value, onClick = { mode = value }, label = { Text(label) })
+                        }
                     }
                 }
                 if (mode == "jump") {
@@ -4519,21 +4581,24 @@ private fun DramaButtonsDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 optionsState.forEachIndexed { index, option ->
                     OutlinedTextField(
                         value = option.first,
                         onValueChange = { optionsState[index] = it to optionsState[index].second },
                         label = { Text("按钮${index + 1}文案") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                     OutlinedTextField(
                         value = option.second,
                         onValueChange = { optionsState[index] = optionsState[index].first to it },
                         label = { Text("按钮${index + 1}跳转") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                 }
                 if (blockNames.isNotEmpty()) {
