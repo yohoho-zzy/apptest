@@ -3807,9 +3807,12 @@ private fun MagicDramaScriptEditorScreen(
                 activeDialog = null
             }
             DramaDialogType.BACKGROUND -> DramaResourceDialog(
-                resourceOptions = mediaResources,
+                resourceOptions = mediaResources.filter { it.resource.type == ResourceType.VIDEO || it.resource.type == ResourceType.SOUND },
                 vm = vm,
                 title = "添加背景",
+                valueLabel = "背景名（按名字填写）",
+                valueHint = "按背景名称填写，多个背景请用逗号分隔。",
+                insertTitleInsteadOfCode = true,
                 onConfirm = {
                     addCommand(DramaEditorCommand.Background(it.trim()))
                     activeDialog = null
@@ -4351,10 +4354,13 @@ private fun DramaCommandEditDialog(
             onDismiss = onDismiss
         )
         is DramaEditorCommand.Background -> DramaResourceDialog(
-            resourceOptions = resourceOptions,
+            resourceOptions = resourceOptions.filter { it.resource.type == ResourceType.VIDEO || it.resource.type == ResourceType.SOUND },
             vm = vm,
             initialSource = command.source,
             title = "编辑背景",
+            valueLabel = "背景名（按名字填写）",
+            valueHint = "按背景名称填写，多个背景请用逗号分隔。",
+            insertTitleInsteadOfCode = true,
             onConfirm = { onConfirm(DramaEditorCommand.Background(it.trim())) },
             onDismiss = onDismiss
         )
@@ -4518,17 +4524,25 @@ private fun DramaResourceDialog(
     vm: ResourceViewModel,
     initialSource: String = "",
     title: String = "添加资源",
+    valueLabel: String = "命令值（可填多个ID）",
+    valueHint: String = "多个资源请用英文/中文逗号分隔。",
+    insertTitleInsteadOfCode: Boolean = false,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var source by remember(initialSource, resourceOptions) { mutableStateOf(initialSource) }
+    val normalizedResources = remember(resourceOptions) { resourceOptions.sortedBy { it.resource.title } }
+    var source by remember(initialSource, normalizedResources) { mutableStateOf(initialSource) }
     var searchQuery by remember(initialSource) { mutableStateOf("") }
     val selectedTokens = remember(source) { parseDramaResourceTokens(source) }
-    val selectedResources = remember(selectedTokens, resourceOptions) {
+    val selectedResources = remember(selectedTokens, normalizedResources, insertTitleInsteadOfCode) {
         selectedTokens.mapNotNull { token ->
-            resourceOptions.firstOrNull { item ->
-                item.resource.resourceCode.equals(token, ignoreCase = true) ||
+            normalizedResources.firstOrNull { item ->
+                if (insertTitleInsteadOfCode) {
                     item.resource.title.equals(token, ignoreCase = true)
+                } else {
+                    item.resource.resourceCode.equals(token, ignoreCase = true) ||
+                        item.resource.title.equals(token, ignoreCase = true)
+                }
             }
         }
     }
@@ -4536,12 +4550,12 @@ private fun DramaResourceDialog(
         selectedResources.flatMap { item -> buildDramaResourcePreviewItems(item) }
     }
     val effectiveQuery = searchQuery.trim().ifBlank { selectedTokens.lastOrNull().orEmpty() }
-    val filteredResources = remember(effectiveQuery, resourceOptions) {
-        resourceOptions.filter { item ->
+    val filteredResources = remember(effectiveQuery, normalizedResources) {
+        normalizedResources.filter { item ->
             val resource = item.resource
             effectiveQuery.isBlank() || listOfNotNull(resource.title, resource.resourceCode)
                 .any { it.contains(effectiveQuery, ignoreCase = true) }
-        }.sortedBy { it.resource.title }
+        }
     }
     val previewPagerState = rememberPagerState(pageCount = { previewItems.size.coerceAtLeast(1) })
     val previewBitmaps by produceState<Map<String, android.graphics.Bitmap?>>(initialValue = emptyMap(), previewItems.map { it.key }) {
@@ -4567,8 +4581,8 @@ private fun DramaResourceDialog(
                 OutlinedTextField(
                     value = source,
                     onValueChange = { source = it },
-                    label = { Text("命令值（可填多个ID）") },
-                    supportingText = { Text("多个资源请用英文/中文逗号分隔。") },
+                    label = { Text(valueLabel) },
+                    supportingText = { Text(valueHint) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -4653,7 +4667,8 @@ private fun DramaResourceDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    source = appendDramaResourceToken(source, resource.resourceCode ?: resource.title)
+                                    val value = if (insertTitleInsteadOfCode) resource.title else (resource.resourceCode ?: resource.title)
+                                    source = appendDramaResourceToken(source, value)
                                 }
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
@@ -4764,7 +4779,7 @@ private fun DramaButtonsDialog(
     onConfirm: (List<Pair<String, String>>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val optionCount = maxOf(4, initialOptions.size.coerceAtLeast(2))
+    val optionCount = maxOf(2, initialOptions.size)
     val optionsState = remember(initialOptions, blockNames) {
         mutableStateListOf<Pair<String, String>>().apply {
             repeat(optionCount) { index ->
@@ -4796,6 +4811,12 @@ private fun DramaButtonsDialog(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                }
+                TextButton(
+                    onClick = { optionsState.add("" to "") },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("追加按钮")
                 }
                 if (blockNames.isNotEmpty()) {
                     Text("可用分段：${blockNames.joinToString("、")}", style = MaterialTheme.typography.labelSmall)
