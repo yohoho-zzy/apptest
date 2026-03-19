@@ -104,6 +104,7 @@ import com.example.quotepicker.data.TagCategoryEntity
 import com.example.quotepicker.data.TagEntity
 import com.example.quotepicker.ui.components.CharacterBadge
 import com.example.quotepicker.ui.components.ResourceListRow
+import com.example.quotepicker.ui.components.loadMagicDramaThemes
 import com.example.quotepicker.ui.components.ResourcePreviewScreen
 import com.example.quotepicker.ui.components.TagBadge
 import com.example.quotepicker.ui.components.sortTagsForDisplay
@@ -3601,6 +3602,7 @@ private fun MagicDramaScriptEditorScreen(
     onSave: (String) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var blocks by remember(initialScript) { mutableStateOf(parseDramaEditorBlocks(initialScript)) }
     var selectedBlockIndex by remember { mutableStateOf(if (blocks.isEmpty()) -1 else 0) }
     var activeDialog by remember { mutableStateOf<DramaDialogType?>(null) }
@@ -3613,6 +3615,7 @@ private fun MagicDramaScriptEditorScreen(
         }
     }
     val blockNames = remember(blocks) { blocks.map { it.name } }
+    val atmosphereThemes = remember(context) { loadMagicDramaThemes(context) }
     val commandGroups = remember {
         listOf(
             "结构" to listOf(
@@ -3784,10 +3787,9 @@ private fun MagicDramaScriptEditorScreen(
                 },
                 onDismiss = { activeDialog = null }
             )
-            DramaDialogType.ATMOSPHERE -> DramaVariableDialog(
+            DramaDialogType.ATMOSPHERE -> DramaAtmosphereDialog(
                 title = "添加氛围",
-                description = "输入氛围 key，例如：forest、dream、night。",
-                fieldLabel = "氛围 key",
+                themeOptions = atmosphereThemes.map { it.name },
                 onConfirm = {
                     addCommand(DramaEditorCommand.Atmosphere(it.trim()))
                     activeDialog = null
@@ -4314,11 +4316,10 @@ private fun DramaCommandEditDialog(
             onConfirm = { _, primary, _ -> onConfirm(DramaEditorCommand.Wait(primary.trim().toIntOrNull() ?: 0)) },
             onDismiss = onDismiss
         )
-        is DramaEditorCommand.Atmosphere -> DramaVariableDialog(
+        is DramaEditorCommand.Atmosphere -> DramaAtmosphereDialog(
             initialExpression = command.key,
             title = "编辑氛围",
-            description = "输入氛围 key。",
-            fieldLabel = "氛围 key",
+            themeOptions = loadMagicDramaThemes(LocalContext.current).map { it.name },
             onConfirm = { onConfirm(DramaEditorCommand.Atmosphere(it.trim())) },
             onDismiss = onDismiss
         )
@@ -4688,6 +4689,52 @@ private fun DramaResourceDialog(
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(source) }, enabled = source.isNotBlank()) { Text("确定") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun DramaAtmosphereDialog(
+    initialExpression: String = "",
+    title: String = "添加氛围",
+    themeOptions: List<String>,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var expression by remember(initialExpression) { mutableStateOf(initialExpression) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = dramaDialogModifier,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = expression,
+                    onValueChange = { expression = it },
+                    label = { Text("氛围名称") },
+                    supportingText = { Text("按名称填写，例如：清新、神圣。") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (themeOptions.isNotEmpty()) {
+                    Text("快捷氛围", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        themeOptions.forEach { option ->
+                            FilterChip(
+                                selected = expression == option,
+                                onClick = { expression = option },
+                                label = { Text(option, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(expression) }, enabled = expression.isNotBlank()) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
