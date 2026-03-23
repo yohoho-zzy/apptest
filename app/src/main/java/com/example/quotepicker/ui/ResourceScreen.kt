@@ -91,6 +91,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -3623,19 +3624,19 @@ private fun MagicDramaScriptEditorScreen(
                 "角色" to DramaDialogType.ROLE,
                 "资源" to DramaDialogType.RESOURCE,
                 "按钮" to DramaDialogType.BUTTONS,
-                "背景" to DramaDialogType.BACKGROUND,
-                "氛围" to DramaDialogType.ATMOSPHERE
+                "氛围" to DramaDialogType.ATMOSPHERE,
+                "背景" to DramaDialogType.BACKGROUND
+                "命令" to DramaDialogType.RAW,
             ),
             "流程" to listOf(
-                "设变量" to DramaDialogType.VARIABLE,
-                "删变量" to DramaDialogType.REMOVE_VARIABLE,
+                "设量" to DramaDialogType.VARIABLE,
+                "计时" to DramaDialogType.COUNTDOWN,
                 "跳转" to DramaDialogType.JUMP,
                 "条件" to DramaDialogType.CONDITION,
-                "计时" to DramaDialogType.COUNTDOWN,
                 "等待" to DramaDialogType.WAIT,
                 "停背" to DramaDialogType.STOP_BACKGROUND,
                 "停计" to DramaDialogType.STOP_COUNTDOWN,
-                "命令" to DramaDialogType.RAW
+                "删量" to DramaDialogType.REMOVE_VARIABLE,
             )
         )
     }
@@ -4519,6 +4520,7 @@ private fun DramaNarrationDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DramaResourceDialog(
     resourceOptions: List<ResourceWithTagsCharacters>,
