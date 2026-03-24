@@ -7,6 +7,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,13 +22,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,7 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.quotepicker.util.StoragePaths
+import java.io.File
 import kotlinx.coroutines.delay
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class Corner { LEFT_TOP, RIGHT_TOP, LEFT_BOTTOM, RIGHT_BOTTOM, NONE }
 
@@ -68,10 +76,53 @@ data class GateWebItem(
     val url: String
 )
 
+private const val GATE_WEB_EXPORT_FILENAME = "gate_websites.json"
+
 private fun normalizeUrl(rawUrl: String): String {
     val trimmed = rawUrl.trim()
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
         return trimmed
+    }
+    return "https://$trimmed"
+}
+
+private fun serializeGateWebItems(items: List<GateWebItem>): String {
+    val root = JSONObject()
+    root.put("version", 1)
+    root.put("items", JSONArray().apply {
+        items.forEach { item ->
+            put(
+                JSONObject()
+                    .put("name", item.name)
+                    .put("url", item.url)
+            )
+        }
+    })
+    return root.toString(2)
+}
+
+private fun parseGateWebItems(jsonText: String): List<GateWebItem> {
+    val trimmed = jsonText.trim()
+    if (trimmed.isBlank()) return emptyList()
+
+    fun parseArray(array: JSONArray): List<GateWebItem> {
+        return buildList {
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val url = obj.optString("url").trim()
+                if (url.isBlank()) continue
+                val normalizedUrl = normalizeUrl(url)
+                val name = obj.optString("name").trim().ifBlank { normalizedUrl }
+                add(GateWebItem(name = name, url = normalizedUrl))
+            }
+        }
+    }
+
+    return if (trimmed.startsWith("[")) {
+        parseArray(JSONArray(trimmed))
+    } else {
+        val root = JSONObject(trimmed)
+        parseArray(root.optJSONArray("items") ?: JSONArray())
     }
     return "https://$trimmed"
 }
@@ -82,6 +133,7 @@ fun GateScreen(onPassed: () -> Unit) {
     var count by remember { mutableStateOf(0) }
     var startTime by remember { mutableStateOf<Long?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
     val webItems = remember {
         mutableStateListOf(
             GateWebItem(name = "Notion 表单", url = "https://www.notion.so")
@@ -129,35 +181,49 @@ fun GateScreen(onPassed: () -> Unit) {
 
     val selectedItem = selectedIndex?.let { webItems.getOrNull(it) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (selectedItem == null) {
+    if (selectedItem == null) {
+        Box(modifier = Modifier.fillMaxSize()) {
             GateWebListScreen(
                 webItems = webItems,
                 onAddClick = { showAddDialog = true },
+                onImportClick = { showImportDialog = true },
+                onExportClick = {
+                    val context = it
+                    runCatching {
+                        val dir = StoragePaths.sysDir().apply { mkdirs() }
+                        val target = File(dir, GATE_WEB_EXPORT_FILENAME)
+                        target.writeText(serializeGateWebItems(webItems))
+                        target
+                    }.onSuccess { file ->
+                        Toast.makeText(context, "已导出到 ${file.absolutePath}", Toast.LENGTH_SHORT).show()
+                    }.onFailure { e ->
+                        Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 onItemClick = { selectedIndex = it }
             )
-        } else {
-            GateWebDetailScreen(
-                item = selectedItem,
-                onBack = { selectedIndex = null }
+
+            CornerHotspot(
+                modifier = Modifier.align(Alignment.TopStart),
+                onTap = { handleCornerTap(Corner.LEFT_TOP) }
+            )
+            CornerHotspot(
+                modifier = Modifier.align(Alignment.TopEnd),
+                onTap = { handleCornerTap(Corner.RIGHT_TOP) }
+            )
+            CornerHotspot(
+                modifier = Modifier.align(Alignment.BottomStart),
+                onTap = { handleCornerTap(Corner.LEFT_BOTTOM) }
+            )
+            CornerHotspot(
+                modifier = Modifier.align(Alignment.BottomEnd),
+                onTap = { handleCornerTap(Corner.RIGHT_BOTTOM) }
             )
         }
-
-        CornerHotspot(
-            modifier = Modifier.align(Alignment.TopStart),
-            onTap = { handleCornerTap(Corner.LEFT_TOP) }
-        )
-        CornerHotspot(
-            modifier = Modifier.align(Alignment.TopEnd),
-            onTap = { handleCornerTap(Corner.RIGHT_TOP) }
-        )
-        CornerHotspot(
-            modifier = Modifier.align(Alignment.BottomStart),
-            onTap = { handleCornerTap(Corner.LEFT_BOTTOM) }
-        )
-        CornerHotspot(
-            modifier = Modifier.align(Alignment.BottomEnd),
-            onTap = { handleCornerTap(Corner.RIGHT_BOTTOM) }
+    } else {
+        GateWebDetailScreen(
+            item = selectedItem,
+            onBack = { selectedIndex = null }
         )
     }
 
@@ -210,14 +276,76 @@ fun GateScreen(onPassed: () -> Unit) {
             }
         )
     }
+
+    if (showImportDialog) {
+        val context = LocalContext.current
+        val importFiles = remember(showImportDialog) {
+            StoragePaths.sysDir().apply { mkdirs() }
+                .listFiles { file -> file.isFile && file.extension.equals("json", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() }
+                .orEmpty()
+        }
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("导入网站记录（${StoragePaths.sysDir().absolutePath}）") },
+            text = {
+                if (importFiles.isEmpty()) {
+                    Text("未找到 json 文件，先导出一次再导入。")
+                } else {
+                    LazyColumn {
+                        items(importFiles) { file ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        runCatching {
+                                            parseGateWebItems(file.readText())
+                                        }.onSuccess { imported ->
+                                            if (imported.isEmpty()) {
+                                                Toast.makeText(context, "导入文件为空", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                webItems.clear()
+                                                webItems.addAll(imported)
+                                                selectedIndex = null
+                                                showImportDialog = false
+                                                Toast.makeText(context, "已导入 ${imported.size} 条", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }.onFailure { e ->
+                                            Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(vertical = 10.dp)
+                            ) {
+                                Text(file.name, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = "${file.length()} bytes",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text("关闭")
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun GateWebListScreen(
     webItems: List<GateWebItem>,
     onAddClick: () -> Unit,
+    onImportClick: () -> Unit,
+    onExportClick: (android.content.Context) -> Unit,
     onItemClick: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     Scaffold(
         containerColor = Color.Transparent,
         floatingActionButton = {
@@ -237,19 +365,33 @@ private fun GateWebListScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 18.dp, vertical = 16.dp)
         ) {
-            Text(
-                text = "N表单",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF1D2A57)
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "纯列表入口，点击项目后进入新页面查看网页内容。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF5B6585)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "N表单",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1D2A57)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "纯列表入口，点击项目后进入新页面查看网页内容。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF5B6585)
+                    )
+                }
+                IconButton(onClick = onImportClick) {
+                    Icon(Icons.Default.Download, contentDescription = "导入 JSON")
+                }
+                IconButton(onClick = { onExportClick(context) }) {
+                    Icon(Icons.Default.Upload, contentDescription = "导出 JSON")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(24.dp),
