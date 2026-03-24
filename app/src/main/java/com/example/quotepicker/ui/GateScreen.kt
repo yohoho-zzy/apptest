@@ -22,20 +22,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -81,7 +87,7 @@ fun GateScreen(onPassed: () -> Unit) {
             GateWebItem(name = "Notion 表单", url = "https://www.notion.so")
         )
     }
-    var selectedIndex by remember { mutableStateOf(0) }
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
 
     val targets = listOf(
         Corner.RIGHT_TOP to 3,
@@ -121,136 +127,38 @@ fun GateScreen(onPassed: () -> Unit) {
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "添加网页")
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(innerPadding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .width(220.dp)
-                        .fillMaxSize(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            text = "网页列表",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                        Divider()
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            itemsIndexed(webItems) { index, item ->
-                                val selected = index == selectedIndex
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedIndex = index }
-                                        .background(
-                                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                            else Color.Transparent
-                                        )
-                                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                                ) {
-                                    Text(
-                                        text = item.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = item.url,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                Divider()
-                            }
-                        }
-                    }
-                }
+    val selectedItem = selectedIndex?.let { webItems.getOrNull(it) }
 
-                Card(
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        val selectedItem = webItems.getOrNull(selectedIndex)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(Icons.Default.Language, contentDescription = null)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = selectedItem?.name ?: "未选择网页",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = selectedItem?.url ?: "点击右下角 + 添加网页",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        Divider()
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            if (selectedItem == null) {
-                                EmptyPreview()
-                            } else {
-                                GateWebPreview(url = selectedItem.url)
-                            }
-                        }
-                    }
-                }
-            }
-
-            CornerHotspot(
-                modifier = Modifier.align(Alignment.TopStart),
-                onTap = { handleCornerTap(Corner.LEFT_TOP) }
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (selectedItem == null) {
+            GateWebListScreen(
+                webItems = webItems,
+                onAddClick = { showAddDialog = true },
+                onItemClick = { selectedIndex = it }
             )
-            CornerHotspot(
-                modifier = Modifier.align(Alignment.TopEnd),
-                onTap = { handleCornerTap(Corner.RIGHT_TOP) }
-            )
-            CornerHotspot(
-                modifier = Modifier.align(Alignment.BottomStart),
-                onTap = { handleCornerTap(Corner.LEFT_BOTTOM) }
-            )
-            CornerHotspot(
-                modifier = Modifier.align(Alignment.BottomEnd),
-                onTap = { handleCornerTap(Corner.RIGHT_BOTTOM) }
+        } else {
+            GateWebDetailScreen(
+                item = selectedItem,
+                onBack = { selectedIndex = null }
             )
         }
+
+        CornerHotspot(
+            modifier = Modifier.align(Alignment.TopStart),
+            onTap = { handleCornerTap(Corner.LEFT_TOP) }
+        )
+        CornerHotspot(
+            modifier = Modifier.align(Alignment.TopEnd),
+            onTap = { handleCornerTap(Corner.RIGHT_TOP) }
+        )
+        CornerHotspot(
+            modifier = Modifier.align(Alignment.BottomStart),
+            onTap = { handleCornerTap(Corner.LEFT_BOTTOM) }
+        )
+        CornerHotspot(
+            modifier = Modifier.align(Alignment.BottomEnd),
+            onTap = { handleCornerTap(Corner.RIGHT_BOTTOM) }
+        )
     }
 
     if (showAddDialog) {
@@ -305,18 +213,183 @@ fun GateScreen(onPassed: () -> Unit) {
 }
 
 @Composable
-private fun EmptyPreview() {
-    Box(
+private fun GateWebListScreen(
+    webItems: List<GateWebItem>,
+    onAddClick: () -> Unit,
+    onItemClick: (Int) -> Unit
+) {
+    Scaffold(
+        containerColor = Color.Transparent,
+        floatingActionButton = {
+            FloatingActionButton(onClick = onAddClick) {
+                Icon(Icons.Default.Add, contentDescription = "添加网页")
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFFF7FAFF), Color(0xFFEFF4FF))
+                    )
+                )
+                .padding(innerPadding)
+                .padding(horizontal = 18.dp, vertical = 16.dp)
+        ) {
+            Text(
+                text = "N表单",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1D2A57)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "纯列表入口，点击项目后进入新页面查看网页内容。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF5B6585)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 8.dp,
+                color = Color.White.copy(alpha = 0.92f)
+            ) {
+                if (webItems.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "点击右下角 + 添加网页",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        itemsIndexed(webItems) { index, item ->
+                            GateWebListItem(
+                                item = item,
+                                onClick = { onItemClick(index) }
+                            )
+                            if (index != webItems.lastIndex) {
+                                Divider(modifier = Modifier.padding(start = 64.dp, end = 16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GateWebListItem(
+    item: GateWebItem,
+    onClick: () -> Unit
+) {
+    Row(
         modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFE8F0FF)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Language,
+                contentDescription = null,
+                tint = Color(0xFF315DDB)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = Color(0xFF1A2340)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = item.url,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF6B7491),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "点击右下角 + 添加网页，\n再从左侧列表选择后即可预览。",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "打开",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF315DDB),
+            fontWeight = FontWeight.Medium
         )
+    }
+}
+
+@Composable
+private fun GateWebDetailScreen(
+    item: GateWebItem,
+    onBack: () -> Unit
+) {
+    Scaffold(
+        containerColor = Color(0xFFF3F6FC),
+        topBar = {
+            Surface(shadowElevation = 4.dp, color = Color.White) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = item.url,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(12.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
+        ) {
+            GateWebPreview(url = item.url)
+        }
     }
 }
 
@@ -383,10 +456,10 @@ private fun GateWebPreview(url: String) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)),
+                    .background(Color.White.copy(alpha = 0.78f)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = Color(0xFF315DDB))
             }
         }
     }
