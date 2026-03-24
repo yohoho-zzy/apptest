@@ -189,7 +189,7 @@ fun MagicDramaScreen(
         timeoutBlockToJump = null
         currentThemeId = availableThemes.firstOrNull { it.id == playbackOptions.initialThemeId }?.id
             ?: availableThemes.firstOrNull { it.name == "清新" }?.id
-            ?: availableThemes.first().id
+                    ?: availableThemes.first().id
         countdownJob?.cancel()
         countdownJob = null
         stopBackgroundPlayback()
@@ -280,10 +280,18 @@ fun MagicDramaScreen(
 
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
-                    countdownJob = coroutineScope.launch {
+                    val awaitingButtonSelection = queue.firstOrNull() is DramaCommand.ShowButtons
+                    if (awaitingButtonSelection) {
+                        countdownJob = coroutineScope.launch {
+                            launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
+                            timeoutBlockToJump = cmd.timeoutBlock
+                            pendingBranch?.complete(cmd.timeoutBlock)
+                        }
+                    } else {
                         launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
-                        timeoutBlockToJump = cmd.timeoutBlock
-                        pendingBranch?.complete(cmd.timeoutBlock)
+                        countdownJob = null
+                        countdownSeconds = null
+                        jumpTo(cmd.timeoutBlock, queue)
                     }
                 }
 
@@ -322,82 +330,82 @@ fun MagicDramaScreen(
         ) {
             backgroundVideoUri?.let { HiddenBackgroundVideoPlayer(uri = it) }
             Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .weight(3f)
-                    .fillMaxWidth()
-                    .background(currentTheme.resourceBackground)
-            ) {
-                DramaMediaArea(media = currentMedia, vm = vm, settings = settings)
-                countdownSeconds?.let { left ->
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(12.dp)
-                            .background(currentTheme.resourceCountdownBubble.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(text = "倒数 ${left}s", color = currentTheme.resourceCountdownText, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            if (variables.isNotEmpty()) {
-                Row(
+                Box(
                     modifier = Modifier
+                        .weight(3f)
                         .fillMaxWidth()
-                        .background(currentTheme.statusBackground)
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(currentTheme.resourceBackground)
                 ) {
-                    Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = currentTheme.statusTitleText)
-                    variables.forEach { (k, v) ->
-                        Text(
-                            text = "$k:$v",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = currentTheme.statusBubbleText,
+                    DramaMediaArea(media = currentMedia, vm = vm, settings = settings)
+                    countdownSeconds?.let { left ->
+                        Box(
                             modifier = Modifier
-                                .background(currentTheme.statusBubble, RoundedCornerShape(10.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
+                                .align(Alignment.BottomEnd)
+                                .padding(12.dp)
+                                .background(currentTheme.resourceCountdownBubble.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(text = "倒数 ${left}s", color = currentTheme.resourceCountdownText, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-            }
-            Column(
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxWidth()
-                    .background(currentTheme.dialogBackground)
-                    .padding(10.dp)
-            ) {
-                Text(text = title, color = currentTheme.statusTitleText, style = MaterialTheme.typography.labelMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    state = listState
+                if (variables.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(currentTheme.statusBackground)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "状态", style = MaterialTheme.typography.labelSmall, color = currentTheme.statusTitleText)
+                        variables.forEach { (k, v) ->
+                            Text(
+                                text = "$k:$v",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = currentTheme.statusBubbleText,
+                                modifier = Modifier
+                                    .background(currentTheme.statusBubble, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(2f)
+                        .fillMaxWidth()
+                        .background(currentTheme.dialogBackground)
+                        .padding(10.dp)
                 ) {
-                    items(messages) { message ->
-                        when (message) {
-                            is DramaMessage.Narration -> NarrationBubble(message, currentTheme)
-                            is DramaMessage.Role -> RoleBubble(message, currentTheme)
+                    Text(text = title, color = currentTheme.statusTitleText, style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        state = listState
+                    ) {
+                        items(messages) { message ->
+                            when (message) {
+                                is DramaMessage.Narration -> NarrationBubble(message, currentTheme)
+                                is DramaMessage.Role -> RoleBubble(message, currentTheme)
+                            }
                         }
                     }
-                }
-                if (buttonOptions.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        buttonOptions.forEach { option ->
-                            Button(
-                                onClick = { pendingBranch?.complete(option.branchId) },
-                                modifier = Modifier.weight(1f)
-                            ) { Text(option.text) }
+                    if (buttonOptions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            buttonOptions.forEach { option ->
+                                Button(
+                                    onClick = { pendingBranch?.complete(option.branchId) },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text(option.text) }
+                            }
                         }
                     }
                 }
             }
-        }
             IconButton(
                 onClick = {
                     stopBackgroundPlayback()
@@ -443,8 +451,8 @@ private suspend fun speakByRole(
 private fun resolveRoleSettingFromTextResource(roleName: String, vm: ResourceViewModel): RoleVoiceSetting? {
     val candidates = vm.allResources.value.filter { item ->
         item.resource.type == ResourceType.TEXT &&
-            item.resource.title.contains("声音配置") &&
-            item.characters.any { it.name == roleName }
+                item.resource.title.contains("声音配置") &&
+                item.characters.any { it.name == roleName }
     }
     val selected = candidates.filter { it.resource.markState == ResourceMarkState.FAVORITE }
         .ifEmpty { candidates }
@@ -701,6 +709,10 @@ private fun parseDramaScript(raw: String): ParsedDramaScript {
     return ParsedDramaScript(startBlock = start, blocks = blocks)
 }
 
+private fun normalizeBlockRef(raw: String): String {
+    return raw.trim().removePrefix("@").trim()
+}
+
 private fun sanitizeScriptLine(raw: String): String {
     val normalized = normalizeScriptSymbols(raw)
     val trimmed = normalized.trim()
@@ -744,11 +756,19 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val name = line.substringAfter(':').trim()
                 if (name.isNotBlank()) commands += DramaCommand.RemoveVariable(name)
             }
-            line.startsWith("跳:") -> commands += DramaCommand.Jump(line.substringAfter(':').trim())
+            line.startsWith("跳:") -> {
+                val target = normalizeBlockRef(line.substringAfter(':'))
+                if (target.isNotBlank()) commands += DramaCommand.Jump(target)
+            }
             line.startsWith("判:") -> {
                 val body = line.substringAfter(':').trim()
                 val parts = body.split("--", limit = 2)
-                if (parts.size == 2) commands += DramaCommand.ConditionalJump(parts[0].trim(), parts[1].trim())
+                if (parts.size == 2) {
+                    val target = normalizeBlockRef(parts[1])
+                    if (target.isNotBlank()) {
+                        commands += DramaCommand.ConditionalJump(parts[0].trim(), target)
+                    }
+                }
             }
             line.startsWith("氛围:") -> {
                 val key = line.substringAfter(':').trim()
@@ -758,7 +778,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val body = line.substringAfter(':').trim()
                 val parts = body.split("--", limit = 2)
                 val sec = parts.firstOrNull()?.trim()?.toIntOrNull()
-                val target = parts.getOrNull(1)?.trim()
+                val target = parts.getOrNull(1)?.let(::normalizeBlockRef)
                 if (sec != null && !target.isNullOrBlank()) commands += DramaCommand.Countdown(sec, target)
             }
             line.equals("c1", ignoreCase = true) -> commands += DramaCommand.ClearResourceArea
@@ -776,7 +796,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 while (j < lines.size && lines[j].contains("--")) {
                     val p = lines[j].split("--", limit = 2)
                     val text = p.firstOrNull()?.trim().orEmpty()
-                    val target = p.getOrNull(1)?.trim().orEmpty()
+                    val target = p.getOrNull(1)?.let(::normalizeBlockRef).orEmpty()
                     if (text.isNotBlank() && target.isNotBlank()) options += DramaButtonOption(text, target)
                     j++
                 }
