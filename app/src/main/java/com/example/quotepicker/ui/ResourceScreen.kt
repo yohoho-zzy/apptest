@@ -3625,7 +3625,7 @@ private fun MagicDramaScriptEditorScreen(
                 "资源" to DramaDialogType.RESOURCE,
                 "按钮" to DramaDialogType.BUTTONS,
                 "氛围" to DramaDialogType.ATMOSPHERE,
-                "背景" to DramaDialogType.BACKGROUND
+                "背景" to DramaDialogType.BACKGROUND,
                 "命令" to DramaDialogType.RAW,
             ),
             "流程" to listOf(

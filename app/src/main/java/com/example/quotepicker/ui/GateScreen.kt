@@ -124,6 +124,7 @@ private fun parseGateWebItems(jsonText: String): List<GateWebItem> {
         val root = JSONObject(trimmed)
         parseArray(root.optJSONArray("items") ?: JSONArray())
     }
+    return "https://$trimmed"
 }
 
 @Composable
