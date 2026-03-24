@@ -280,10 +280,18 @@ fun MagicDramaScreen(
 
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
-                    countdownJob = coroutineScope.launch {
+                    val awaitingButtonSelection = queue.firstOrNull() is DramaCommand.ShowButtons
+                    if (awaitingButtonSelection) {
+                        countdownJob = coroutineScope.launch {
+                            launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
+                            timeoutBlockToJump = cmd.timeoutBlock
+                            pendingBranch?.complete(cmd.timeoutBlock)
+                        }
+                    } else {
                         launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
-                        timeoutBlockToJump = cmd.timeoutBlock
-                        pendingBranch?.complete(cmd.timeoutBlock)
+                        countdownJob = null
+                        countdownSeconds = null
+                        jumpTo(cmd.timeoutBlock, queue)
                     }
                 }
 
@@ -701,6 +709,10 @@ private fun parseDramaScript(raw: String): ParsedDramaScript {
     return ParsedDramaScript(startBlock = start, blocks = blocks)
 }
 
+private fun normalizeBlockRef(raw: String): String {
+    return raw.trim().removePrefix("@").trim()
+}
+
 private fun sanitizeScriptLine(raw: String): String {
     val normalized = normalizeScriptSymbols(raw)
     val trimmed = normalized.trim()
@@ -744,11 +756,19 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val name = line.substringAfter(':').trim()
                 if (name.isNotBlank()) commands += DramaCommand.RemoveVariable(name)
             }
-            line.startsWith("跳:") -> commands += DramaCommand.Jump(line.substringAfter(':').trim())
+            line.startsWith("跳:") -> {
+                val target = normalizeBlockRef(line.substringAfter(':'))
+                if (target.isNotBlank()) commands += DramaCommand.Jump(target)
+            }
             line.startsWith("判:") -> {
                 val body = line.substringAfter(':').trim()
                 val parts = body.split("--", limit = 2)
-                if (parts.size == 2) commands += DramaCommand.ConditionalJump(parts[0].trim(), parts[1].trim())
+                if (parts.size == 2) {
+                    val target = normalizeBlockRef(parts[1])
+                    if (target.isNotBlank()) {
+                        commands += DramaCommand.ConditionalJump(parts[0].trim(), target)
+                    }
+                }
             }
             line.startsWith("氛围:") -> {
                 val key = line.substringAfter(':').trim()
@@ -758,7 +778,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 val body = line.substringAfter(':').trim()
                 val parts = body.split("--", limit = 2)
                 val sec = parts.firstOrNull()?.trim()?.toIntOrNull()
-                val target = parts.getOrNull(1)?.trim()
+                val target = parts.getOrNull(1)?.let(::normalizeBlockRef)
                 if (sec != null && !target.isNullOrBlank()) commands += DramaCommand.Countdown(sec, target)
             }
             line.equals("c1", ignoreCase = true) -> commands += DramaCommand.ClearResourceArea
@@ -776,7 +796,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
                 while (j < lines.size && lines[j].contains("--")) {
                     val p = lines[j].split("--", limit = 2)
                     val text = p.firstOrNull()?.trim().orEmpty()
-                    val target = p.getOrNull(1)?.trim().orEmpty()
+                    val target = p.getOrNull(1)?.let(::normalizeBlockRef).orEmpty()
                     if (text.isNotBlank() && target.isNotBlank()) options += DramaButtonOption(text, target)
                     j++
                 }
