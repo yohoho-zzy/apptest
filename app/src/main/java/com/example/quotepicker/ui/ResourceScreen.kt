@@ -4953,7 +4953,7 @@ private fun parseDramaEditorCommands(lines: List<String>): List<DramaEditorComma
             line.startsWith("按钮:") -> {
                 val options = mutableListOf<Pair<String, String>>()
                 var buttonIndex = index + 1
-                while (buttonIndex < lines.size && lines[buttonIndex].contains("--")) {
+                while (buttonIndex < lines.size && isDramaButtonOptionLine(lines[buttonIndex])) {
                     val parts = lines[buttonIndex].split("--", limit = 2)
                     val label = parts.firstOrNull()?.trim().orEmpty()
                     val target = parts.getOrNull(1)?.trim().orEmpty()
@@ -4973,6 +4973,32 @@ private fun parseDramaEditorCommands(lines: List<String>): List<DramaEditorComma
         index++
     }
     return commands
+}
+
+private fun isDramaButtonOptionLine(line: String): Boolean {
+    if (!line.contains("--")) return false
+    if (line.startsWith("@")) return false
+    return !isDramaStructuredCommandLine(line)
+}
+
+private fun isDramaStructuredCommandLine(line: String): Boolean {
+    return line.matches(Regex("^w\\d+$", RegexOption.IGNORE_CASE)) ||
+        line.equals("c1", ignoreCase = true) ||
+        line.equals("c2", ignoreCase = true) ||
+        line.equals("c3", ignoreCase = true) ||
+        line.equals("停:背景", ignoreCase = true) ||
+        line.equals("停:计时", ignoreCase = true) ||
+        line.startsWith("资源:") ||
+        line.startsWith("旁白:") ||
+        line.startsWith("注意:") ||
+        line.startsWith("设:") ||
+        line.startsWith("删:") ||
+        line.startsWith("跳:") ||
+        line.startsWith("判:") ||
+        line.startsWith("氛围:") ||
+        line.startsWith("计时:") ||
+        line.startsWith("按钮:") ||
+        line.startsWith("背景:")
 }
 
 private fun parseDramaResourceTokens(raw: String): List<String> {

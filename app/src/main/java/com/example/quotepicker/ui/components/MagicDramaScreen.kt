@@ -793,7 +793,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
             line.startsWith("按钮:") -> {
                 val options = mutableListOf<DramaButtonOption>()
                 var j = i + 1
-                while (j < lines.size && lines[j].contains("--")) {
+                while (j < lines.size && isButtonOptionLine(lines[j])) {
                     val p = lines[j].split("--", limit = 2)
                     val text = p.firstOrNull()?.trim().orEmpty()
                     val target = p.getOrNull(1)?.let(::normalizeBlockRef).orEmpty()
@@ -812,6 +812,32 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
         i++
     }
     return commands
+}
+
+private fun isButtonOptionLine(line: String): Boolean {
+    if (!line.contains("--")) return false
+    if (line.startsWith("@")) return false
+    return !isScriptCommandLine(line)
+}
+
+private fun isScriptCommandLine(line: String): Boolean {
+    return line.matches(Regex("^w\\d+$", RegexOption.IGNORE_CASE)) ||
+        line.equals("c1", ignoreCase = true) ||
+        line.equals("c2", ignoreCase = true) ||
+        line.equals("c3", ignoreCase = true) ||
+        line.equals("停:背景", ignoreCase = true) ||
+        line.equals("停:计时", ignoreCase = true) ||
+        line.startsWith("资源:") ||
+        line.startsWith("旁白:") ||
+        line.startsWith("注意:") ||
+        line.startsWith("设:") ||
+        line.startsWith("删:") ||
+        line.startsWith("跳:") ||
+        line.startsWith("判:") ||
+        line.startsWith("氛围:") ||
+        line.startsWith("计时:") ||
+        line.startsWith("按钮:") ||
+        line.startsWith("背景:")
 }
 
 private fun resolveMediaPlaybackUri(source: String, vm: ResourceViewModel): Uri? {
