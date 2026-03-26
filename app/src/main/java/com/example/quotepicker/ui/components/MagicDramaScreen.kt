@@ -200,7 +200,7 @@ fun MagicDramaScreen(
         }
 
         val queue = ArrayDeque(parsed.blocks[parsed.startBlock].orEmpty())
-        while (queue.isNotEmpty() || countdownJob?.isActive == true) {
+        while (queue.isNotEmpty() || countdownJob?.isActive == true || timeoutBlockToJump != null) {
             timeoutBlockToJump?.let { blockId ->
                 timeoutBlockToJump = null
                 jumpTo(blockId, queue)
