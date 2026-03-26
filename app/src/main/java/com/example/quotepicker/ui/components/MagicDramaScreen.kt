@@ -200,10 +200,14 @@ fun MagicDramaScreen(
         }
 
         val queue = ArrayDeque(parsed.blocks[parsed.startBlock].orEmpty())
-        while (queue.isNotEmpty()) {
+        while (queue.isNotEmpty() || countdownJob?.isActive == true) {
             timeoutBlockToJump?.let { blockId ->
                 timeoutBlockToJump = null
                 jumpTo(blockId, queue)
+            }
+            if (queue.isEmpty()) {
+                delay(50)
+                continue
             }
 
             when (val cmd = queue.removeFirst()) {
@@ -280,18 +284,10 @@ fun MagicDramaScreen(
 
                 is DramaCommand.Countdown -> {
                     countdownJob?.cancel()
-                    val awaitingButtonSelection = queue.firstOrNull() is DramaCommand.ShowButtons
-                    if (awaitingButtonSelection) {
-                        countdownJob = coroutineScope.launch {
-                            launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
-                            timeoutBlockToJump = cmd.timeoutBlock
-                            pendingBranch?.complete(cmd.timeoutBlock)
-                        }
-                    } else {
+                    countdownJob = coroutineScope.launch {
                         launchCountdown(cmd.seconds) { left -> countdownSeconds = left }
-                        countdownJob = null
-                        countdownSeconds = null
-                        jumpTo(cmd.timeoutBlock, queue)
+                        timeoutBlockToJump = cmd.timeoutBlock
+                        pendingBranch?.complete(cmd.timeoutBlock)
                     }
                 }
 
