@@ -649,11 +649,12 @@ private fun MediaPreviewPager(uris: List<Uri>, resourceCode: String?) {
             Box(modifier = Modifier.weight(1f)) {
                 val currentIndex = pagerState.currentPage + 1
                 val currentCode = indexedResourceFileId(resourceCode, pagerState.currentPage)
+                val currentSize = formatSizeMb(uris[pagerState.currentPage].toString())
                 Text(
                     text = if (currentCode.isNullOrBlank()) {
-                        "视频 $currentIndex/${uris.size}"
+                        "视频 $currentIndex/${uris.size} ($currentSize)"
                     } else {
-                        "视频 $currentIndex/${uris.size} $currentCode"
+                        "视频 $currentIndex/${uris.size} $currentCode ($currentSize)"
                     },
                     style = MaterialTheme.typography.labelSmall
                 )
