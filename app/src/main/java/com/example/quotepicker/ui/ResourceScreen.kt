@@ -3813,9 +3813,8 @@ private fun MagicDramaScriptEditorScreen(
                 resourceOptions = mediaResources.filter { it.resource.type == ResourceType.VIDEO || it.resource.type == ResourceType.SOUND },
                 vm = vm,
                 title = "添加背景",
-                valueLabel = "背景名（按名字填写）",
-                valueHint = "按背景名称填写，多个背景请用逗号分隔。",
-                insertTitleInsteadOfCode = true,
+                valueLabel = "命令值（可填组ID/单个ID）",
+                valueHint = "与资源设定一致：填写组ID或单个ID；可填多个值并用逗号分隔，按顺序取第一个可用项播放。",
                 onConfirm = {
                     addCommand(DramaEditorCommand.Background(it.trim()))
                     activeDialog = null
@@ -4360,9 +4359,8 @@ private fun DramaCommandEditDialog(
             vm = vm,
             initialSource = command.source,
             title = "编辑背景",
-            valueLabel = "背景名（按名字填写）",
-            valueHint = "按背景名称填写，多个背景请用逗号分隔。",
-            insertTitleInsteadOfCode = true,
+            valueLabel = "命令值（可填组ID/单个ID）",
+            valueHint = "与资源设定一致：填写组ID或单个ID；可填多个值并用逗号分隔，按顺序取第一个可用项播放。",
             onConfirm = { onConfirm(DramaEditorCommand.Background(it.trim())) },
             onDismiss = onDismiss
         )
