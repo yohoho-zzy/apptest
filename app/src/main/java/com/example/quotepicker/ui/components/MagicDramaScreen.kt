@@ -849,8 +849,15 @@ private fun isScriptCommandLine(line: String): Boolean {
 }
 
 private fun resolveMediaPlaybackUri(source: String, vm: ResourceViewModel): Uri? {
-    return vm.resolveMediaUriByCodeOrPath(source)
-        ?: runCatching { Uri.parse(source) }.getOrNull()?.takeIf { it.scheme != null }
+    val candidates = source
+        .split(',', '&', '，')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .ifEmpty { listOf(source.trim()) }
+    return candidates.firstNotNullOfOrNull { token ->
+        vm.resolveMediaUriByCodeOrPath(token)
+            ?: runCatching { Uri.parse(token) }.getOrNull()?.takeIf { it.scheme != null }
+    }
 }
 
 private fun createRepeatedMediaPlayer(source: String, vm: ResourceViewModel, repeatCount: Int): MediaPlayer? {
