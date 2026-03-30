@@ -99,7 +99,7 @@ private sealed interface DramaCommand {
     data object ClearResourceArea : DramaCommand
     data object ClearAllVariables : DramaCommand
     data object ClearDialogue : DramaCommand
-    data class SetBackgroundMusic(val source: String) : DramaCommand
+    data class SetBackgroundMusic(val source: String, val repeatCount: Int = 1) : DramaCommand
     data object StopBackgroundMusic : DramaCommand
     data object StopCountdown : DramaCommand
 }
@@ -213,33 +213,35 @@ fun MagicDramaScreen(
             when (val cmd = queue.removeFirst()) {
                 is DramaCommand.Narration -> {
                     val text = resolveVariablePlaceholders(renderRandomToken(cmd.text), variables)
-                    if (playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
+                    val (displayText, suppressSpeech) = extractSpeechControl(text)
+                    if (!suppressSpeech && playbackOptions.voicePlaybackMode == MagicDramaVoicePlaybackMode.ALL) {
                         val narrationRoleName = if (cmd.important) "注意" else "旁白"
                         speakByRole(
-                            text = text,
+                            text = displayText,
                             roleName = narrationRoleName,
                             voiceSettings = voiceSettings,
                             piperSpeechEngine = piperSpeechEngine,
                             vm = vm
                         )
                     }
-                    messages += DramaMessage.Narration(text = text, important = cmd.important)
+                    messages += DramaMessage.Narration(text = displayText, important = cmd.important)
                     delay(settings.defaultDelayMs)
                 }
 
                 is DramaCommand.RoleLine -> {
                     val role = resolveRoleName(cmd.roleKey, boundCharacters)
                     val text = resolveVariablePlaceholders(cmd.text, variables).replace("nn", "\n")
-                    if (playbackOptions.voicePlaybackMode != MagicDramaVoicePlaybackMode.SILENT) {
+                    val (displayText, suppressSpeech) = extractSpeechControl(text)
+                    if (!suppressSpeech && playbackOptions.voicePlaybackMode != MagicDramaVoicePlaybackMode.SILENT) {
                         speakByRole(
-                            text = text,
+                            text = displayText,
                             roleName = role,
                             voiceSettings = voiceSettings,
                             piperSpeechEngine = piperSpeechEngine,
                             vm = vm
                         )
                     }
-                    messages += DramaMessage.Role(role = role, text = text)
+                    messages += DramaMessage.Role(role = role, text = displayText)
                     delay(settings.defaultDelayMs)
                 }
 
@@ -266,10 +268,10 @@ fun MagicDramaScreen(
                     val backgroundSource = resolveVariablePlaceholders(cmd.source, variables)
                     val resolvedUri = resolveMediaPlaybackUri(backgroundSource, vm)
                     if (resolvedUri != null && vm.isVideoUri(resolvedUri)) {
-                        backgroundVideoUri = resolvedUri
+                        backgroundVideoUri = resolvedUri.withRepeatCount(cmd.repeatCount)
                     } else {
                         backgroundVideoUri = null
-                        backgroundPlayer = createLoopMediaPlayer(backgroundSource, vm)
+                        backgroundPlayer = createRepeatedMediaPlayer(backgroundSource, vm, cmd.repeatCount)
                     }
                 }
                 is DramaCommand.StopBackgroundMusic -> {
@@ -324,7 +326,12 @@ fun MagicDramaScreen(
                 .fillMaxSize()
                 .background(currentTheme.dialogBackground)
         ) {
-            backgroundVideoUri?.let { HiddenBackgroundVideoPlayer(uri = it) }
+            backgroundVideoUri?.let { uri ->
+                HiddenBackgroundVideoPlayer(
+                    uri = uri.withoutRepeatCount(),
+                    repeatCount = uri.repeatCountFromFragment()
+                )
+            }
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(
                     modifier = Modifier
@@ -582,9 +589,9 @@ private fun resolveTokenValue(token: String, variables: Map<String, String>): St
 
 
 @Composable
-private fun HiddenBackgroundVideoPlayer(uri: Uri) {
+private fun HiddenBackgroundVideoPlayer(uri: Uri, repeatCount: Int) {
     val holder = remember { mutableStateOf<VideoView?>(null) }
-    DisposableEffect(uri) {
+    DisposableEffect(uri, repeatCount) {
         onDispose {
             holder.value?.stopPlayback()
             holder.value = null
@@ -595,16 +602,21 @@ private fun HiddenBackgroundVideoPlayer(uri: Uri) {
             VideoView(context).apply {
                 alpha = 0f
                 setVideoURI(uri)
-                setOnPreparedListener { player ->
-                    player.isLooping = true
+                var remaining = repeatCount.coerceAtLeast(1)
+                setOnPreparedListener {
                     start()
+                }
+                setOnCompletionListener {
+                    remaining -= 1
+                    if (remaining > 0) start()
                 }
                 holder.value = this
             }
         },
         update = { view ->
-            if (view.tag != uri) {
-                view.tag = uri
+            val tag = "${uri}#${repeatCount.coerceAtLeast(1)}"
+            if (view.tag != tag) {
+                view.tag = tag
                 view.setVideoURI(uri)
                 view.start()
             }
@@ -740,6 +752,7 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
     var i = 0
     while (i < lines.size) {
         val line = lines[i]
+        val backgroundSpec = parseBackgroundLine(line)
         when {
             line.matches(Regex("^w\\d+$", RegexOption.IGNORE_CASE)) -> {
                 commands += DramaCommand.WaitSeconds(line.drop(1).toIntOrNull() ?: 0)
@@ -780,10 +793,9 @@ private fun parseBlockCommands(lines: List<String>): List<DramaCommand> {
             line.equals("c1", ignoreCase = true) -> commands += DramaCommand.ClearResourceArea
             line.equals("c2", ignoreCase = true) -> commands += DramaCommand.ClearAllVariables
             line.equals("c3", ignoreCase = true) -> commands += DramaCommand.ClearDialogue
-            line.startsWith("背景:") -> {
-                val source = line.substringAfter(':').trim()
-                if (source.isNotBlank()) commands += DramaCommand.SetBackgroundMusic(source)
-            }
+            backgroundSpec?.let { (repeatCount, source) ->
+                commands += DramaCommand.SetBackgroundMusic(source = source, repeatCount = repeatCount)
+            } != null -> Unit
             line.equals("停:背景", ignoreCase = true) -> commands += DramaCommand.StopBackgroundMusic
             line.equals("停:计时", ignoreCase = true) -> commands += DramaCommand.StopCountdown
             line.startsWith("按钮:") -> {
@@ -833,7 +845,7 @@ private fun isScriptCommandLine(line: String): Boolean {
         line.startsWith("氛围:") ||
         line.startsWith("计时:") ||
         line.startsWith("按钮:") ||
-        line.startsWith("背景:")
+        parseBackgroundLine(line) != null
 }
 
 private fun resolveMediaPlaybackUri(source: String, vm: ResourceViewModel): Uri? {
@@ -841,15 +853,52 @@ private fun resolveMediaPlaybackUri(source: String, vm: ResourceViewModel): Uri?
         ?: runCatching { Uri.parse(source) }.getOrNull()?.takeIf { it.scheme != null }
 }
 
-private fun createLoopMediaPlayer(source: String, vm: ResourceViewModel): MediaPlayer? {
+private fun createRepeatedMediaPlayer(source: String, vm: ResourceViewModel, repeatCount: Int): MediaPlayer? {
     val uri = resolveMediaPlaybackUri(source, vm) ?: return null
     return runCatching {
         MediaPlayer.create(vm.getApplication(), uri)?.apply {
-            isLooping = true
+            var remaining = repeatCount.coerceAtLeast(1)
+            setOnCompletionListener { player ->
+                remaining -= 1
+                if (remaining > 0) {
+                    player.seekTo(0)
+                    player.start()
+                } else {
+                    player.setOnCompletionListener(null)
+                }
+            }
             start()
         }
     }.getOrNull()
 }
+
+private fun extractSpeechControl(text: String): Pair<String, Boolean> {
+    val match = Regex("^(.*?)(?:\\s+)?cc\\s*$", RegexOption.IGNORE_CASE).matchEntire(text)
+    if (match != null) {
+        return match.groupValues[1].trimEnd() to true
+    }
+    return text to false
+}
+
+private fun parseBackgroundLine(line: String): Pair<Int, String>? {
+    val match = Regex("^背景(\\d*):(.*)$", RegexOption.IGNORE_CASE).matchEntire(line) ?: return null
+    val count = match.groupValues[1].toIntOrNull()?.coerceAtLeast(1) ?: 1
+    val source = match.groupValues[2].trim()
+    if (source.isBlank()) return null
+    return count to source
+}
+
+private fun Uri.withRepeatCount(repeatCount: Int): Uri {
+    return buildUpon().encodedFragment("repeat=${repeatCount.coerceAtLeast(1)}").build()
+}
+
+private fun Uri.repeatCountFromFragment(): Int {
+    val raw = fragment ?: return 1
+    val match = Regex("repeat=(\\d+)", RegexOption.IGNORE_CASE).find(raw) ?: return 1
+    return match.groupValues[1].toIntOrNull()?.coerceAtLeast(1) ?: 1
+}
+
+private fun Uri.withoutRepeatCount(): Uri = buildUpon().fragment(null).build()
 
 private fun resolveRoleName(input: String, boundCharacters: List<CharacterEntity>): String {
     val exact = boundCharacters.firstOrNull { it.name.equals(input, ignoreCase = true) }

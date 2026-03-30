@@ -3569,7 +3569,7 @@ private sealed interface DramaEditorCommand {
     data object ClearResourceArea : DramaEditorCommand
     data object ClearAllVariables : DramaEditorCommand
     data object ClearDialogue : DramaEditorCommand
-    data class Background(val source: String) : DramaEditorCommand
+    data class Background(val source: String, val repeatCount: Int = 1) : DramaEditorCommand
     data object StopBackgroundMusic : DramaEditorCommand
     data object StopCountdown : DramaEditorCommand
     data class Buttons(val options: List<Pair<String, String>>) : DramaEditorCommand
@@ -4925,6 +4925,7 @@ private fun parseDramaEditorCommands(lines: List<String>): List<DramaEditorComma
     var index = 0
     while (index < lines.size) {
         val line = lines[index]
+        val backgroundSpec = parseDramaBackgroundLine(line)
         when {
             line.matches(Regex("^w\\d+$", RegexOption.IGNORE_CASE)) -> commands += DramaEditorCommand.Wait(line.drop(1).toIntOrNull() ?: 0)
             line.startsWith("资源:") -> commands += DramaEditorCommand.Resource(line.substringAfter(':').trim())
@@ -4947,7 +4948,10 @@ private fun parseDramaEditorCommands(lines: List<String>): List<DramaEditorComma
             line.equals("c1", ignoreCase = true) -> commands += DramaEditorCommand.ClearResourceArea
             line.equals("c2", ignoreCase = true) -> commands += DramaEditorCommand.ClearAllVariables
             line.equals("c3", ignoreCase = true) -> commands += DramaEditorCommand.ClearDialogue
-            line.startsWith("背景:") -> commands += DramaEditorCommand.Background(line.substringAfter(':').trim())
+            backgroundSpec != null -> {
+                val (repeatCount, source) = backgroundSpec
+                commands += DramaEditorCommand.Background(source = source, repeatCount = repeatCount)
+            }
             line.equals("停:背景", ignoreCase = true) -> commands += DramaEditorCommand.StopBackgroundMusic
             line.equals("停:计时", ignoreCase = true) -> commands += DramaEditorCommand.StopCountdown
             line.startsWith("按钮:") -> {
@@ -4998,7 +5002,15 @@ private fun isDramaStructuredCommandLine(line: String): Boolean {
         line.startsWith("氛围:") ||
         line.startsWith("计时:") ||
         line.startsWith("按钮:") ||
-        line.startsWith("背景:")
+        parseDramaBackgroundLine(line) != null
+}
+
+private fun parseDramaBackgroundLine(line: String): Pair<Int, String>? {
+    val match = Regex("^背景(\\d*):(.*)$", RegexOption.IGNORE_CASE).matchEntire(line) ?: return null
+    val repeatCount = match.groupValues[1].toIntOrNull()?.coerceAtLeast(1) ?: 1
+    val source = match.groupValues[2].trim()
+    if (source.isBlank()) return null
+    return repeatCount to source
 }
 
 private fun parseDramaResourceTokens(raw: String): List<String> {
@@ -5080,7 +5092,10 @@ private fun buildDramaEditorScript(blocks: List<DramaEditorBlock>): String {
                     DramaEditorCommand.ClearResourceArea -> add("c1")
                     DramaEditorCommand.ClearAllVariables -> add("c2")
                     DramaEditorCommand.ClearDialogue -> add("c3")
-                    is DramaEditorCommand.Background -> add("背景:${command.source}")
+                    is DramaEditorCommand.Background -> {
+                        val prefix = if (command.repeatCount <= 1) "背景" else "背景${command.repeatCount}"
+                        add("$prefix:${command.source}")
+                    }
                     DramaEditorCommand.StopBackgroundMusic -> add("停:背景")
                     DramaEditorCommand.StopCountdown -> add("停:计时")
                     is DramaEditorCommand.Buttons -> {
@@ -5109,7 +5124,9 @@ private fun summarizeDramaEditorCommand(command: DramaEditorCommand): String {
         DramaEditorCommand.ClearResourceArea -> "清资源：c1"
         DramaEditorCommand.ClearAllVariables -> "清变量：c2"
         DramaEditorCommand.ClearDialogue -> "清对白：c3"
-        is DramaEditorCommand.Background -> "背景：${command.source}"
+        is DramaEditorCommand.Background -> {
+            if (command.repeatCount <= 1) "背景：${command.source}" else "背景${command.repeatCount}次：${command.source}"
+        }
         DramaEditorCommand.StopBackgroundMusic -> "停止背景：停:背景"
         DramaEditorCommand.StopCountdown -> "停止计时：停:计时"
         is DramaEditorCommand.Buttons -> "按钮：${command.options.joinToString { "${it.first}→${it.second}" }}"
